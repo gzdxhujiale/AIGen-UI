@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
-import { toast } from 'vue-sonner'
+import { Message } from '@arco-design/web-vue'
 import { Loader2, Plus, Trash2, Save } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -88,12 +88,12 @@ const handleSave = async () => {
     )
     
     if (result.success) {
-      toast.success('保存成功', { description: '您的个人资料已更新' })
+      Message.success('保存成功')
     } else {
-      toast.error('保存失败', { description: result.error })
+      Message.error(result.error || '保存失败')
     }
   } catch (e: any) {
-    toast.error('保存失败', { description: e.message })
+    Message.error(e.message || '保存过程中发生错误')
   } finally {
     isSaving.value = false
   }

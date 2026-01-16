@@ -105,8 +105,6 @@ useNetworkStatus()
           </Transition>
       </ShadcnLayout>
   </template>
-  
-  <Toaster position="top-right" />
 </template>
 
 <style>

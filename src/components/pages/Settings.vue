@@ -38,7 +38,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { toast } from 'vue-sonner'
+import { Message } from '@arco-design/web-vue'
 import draggable from 'vuedraggable'
 import { useConfigStore, type NavSubItem, type FilterConfig, type TableColumn } from '@/stores/configStore'
 import Page1 from '@/components/pages/Page1.vue'
@@ -818,9 +818,7 @@ const downloadJson = (data: object, filename: string) => {
 const handleDownloadTemplate = () => {
   const template = configStore.getTemplateConfig()
   downloadJson(template, 'config-template.json')
-  toast.success('模板下载成功', {
-    description: '请按照模板格式填写配置后导入'
-  })
+  Message.success('模板下载成功')
 }
 
 // 导出配置
@@ -828,9 +826,7 @@ const handleExportConfig = () => {
   const exportData = configStore.exportFullConfig()
   const filename = `settings-config-${new Date().toISOString().slice(0, 10)}.json`
   downloadJson(exportData, filename)
-  toast.success('配置导出成功', {
-    description: `已保存为 ${filename}`
-  })
+  Message.success('配置导出成功')
 }
 
 // 导入配置
@@ -854,24 +850,18 @@ const handleFileSelected = (event: Event) => {
       const data = JSON.parse(e.target?.result as string)
       // 验证新版 JSON 结构 (version 2.0)
       if (!data.version || !data.navGroups || !Array.isArray(data.navGroups)) {
-        toast.error('导入失败', {
-          description: '无效的配置文件格式，请使用 2.0 版本格式'
-        })
+        Message.error('导入失败: 无效的配置文件格式')
         return
       }
       // 检查版本
       if (data.version !== '2.0') {
-        toast.warning('版本警告', {
-          description: `配置文件版本 ${data.version} 可能不兼容，推荐使用 2.0 版本`
-        })
+        Message.warning(`版本警告: 配置文件版本 ${data.version} 可能不兼容`)
       }
       // 储存数据并显示确认对话框
       pendingImportData.value = data
       importConfirmDialogOpen.value = true
     } catch (err) {
-      toast.error('导入失败', {
-        description: '无效的 JSON 文件格式'
-      })
+      Message.error('导入失败: 无效的 JSON 文件格式')
     }
   }
   reader.readAsText(file)
@@ -890,13 +880,9 @@ const handleConfirmImport = async () => {
   try {
     const result = await configStore.importAndSyncToCloud(pendingImportData.value)
     if (result.success) {
-      toast.success('导入成功', {
-        description: result.message
-      })
+      Message.success(result.message || '导入成功')
     } else {
-      toast.error('导入失败', {
-        description: result.message
-      })
+      Message.error(result.message || '导入失败')
     }
   } finally {
     isSaving.value = false
@@ -910,13 +896,9 @@ const handleSaveToCloud = async () => {
   try {
     const result = await configStore.saveToSupabase()
     if (result.success) {
-      toast.success('保存成功', {
-        description: result.message
-      })
+      Message.success(result.message || '保存成功')
     } else {
-      toast.error('保存失败', {
-        description: result.message
-      })
+      Message.error(result.message || '保存失败')
     }
   } finally {
     isSaving.value = false

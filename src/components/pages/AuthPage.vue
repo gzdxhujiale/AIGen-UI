@@ -4,7 +4,8 @@ import { Loader2, Eye, EyeOff, ArrowLeft } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/stores/authStore'
-import { toast } from 'vue-sonner'
+import { Message } from '@arco-design/web-vue'
+import '@arco-design/web-vue/es/message/style/css' // 引入样式
 
 const authStore = useAuthStore()
 
@@ -54,9 +55,9 @@ const handleLogin = async () => {
   const result = await authStore.signInWithPassword(email.value, password.value)
   
   if (result.success) {
-    toast.success('登录成功', { description: '欢迎回来！' })
+    Message.success('登录成功')
   } else {
-    toast.error('登录失败', { description: result.error || '请重试' })
+    Message.error(result.error || '登录失败，请重试')
   }
 }
 
@@ -75,16 +76,16 @@ const handleRegister = async () => {
   
   if (result.success) {
     if (result.message) {
-      toast.info('注册成功', { description: result.message })
+      Message.info(result.message)
     } else {
-      toast.success('注册成功', { description: '欢迎加入！' })
+      Message.success('注册成功')
     }
     // After successful registration, switch to login view
     if (result.message) {
       currentView.value = 'login'
     }
   } else {
-    toast.error('注册失败', { description: result.error || '请重试' })
+    Message.error(result.error || '注册失败，请重试')
   }
 }
 
@@ -94,10 +95,10 @@ const handleForgotPassword = async () => {
   const result = await authStore.resetPassword(email.value)
   
   if (result.success) {
-    toast.success('邮件已发送', { description: result.message })
+    Message.success(result.message || '重置邮件已发送')
     currentView.value = 'login'
   } else {
-    toast.error('发送失败', { description: result.error || '请重试' })
+    Message.error(result.error || '发送失败，请重试')
   }
 }
 
