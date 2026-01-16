@@ -4,6 +4,9 @@ import {
     Command,
     type LucideIcon,
 } from 'lucide-vue-next'
+import {
+    IconSettings,
+} from '@arco-design/web-vue/es/icon'
 
 // ============================================
 // 类型定义
@@ -25,7 +28,7 @@ export interface NavMainItem {
     id: string
     title: string
     url: string
-    icon?: LucideIcon
+    icon?: any
     /**
      * @deprecated 请使用 isOpen 代替
      */
@@ -190,7 +193,7 @@ export function createNavItem(
     id: string,
     title: string,
     url: string,
-    icon?: LucideIcon,
+    icon?: any,
     subItems?: NavSubItem[],
     isActive = false
 ): NavMainItem {
@@ -198,7 +201,7 @@ export function createNavItem(
         id,
         title,
         url,
-        icon,
+        icon: icon || IconSettings,
         isActive,
         items: subItems,
     }

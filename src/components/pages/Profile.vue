@@ -1,27 +1,36 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
-import { Message } from '@arco-design/web-vue'
-import { Loader2, Plus, Trash2, Save } from 'lucide-vue-next'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-
+import { 
+  Message, 
+  Button as AButton, 
+  Input as AInput, 
+  Card as ACard, 
+  Table as ATable, 
+  Form as AForm, 
+  FormItem as AFormItem, 
+  Space as ASpace, 
+  Typography as ATypography,
+  Avatar as AAvatar,
+  Grid as AGrid,
+  Divider as ADivider,
+  Tooltip as ATooltip,
+  Scrollbar as AScrollbar
+} from '@arco-design/web-vue'
+import { 
+  IconUser, 
+  IconEdit, 
+  IconDelete, 
+  IconPlus, 
+  IconSafe, 
+  IconCode, 
+  IconAt,
+  IconInfoCircle
+} from '@arco-design/web-vue/es/icon'
 import { useConfigStore } from '@/stores/configStore'
+
+const { Row: ARow, Col: ACol } = AGrid
+const { Text: AText } = ATypography
 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
@@ -33,10 +42,12 @@ const form = ref({
   teams: [] as any[]
 })
 
+// Debounce timer
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+
 // Initialize form data from store
 const initForm = () => {
   form.value.userName = authStore.customUserName || authStore.userDisplayName
-  // Deep copy teams config to avoid direct mutation of store state
   form.value.teams = JSON.parse(JSON.stringify(authStore.teamsConfig || []))
 }
 
@@ -46,221 +57,321 @@ onMounted(() => {
   }
 })
 
-// Watch for store changes (e.g. if loaded late)
+// Auto-save function with debouncing
+const autoSave = async () => {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+  }
+  
+  saveTimer = setTimeout(async () => {
+    if (!authStore.user) return
+    
+    isSaving.value = true
+    try {
+      const result = await authStore.updateUserProfile(
+        form.value.userName, 
+        form.value.teams,
+        configStore.navigationStyle
+      )
+      
+      if (result.success) {
+        // Silent success - no message for auto-save
+      } else {
+        Message.error(result.error || '保存失败')
+      }
+    } catch (e: any) {
+      Message.error(e.message || '保存过程中发生错误')
+    } finally {
+      isSaving.value = false
+    }
+  }, 1000) // 1 second debounce
+}
+
+// Watch for changes and auto-save
+watch(() => form.value.userName, () => {
+  autoSave()
+})
+
+watch(() => form.value.teams, () => {
+  autoSave()
+}, { deep: true })
+
+watch(() => configStore.navigationStyle, () => {
+  autoSave()
+})
+
+// Watch for store changes
 watch(() => authStore.customUserName, (newVal) => {
     if (newVal && !form.value.userName) {
         form.value.userName = newVal
     }
 })
+
 watch(() => authStore.teamsConfig, (newVal) => {
     if (newVal && form.value.teams.length === 0) {
         form.value.teams = JSON.parse(JSON.stringify(newVal))
     }
 })
 
-// Initial style sync taken care of in App.vue or via direct binding
-// Removing the immediate watch here as it causes a reset loop when switching styles before saving.
-
-
 // Team Management Actions
 const addTeam = () => {
   form.value.teams.push({
     id: `team-${Date.now()}`,
-    name: 'New Team',
+    name: '新团队',
     role: 'member',
     permissions: ['read']
   })
 }
 
-const removeTeam = (index: number) => {
-  form.value.teams.splice(index, 1)
-}
-
-const handleSave = async () => {
-  if (!authStore.user) return
-  
-  isSaving.value = true
-  try {
-    const result = await authStore.updateUserProfile(
-      form.value.userName, 
-      form.value.teams,
-      configStore.navigationStyle
-    )
-    
-    if (result.success) {
-      Message.success('保存成功')
-    } else {
-      Message.error(result.error || '保存失败')
-    }
-  } catch (e: any) {
-    Message.error(e.message || '保存过程中发生错误')
-  } finally {
-    isSaving.value = false
+const removeTeam = (id: string) => {
+  const index = form.value.teams.findIndex(t => t.id === id)
+  if (index !== -1) {
+    form.value.teams.splice(index, 1)
   }
 }
+
+const columns = [
+  { title: 'ID', dataIndex: 'id', slotName: 'id', width: 100 },
+  { title: '团队名称', dataIndex: 'name', slotName: 'name' },
+  { title: '角色 (Role)', dataIndex: 'role', slotName: 'role', width: 150 },
+  { title: '权限 (Permissions)', dataIndex: 'permissions', slotName: 'permissions' },
+  { title: '操作', slotName: 'actions', width: 80, align: 'center' }
+]
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col h-full overflow-hidden">
-    
-    <!-- Scrollable Content -->
-    <div class="flex-1 overflow-y-auto p-8">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 max-w-[1600px]">
-        
-        <!-- Left Column: Basic Info & Profile -->
-        <div class="lg:col-span-4 space-y-6">
-          <Card class="border-border/60 shadow-sm">
-            <CardHeader>
-              <CardTitle>基本信息</CardTitle>
-              <CardDescription>您的公开个人资料信息。</CardDescription>
-            </CardHeader>
-            <CardContent class="space-y-6">
-              <!-- Avatar Placeholder (Future enhancement) -->
-              <div class="flex justify-center py-4">
-                <div class="h-24 w-24 rounded-full bg-muted flex items-center justify-center text-3xl font-semibold text-muted-foreground">
-                  {{ authStore.userDisplayName.slice(0, 2).toUpperCase() }}
-                </div>
+  <div class="flex flex-col h-full bg-[var(--color-fill-2)] overflow-hidden">
+    <a-scrollbar style="height: 100%; overflow: auto;">
+      <div class="p-8 max-w-[1400px] mx-auto">
+        <a-space direction="vertical" size="large" fill>
+          <!-- 基本信息：头像在左侧 -->
+          <a-card :bordered="false" class="shadow-sm rounded-xl overflow-hidden">
+            <template #title>
+              <a-space>
+                <icon-user class="text-primary" />
+                <span class="font-bold">基本信息</span>
+              </a-space>
+            </template>
+            
+            <div class="flex flex-col md:flex-row gap-8">
+              <!-- 头像区域 -->
+              <div class="flex flex-col items-center md:items-start justify-center" style="flex: 0 0 30%; max-width: 30%;">
+                <a-avatar :size="100" class="shadow-md mb-3 bg-primary-light">
+                  <img v-if="authStore.userAvatar" :src="authStore.userAvatar" />
+                  <span v-else class="text-3xl font-bold">{{ authStore.userDisplayName.slice(0, 1).toUpperCase() }}</span>
+                </a-avatar>
+                <a-text strong class="text-lg text-center md:text-left">{{ authStore.userDisplayName }}</a-text>
+                <a-text type="secondary" class="text-xs">{{ authStore.userEmail }}</a-text>
               </div>
 
-              <div class="space-y-3">
-                <label for="name" class="text-sm font-medium leading-none">显示名称</label>
-                <Input id="name" v-model="form.userName" placeholder="请输入您的名字" />
-              </div>
-              
-              <div class="space-y-3">
-                 <label for="email" class="text-sm font-medium leading-none">关联邮箱</label>
-                 <Input id="email" :value="authStore.userEmail" disabled class="bg-muted text-muted-foreground cursor-not-allowed opacity-80" />
-                 <p class="text-[0.8rem] text-muted-foreground">邮箱用于登录和接收通知，暂不支持修改。</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <!-- System Settings -->
-          <Card class="border-border/60 shadow-sm">
-            <CardHeader>
-              <CardTitle>系统设置</CardTitle>
-              <CardDescription>个性化您的界面体验。</CardDescription>
-            </CardHeader>
-            <CardContent class="space-y-6">
-              <!-- Navigation Style -->
-              <div class="space-y-3">
-                <label class="text-sm font-medium leading-none">导航样式</label>
-                <div class="grid grid-cols-2 gap-4">
-                  <div 
-                    class="cursor-pointer border-2 rounded-lg p-3 flex flex-col items-center gap-2 hover:bg-muted/50 transition-colors"
-                    :class="configStore.navigationStyle === 'shadcn' ? 'border-primary bg-muted/20' : 'border-border'"
-                    @click="configStore.setNavigationStyle('shadcn')"
-                  >
-                     <div class="w-full h-12 bg-zinc-900/10 rounded border border-dashed border-zinc-900/20 flex items-center justify-center text-xs text-muted-foreground">Shadcn</div>
-                     <span class="text-sm font-medium">Shadcn UI</span>
-                  </div>
+              <!-- 表单编辑区域 -->
+              <div style="flex: 0 0 60%; max-width: 60%;">
+                <a-form :model="form" layout="vertical">
+                  <a-form-item label="显示名称" feedback="修改后自动保存">
+                    <a-input v-model="form.userName" placeholder="请输入您的名字">
+                      <template #prefix><icon-edit /></template>
+                    </a-input>
+                  </a-form-item>
                   
-                  <div 
-                    class="cursor-pointer border-2 rounded-lg p-3 flex flex-col items-center gap-2 hover:bg-muted/50 transition-colors"
-                    :class="configStore.navigationStyle === 'arco' ? 'border-primary bg-muted/20' : 'border-border'"
-                    @click="configStore.setNavigationStyle('arco')"
-                  >
-                     <div class="w-full h-12 bg-blue-500/10 rounded border border-dashed border-blue-500/20 flex items-center justify-center text-xs text-primary">Arco</div>
-                     <span class="text-sm font-medium">Arco Design</span>
-                  </div>
-                </div>
-                <p class="text-[0.8rem] text-muted-foreground">选择您喜欢的侧边栏导航风格。</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                  <a-form-item label="关联邮箱" disabled>
+                    <a-input :model-value="authStore.userEmail" disabled>
+                      <template #prefix><icon-at /></template>
+                    </a-input>
+                    <template #extra>
+                      <div class="flex items-center gap-1 mt-1 text-xs opacity-70">
+                        <icon-info-circle /> 邮箱暂不支持修改
+                      </div>
+                    </template>
+                  </a-form-item>
 
-        <!-- Right Column: Teams Configuration -->
-        <div class="lg:col-span-8 space-y-6">
-          <Card class="border-border/60 shadow-sm flex flex-col h-full">
-            <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-6">
-              <div class="space-y-1">
-                <CardTitle>团队配置 (JSON Config)</CardTitle>
-                <CardDescription>配置您所属的团队、角色及权限 (NavMain/Projects)。</CardDescription>
+                  <a-form-item label="导航风格">
+                    <a-row :gutter="12">
+                      <a-col :span="12" :sm="6">
+                        <div 
+                          class="style-card transition-all"
+                          :class="{ 'active': configStore.navigationStyle === 'shadcn' }"
+                          @click="configStore.setNavigationStyle('shadcn')"
+                        >
+                          <div class="preview shadcn-preview"></div>
+                          <span class="name">Shadcn UI</span>
+                        </div>
+                      </a-col>
+                      <a-col :span="12" :sm="6">
+                        <div 
+                          class="style-card transition-all"
+                          :class="{ 'active': configStore.navigationStyle === 'arco' }"
+                          @click="configStore.setNavigationStyle('arco')"
+                        >
+                          <div class="preview arco-preview"></div>
+                          <span class="name">Arco Design</span>
+                        </div>
+                      </a-col>
+                    </a-row>
+                  </a-form-item>
+                </a-form>
               </div>
-              <Button size="sm" variant="outline" @click="addTeam" class="h-9">
-                <Plus class="w-4 h-4 mr-2" />
-                新增团队
-              </Button>
-            </CardHeader>
-            <CardContent class="flex-1">
-                
-              <div v-if="form.teams.length === 0" class="flex flex-col items-center justify-center py-16 text-muted-foreground border-2 border-dashed rounded-lg bg-muted/5">
-                <div class="p-4 rounded-full bg-muted/30 mb-4">
-                  <Plus class="w-8 h-8 text-muted-foreground/50" />
-                </div>
-                <p class="text-sm font-medium">暂无团队配置</p>
-                <p class="text-xs mt-1 text-muted-foreground/70">点击右上角按钮添加您的第一个团队</p>
-              </div>
+            </div>
+          </a-card>
 
-              <div v-else class="space-y-6">
-                <div class="border rounded-md overflow-hidden">
-                  <Table>
-                    <TableHeader class="bg-muted/40">
-                      <TableRow>
-                        <TableHead class="w-[80px]">ID</TableHead>
-                        <TableHead>团队名称</TableHead>
-                        <TableHead class="w-[120px]">角色 (Role)</TableHead>
-                        <TableHead>权限 (Permissions)</TableHead>
-                        <TableHead class="w-[50px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <TableRow v-for="(team, index) in form.teams" :key="index" class="hover:bg-muted/5">
-                        <TableCell class="font-mono text-xs text-muted-foreground py-3">{{ team.id.replace('team-', '#') }}</TableCell>
-                        <TableCell class="py-3">
-                          <Input v-model="team.name" class="h-8 shadow-none" placeholder="团队名称" />
-                        </TableCell>
-                        <TableCell class="py-3">
-                          <Input v-model="team.role" class="h-8 shadow-none" placeholder="member" />
-                        </TableCell>
-                        <TableCell class="py-3">
-                          <Input 
-                            :model-value="team.permissions?.join(', ')" 
-                            @update:model-value="(val) => team.permissions = String(val).split(',').map((s: string) => s.trim()).filter(Boolean)" 
-                            class="h-8 shadow-none" 
-                            placeholder="如: admin, read, write" 
-                          />
-                        </TableCell>
-                        <TableCell class="py-3">
-                          <Button variant="ghost" size="icon" class="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" @click="removeTeam(index)">
-                            <Trash2 class="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-                
-                <div class="rounded-md bg-muted/30 border p-4">
-                  <details class="text-xs group">
-                    <summary class="cursor-pointer text-muted-foreground hover:text-foreground font-medium flex items-center select-none">
-                      <span class="mr-2 opacity-50 transition-transform group-open:rotate-90">▶</span>
-                      查看原始 JSON 数据
-                    </summary>
-                    <div class="mt-3 relative">
-                      <pre class="overflow-auto max-h-[300px] font-mono text-[11px] leading-relaxed p-3 bg-muted/50 rounded border">{{ JSON.stringify(form.teams, null, 2) }}</pre>
-                    </div>
-                  </details>
-                </div>
+          <!-- Teams -->
+          <a-card :bordered="false" class="shadow-sm rounded-xl flex flex-col">
+            <template #title>
+              <div class="flex items-center justify-between">
+                <a-space>
+                  <icon-safe class="text-primary" />
+                  <span class="font-bold">团队与权限配置</span>
+                </a-space>
+                <a-button type="outline" size="small" @click="addTeam">
+                  <template #icon><icon-plus /></template>
+                  新增团队
+                </a-button>
               </div>
+            </template>
+            
+            <div class="mb-4">
+              <a-alert type="info" show-icon>
+                配置您在各个团队中的角色和操作权限。所有更改将自动保存。
+              </a-alert>
+            </div>
 
-            </CardContent>
-          </Card>
-        </div>
+            <a-table 
+              :columns="columns" 
+              :data="form.teams" 
+              :pagination="false"
+              :bordered="{ wrapper: true, cell: false }"
+              class="rounded-lg overflow-hidden border-none"
+            >
+              <template #id="{ record }">
+                <a-text code class="text-[10px]">{{ record.id.replace('team-', '#') }}</a-text>
+              </template>
+              <template #name="{ record }">
+                <a-input v-model="record.name" size="small" class="border-transparent hover:border-gray-300" />
+              </template>
+              <template #role="{ record }">
+                <a-input v-model="record.role" size="small" class="border-transparent hover:border-gray-300" />
+              </template>
+              <template #permissions="{ record }">
+                 <a-input 
+                  :model-value="record.permissions?.join(', ')" 
+                  @update:model-value="(val: string | number) => record.permissions = String(val).split(',').map((s: string) => s.trim()).filter(Boolean)" 
+                  size="small" 
+                  placeholder="如: admin, read, write"
+                  class="border-transparent hover:border-gray-300"
+                />
+              </template>
+              <template #actions="{ record }">
+                <a-tooltip content="删除团队">
+                  <a-button type="text" status="danger" size="small" @click="removeTeam(record.id)">
+                    <template #icon><icon-delete /></template>
+                  </a-button>
+                </a-tooltip>
+              </template>
+            </a-table>
+
+            <div class="mt-6">
+              <a-divider orientation="left">原始 JSON 数据</a-divider>
+              <div class="relative group">
+                <pre class="json-code">
+                  <icon-code class="code-icon" />{{ JSON.stringify(form.teams, null, 2) }}
+                </pre>
+              </div>
+            </div>
+          </a-card>
+        </a-space>
       </div>
-    </div>
-    
-    <!-- Footer Actions -->
-    <div class="flex items-center justify-end gap-4 px-8 py-4 border-t bg-background/95 backdrop-blur z-10 shrink-0">
-      <div class="text-xs text-muted-foreground mr-auto">
-        所有更改需要保存后生效。
-      </div>
-      <Button :disabled="isSaving" @click="handleSave">
-        <Loader2 v-if="isSaving" class="animate-spin w-4 h-4 mr-2" />
-        <Save v-else class="w-4 h-4 mr-2" />
-        保存所有更改
-      </Button>
-    </div>
+    </a-scrollbar>
   </div>
 </template>
+
+<style scoped>
+.style-card {
+  border: 2px solid var(--color-border);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-bg-2);
+}
+
+.style-card:hover {
+  border-color: var(--color-primary-light-3);
+  background: var(--color-primary-light-1);
+}
+
+.style-card.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light-1);
+}
+
+.style-card .preview {
+  width: 100%;
+  height: 60px;
+  border-radius: 6px;
+}
+
+.shadcn-preview {
+  background: linear-gradient(135deg, #18181b 30%, #27272a 100%);
+  position: relative;
+}
+.shadcn-preview::after {
+  content: 'Z';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-weight: 800;
+  opacity: 0.1;
+  font-size: 24px;
+}
+
+.arco-preview {
+  background: linear-gradient(135deg, #165dff 30%, #4080ff 100%);
+}
+
+.style-card .name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.json-code {
+  background: var(--color-fill-3);
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 11px;
+  max-height: 250px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  position: relative;
+}
+
+.code-icon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  opacity: 0.2;
+  font-size: 20px;
+}
+
+:deep(.arco-table-cell) {
+  font-size: 13px;
+}
+
+:deep(.arco-card-header) {
+  border-bottom: 1px solid var(--color-border-1);
+  padding: 16px 20px;
+}
+
+:deep(.arco-card-body) {
+  padding: 24px 20px;
+}
+
+:deep(.arco-form-item-label) {
+  font-weight: 600;
+  color: var(--color-text-2);
+  margin-bottom: 8px;
+}
+</style>

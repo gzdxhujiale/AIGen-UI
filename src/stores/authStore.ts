@@ -58,7 +58,16 @@ export const useAuthStore = defineStore('auth', () => {
 
             if (data) {
                 customUserName.value = data.user_name || ''
-                teamsConfig.value = data.teams_config || []
+                // 如果 teams_config 为空，使用默认配置
+                teamsConfig.value = data.teams_config && data.teams_config.length > 0
+                    ? data.teams_config
+                    : [{
+                        id: 'team-default',
+                        name: 'AIGen-UI',
+                        logo: 'IconMosaic',
+                        role: 'online',
+                        permissions: ['read']
+                    }]
                 stylePreference.value = data.style || 'shadcn'
             }
         } catch (e) {

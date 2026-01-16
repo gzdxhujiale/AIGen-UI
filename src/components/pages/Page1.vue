@@ -208,17 +208,6 @@ const handleActionClick = (action: string, record: any) => {
             </SelectContent>
           </Select>
         </template>
-
-        <!-- 功能按钮 (始终显示的全局按钮) -->
-        <div class="flex items-center gap-2">
-           <Button variant="ghost" size="sm" class="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 font-normal">
-             更新记录
-           </Button>
-           <div class="w-px h-4 bg-border"></div>
-           <Button variant="ghost" size="sm" class="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 font-normal">
-             权限申请
-           </Button>
-        </div>
       </div>
     </Teleport>
 

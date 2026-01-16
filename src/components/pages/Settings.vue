@@ -2,9 +2,23 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 // Card components removed - using plain divs with border/bg-card
-import { Layers, Plus, Pencil, Trash2, Settings2, Save, FileCode, GripVertical, Info, ChevronRight, ChevronDown, Eye, EyeOff, Square, Download, Upload, FileDown, Search, MoreHorizontal, RefreshCw } from 'lucide-vue-next'
+import { Layers, Plus, Pencil, Trash2, Settings2, Save, FileCode, GripVertical, Info, ChevronRight, Eye, EyeOff, Download, Upload, FileDown, Search, MoreHorizontal, RefreshCw } from 'lucide-vue-next'
 
-import { Button as AButton } from '@arco-design/web-vue'
+import { Button as AButton, Card as ACard, Select as ASelect, Option as AOption } from '@arco-design/web-vue'
+import { 
+  IconSettings, 
+  IconApps, 
+  IconList, 
+  IconFile, 
+  IconFolder, 
+  IconHome, 
+  IconUser, 
+  IconDashboard,
+  IconStorage,
+  IconCalendar,
+  IconSafe,
+  IconFire
+} from '@arco-design/web-vue/es/icon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -98,6 +112,10 @@ const filteredNavGroups = computed(() => {
 const editNavDialogOpen = ref(false)
 const filterDialogOpen = ref(false)
 const columnDialogOpen = ref(false)
+const editMainNavDialogOpen = ref(false)
+const editingMainNavId = ref<string | null>(null)
+const editingGroupIndex = ref<number | null>(null)
+const editingMainNav = ref<any>(null)
 const editingFilterIndex = ref<number | null>(null)  // null = 添加模式, number = 编辑模式
 const editingColumnIndex = ref<number | null>(null)  // null = 添加模式, number = 编辑模式
 
@@ -112,6 +130,26 @@ const navForm = ref({
   title: '',
   // template field removed - utilizing component structure
 })
+
+const mainNavForm = ref({
+  title: '',
+  icon: 'IconSettings'
+})
+
+const availableIcons = [
+  { label: 'Settings', value: 'IconSettings', component: IconSettings },
+  { label: 'Apps', value: 'IconApps', component: IconApps },
+  { label: 'List', value: 'IconList', component: IconList },
+  { label: 'File', value: 'IconFile', component: IconFile },
+  { label: 'Folder', value: 'IconFolder', component: IconFolder },
+  { label: 'Home', value: 'IconHome', component: IconHome },
+  { label: 'User', value: 'IconUser', component: IconUser },
+  { label: 'Dashboard', value: 'IconDashboard', component: IconDashboard },
+  { label: 'Storage', value: 'IconStorage', component: IconStorage },
+  { label: 'Calendar', value: 'IconCalendar', component: IconCalendar },
+  { label: 'Safe', value: 'IconSafe', component: IconSafe },
+  { label: 'Fire', value: 'IconFire', component: IconFire },
+]
 
 const filterForm = ref({
   key: '',
@@ -241,6 +279,43 @@ const handleEditNav = () => {
   }
 }
 
+const openEditMainNavDialog = (groupIndex: number, mainItem: any) => {
+  editingGroupIndex.value = groupIndex
+  editingMainNavId.value = mainItem.id
+  editingMainNav.value = mainItem
+  
+  // Try to get icon name
+  let iconName = 'IconSettings'
+  if (typeof mainItem.icon === 'string') {
+    iconName = mainItem.icon
+  } else if (mainItem.icon?.name) {
+    iconName = mainItem.icon.name
+  } else if (mainItem.icon?.__name) {
+    iconName = mainItem.icon.__name
+  }
+
+  mainNavForm.value = {
+    title: mainItem.title,
+    icon: iconName
+  }
+  editMainNavDialogOpen.value = true
+}
+
+const handleEditMainNav = () => {
+  if (editingGroupIndex.value !== null && editingMainNavId.value && mainNavForm.value.title) {
+    configStore.updateNavMainItem(
+      editingGroupIndex.value,
+      editingMainNavId.value,
+      {
+        title: mainNavForm.value.title,
+        icon: mainNavForm.value.icon
+      }
+    )
+    editMainNavDialogOpen.value = false
+    Message.success('主导航更新成功')
+  }
+}
+
 // ============================================
 // Add/Delete Sub Navigation
 // ============================================
@@ -279,7 +354,7 @@ const handleAddSubNav = () => {
 
 // Add Main Nav Dialog State
 const addMainNavDialogOpen = ref(false)
-const addMainNavForm = ref({ title: '', icon: Square })
+const addMainNavForm = ref({ title: '', icon: 'IconSettings' })
 
 
 
@@ -937,27 +1012,39 @@ const handleSaveToCloud = async () => {
             </h3>
             
             <div class="space-y-1">
-              <div v-for="mainItem in group.items" :key="mainItem.id" class="border rounded-lg overflow-hidden">
-                  <!-- Main Item Header - Clickable to expand/collapse -->
-                  <div 
-                    class="px-3 py-2 text-sm font-medium text-foreground flex items-center gap-2 bg-muted/50 cursor-pointer hover:bg-muted transition-colors"
+              <div v-for="mainItem in group.items" :key="mainItem.id" class="space-y-1">
+                   <div 
+                    class="px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer transition-all flex items-center justify-between group"
                     @click="toggleMainItemExpand(mainItem.id)"
-                  >
-                     <!-- Expand/Collapse Icon -->
-                     <ChevronDown v-if="expandedMainItems[mainItem.id]" class="w-4 h-4 text-muted-foreground shrink-0"/>
-                     <ChevronRight v-else class="w-4 h-4 text-muted-foreground shrink-0"/>
-                     <component :is="mainItem.icon" v-if="mainItem.icon" class="w-4 h-4 text-muted-foreground shrink-0"/>
-                     <span class="flex-1 truncate">{{ mainItem.title }}</span>
-                     <!-- Add Sub Item Button -->
-                     <Button 
-                       variant="ghost" 
-                       size="sm" 
-                       class="h-6 w-6 p-0 shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100"
-                       @click.stop="openAddSubNavDialog(groupIndex, mainItem.id)"
-                     >
-                       <Plus class="w-3.5 h-3.5"/>
-                     </Button>
-                  </div>
+                   >
+                      <div class="flex items-center gap-2 flex-1 truncate">
+                         <ChevronRight 
+                          class="w-3.5 h-3.5 transition-transform text-muted-foreground"
+                          :class="{ 'rotate-90': expandedMainItems[mainItem.id] }"
+                         />
+                         <span class="flex-1 truncate text-sm font-medium">{{ mainItem.title }}</span>
+                      </div>
+                      <div class="flex items-center gap-0.5">
+                         <!-- Add Sub Item Button -->
+                         <Button 
+                           variant="ghost" 
+                           size="sm" 
+                           class="h-6 w-6 p-0 shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100"
+                           @click.stop="openAddSubNavDialog(groupIndex, mainItem.id)"
+                         >
+                           <Plus class="w-3.5 h-3.5"/>
+                         </Button>
+                         <!-- Edit Main Item Button -->
+                         <Button 
+                           variant="ghost" 
+                           size="sm" 
+                           class="h-6 w-6 p-0 shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100"
+                           @click.stop="openEditMainNavDialog(groupIndex, mainItem)"
+                         >
+                           <Settings2 class="w-3.5 h-3.5"/>
+                         </Button>
+                      </div>
+                   </div>
                   
                   <!-- Sub Items - Collapsible -->
                   <div v-show="expandedMainItems[mainItem.id]">
@@ -2078,11 +2165,67 @@ const handleSaveToCloud = async () => {
           <label class="text-sm font-medium">标题</label>
           <Input v-model="addMainNavForm.title" placeholder="请输入导航标题" />
         </div>
+        <div class="space-y-2">
+          <label class="text-sm font-medium">图标</label>
+          <ASelect v-model="addMainNavForm.icon">
+            <AOption v-for="icon in availableIcons" :key="icon.value" :value="icon.value">
+              <template #icon><component :is="icon.component" /></template>
+              {{ icon.label }}
+            </AOption>
+          </ASelect>
+        </div>
       </div>
       <DialogFooter>
         <Button variant="outline" @click="closeAddMainNavDialog">取消</Button>
         <Button @click="handleAddMainNav">添加</Button>
       </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <!-- Edit Main Nav Dialog (Arco Card Based as requested) -->
+  <Dialog v-model:open="editMainNavDialogOpen">
+    <DialogContent class="sm:max-w-[450px] p-0 overflow-hidden border-none bg-transparent shadow-none">
+      <ACard :style="{ width: '100%', borderRadius: '12px' }" :title="'编辑主导航'" :bordered="false">
+        <template #extra>
+          <Button variant="ghost" size="sm" class="h-6 w-6 p-0" @click="editMainNavDialogOpen = false">
+            <Trash2 class="w-4 h-4" />
+          </Button>
+        </template>
+        <div class="space-y-5 py-2">
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-[var(--color-text-2)]">导航标题</label>
+            <Input v-model="mainNavForm.title" placeholder="请输入导航标题" class="h-10" />
+          </div>
+          
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-[var(--color-text-2)]">选择图标</label>
+            <div class="grid grid-cols-6 gap-2 p-3 border rounded-lg bg-muted/30">
+              <div 
+                v-for="icon in availableIcons" 
+                :key="icon.value"
+                class="aspect-square flex flex-col items-center justify-center rounded-md border cursor-pointer transition-all hover:bg-primary/5 hover:border-primary/50"
+                :class="mainNavForm.icon === icon.value ? 'bg-primary/10 border-primary text-primary shadow-sm' : 'bg-background border-transparent text-muted-foreground'"
+                @click="mainNavForm.icon = icon.value"
+                :title="icon.label"
+              >
+                <component :is="icon.component" class="w-5 h-5 mb-1" />
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-start gap-2 p-3 rounded-lg bg-blue-50/50 border border-blue-100 text-xs text-blue-600">
+            <Info class="w-4 h-4 mt-0.5 shrink-0" />
+            <p>修改主导航的图标和标题会立即反映在预览中。点击“写入源码”可持久化到本地文件。</p>
+          </div>
+        </div>
+        
+        <template #actions>
+          <div class="flex justify-end gap-2 px-4 pb-4">
+            <AButton @click="editMainNavDialogOpen = false">取消</AButton>
+            <AButton type="primary" @click="handleEditMainNav">保存更改</AButton>
+          </div>
+        </template>
+      </ACard>
     </DialogContent>
   </Dialog>
 
@@ -2148,5 +2291,13 @@ const handleSaveToCloud = async () => {
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--muted-foreground) / 0.3);
+}
+
+/* 移除输入框焦点时的灰色边框 */
+:deep(input[type="text"]:focus),
+:deep(input[type="text"]:focus-visible) {
+  outline: none;
+  box-shadow: none;
+  border-color: hsl(var(--primary));
 }
 </style>

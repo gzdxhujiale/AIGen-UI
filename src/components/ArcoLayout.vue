@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, markRaw } from 'vue'
 import {
   Layout as ALayout,
   LayoutHeader as ALayoutHeader,
@@ -21,21 +21,28 @@ import {
 import {
   IconMenuFold,
   IconMenuUnfold,
-  IconNotification, 
-  IconSettings
+  IconSettings,
+  IconApps,
+  IconList,
+  IconFile,
+  IconFolder,
+  IconHome,
+  IconUser,
+  IconDashboard,
+  IconStorage,
+  IconCalendar,
+  IconSafe,
+  IconFire,
+  IconMosaic
 } from '@arco-design/web-vue/es/icon'
 import {
-  ChevronsUpDown,
-  Plus,
-  BadgeCheck,
-  Bell,
-  CreditCard,
-  LogOut,
-  Sparkles,
-  GalleryVerticalEnd,
-  AudioWaveform,
-  Command,
-  ChevronRight
+    ChevronRight,
+    ChevronsUpDown,
+    LogOut,
+    Plus,
+    GalleryVerticalEnd,
+    AudioWaveform,
+    Command
 } from 'lucide-vue-next'
 import { useConfigStore } from '@/stores/configStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -51,7 +58,7 @@ const collapsed = ref(false)
 const activeTeam = ref<TeamItem | null>(null)
 
 // --- 团队逻辑 ---
-const TEAM_ICONS = [GalleryVerticalEnd, AudioWaveform, Command]
+const TEAM_ICONS = [markRaw(GalleryVerticalEnd), markRaw(AudioWaveform), markRaw(Command)]
 
 const effectiveTeams = computed<TeamItem[]>(() => {
   const cloudTeams = authStore.teamsConfig
@@ -65,7 +72,7 @@ const effectiveTeams = computed<TeamItem[]>(() => {
       }
       return {
         name: t.name || 'Unnamed Team',
-        logo: TEAM_ICONS[index % TEAM_ICONS.length],
+        logo: t.logo === 'IconMosaic' ? markRaw(IconMosaic) : (t.logo || TEAM_ICONS[index % TEAM_ICONS.length]),
         plan: t.role || 'Member',
         permissions: mappedPermissions
       }
@@ -151,6 +158,18 @@ watch(filteredNavGroups, (newGroups) => {
     }
 }, { immediate: true })
 
+const resolveIcon = (icon: any) => {
+    if (!icon) return null
+    if (typeof icon === 'string') {
+        const iconMap: Record<string, any> = {
+            IconSettings, IconApps, IconList, IconFile, IconFolder, IconHome, 
+            IconUser, IconDashboard, IconStorage, IconCalendar, IconSafe, IconFire
+        }
+        return iconMap[icon] || icon
+    }
+    return icon
+}
+
 // 当用户在其他地方切换导航 ID 时（如通过面包屑或代码跳转），自动打开对应父菜单
 watch(currentNavId, (newId) => {
     if (!newId) return
@@ -196,7 +215,7 @@ const handleSubNavClick = () => {
       hide-trigger
       collapsible
       breakpoint="xl"
-      :width="250"
+      :width="190"
       class="border-r border-[var(--color-border-2)] bg-[var(--color-bg-2)] h-screen shrink-0"
     >
       <div class="flex flex-col h-full overflow-hidden">
@@ -216,7 +235,10 @@ const handleSubNavClick = () => {
             <template #content>
                 <a-dgroup key="teams_list" title="Teams">
                     <a-doption v-for="team in effectiveTeams" :key="team.name" :value="team.name">
-                        <template #icon><component :is="team.logo" class="size-3.5" /></template>
+                        <template #icon>
+                          <img v-if="typeof team.logo === 'string'" :src="team.logo" class="size-3.5" alt="team logo" />
+                          <component v-else :is="team.logo" class="size-3.5" />
+                        </template>
                         {{ team.name }}
                     </a-doption>
                 </a-dgroup>
@@ -248,9 +270,9 @@ const handleSubNavClick = () => {
                 <a-sub-menu v-if="item.items && item.items.length > 0" :key="'sub-'+item.id">
                   <template #title>
                     <div class="flex items-center justify-between w-full group/menu-item">
-                      <div class="flex items-center gap-2">
-                        <component :is="item.icon" v-if="item.icon" class="w-4 h-4" />
-                        <span>{{ item.title }}</span>
+                      <div class="flex items-center gap-1.5">
+                        <component :is="resolveIcon(item.icon)" v-if="item.icon" class="w-4 h-4 shrink-0" />
+                        <span class="truncate">{{ item.title }}</span>
                       </div>
                       <ChevronRight 
                         v-if="!collapsed"
@@ -262,6 +284,7 @@ const handleSubNavClick = () => {
                   <a-menu-item 
                     v-for="sub in item.items" 
                     :key="sub.id" 
+                    class="secondary-nav-item"
                     @click="handleNavClick(item.title, sub.title, sub.id)"
                   >
                     {{ sub.title }}
@@ -276,50 +299,6 @@ const handleSubNavClick = () => {
           </div>
         </div>
 
-        <!-- 1.3 用户底部栏 -->
-        <div class="mt-auto border-t border-[var(--color-border-2)] p-2 shrink-0">
-          <a-dropdown @select="handleUserAction" trigger="click" position="top">
-            <div class="flex items-center gap-2 p-2 rounded-lg hover:bg-[var(--color-fill-2)] cursor-pointer transition-colors overflow-hidden">
-                <a-avatar :size="32" class="bg-[var(--color-fill-3)] shrink-0">
-                    <img v-if="authStore.userAvatar" :src="authStore.userAvatar" :alt="authStore.userDisplayName" />
-                    <span v-else>{{ authStore.userDisplayName.slice(0, 2).toUpperCase() }}</span>
-                </a-avatar>
-                <div v-if="!collapsed" class="grid flex-1 text-left text-sm leading-tight overflow-hidden">
-                    <span class="truncate font-semibold text-[var(--color-text-1)]">{{ authStore.userDisplayName }}</span>
-                    <span class="truncate text-xs text-[var(--color-text-3)]">{{ authStore.userEmail }}</span>
-                </div>
-                <ChevronsUpDown v-if="!collapsed" class="ml-auto size-4 text-[var(--color-text-3)] shrink-0" />
-            </div>
-            <template #content>
-                <div class="px-3 py-2 border-b border-[var(--color-border-1)] mb-1">
-                    <p class="text-xs font-medium text-[var(--color-text-3)] uppercase tracking-wider mb-2">Account</p>
-                    <div class="flex items-center gap-2 py-1">
-                        <a-avatar :size="28" class="bg-[var(--color-fill-3)] shrink-0">
-                            <img v-if="authStore.userAvatar" :src="authStore.userAvatar" :alt="authStore.userDisplayName" />
-                            <span v-else class="text-[10px]">{{ authStore.userDisplayName.slice(0, 2).toUpperCase() }}</span>
-                        </a-avatar>
-                        <div class="flex flex-col min-w-0">
-                            <span class="text-sm font-semibold truncate text-[var(--color-text-1)]">{{ authStore.userDisplayName }}</span>
-                            <span class="text-[11px] truncate text-[var(--color-text-3)]">{{ authStore.userEmail }}</span>
-                        </div>
-                    </div>
-                </div>
-                <a-doption value="upgrade">
-                    <template #icon><Sparkles class="size-4 text-amber-500"/></template>
-                    <span class="font-medium">Upgrade to Pro</span>
-                </a-doption>
-                <a-divider class="my-1" />
-                <a-doption value="profile"><template #icon><BadgeCheck class="size-4 opacity-70"/></template>Account</a-doption>
-                <a-doption value="billing"><template #icon><CreditCard class="size-4 opacity-70"/></template>Billing</a-doption>
-                <a-doption value="notifications"><template #icon><Bell class="size-4 opacity-70"/></template>Notifications</a-doption>
-                <a-divider class="my-1" />
-                <a-doption value="logout" class="text-red-500">
-                    <template #icon><LogOut class="size-4"/></template>
-                    Log out
-                </a-doption>
-            </template>
-          </a-dropdown>
-        </div>
       </div>
     </a-layout-sider>
     
@@ -328,7 +307,7 @@ const handleSubNavClick = () => {
         <a-layout-header class="h-14 px-4 bg-[var(--color-bg-2)] border-b border-[var(--color-border-2)] flex items-center justify-between shrink-0 z-10">
             <!-- 页眉左侧 -->
             <div class="flex items-center gap-4 flex-1">
-               <AButton shape="circle" size="small" @click="collapsed = !collapsed">
+               <AButton shape="circle" size="small" @click="collapsed = !collapsed" class="mr-1">
                    <IconMenuUnfold v-if="collapsed" />
                    <IconMenuFold v-else />
                </AButton>
@@ -344,17 +323,44 @@ const handleSubNavClick = () => {
                </ABreadcrumb>
                
                <div id="breadcrumb-actions" class="flex items-center gap-4 ml-4"></div>
-               <a-divider direction="vertical" class="mx-2" />
             </div>
 
             <!-- 页眉右侧 -->
-            <div class="flex items-center gap-4">
-                <AButton shape="circle" size="small">
-                    <IconNotification />
-                </AButton>
-                <AButton shape="circle" size="small" @click="handleUserAction('settings')">
-                    <IconSettings />
-                </AButton>
+            <div class="flex items-center gap-2">
+                <a-button type="text" size="small" class="text-[var(--color-text-2)] hover:text-[rgb(var(--primary-6))]">
+                    更新记录
+                </a-button>
+                <a-button type="text" size="small" class="text-[var(--color-text-2)] hover:text-[rgb(var(--primary-6))]">
+                    权限申请
+                </a-button>
+                
+                <a-divider direction="vertical" class="mx-1 opacity-50" />
+
+                <!-- 用户头像 Dropdown -->
+                <a-dropdown @select="handleUserAction" trigger="click" position="br">
+                    <div class="p-0.5 rounded-full hover:bg-[var(--color-fill-2)] cursor-pointer transition-colors border border-[var(--color-border-2)] flex items-center justify-center">
+                        <a-avatar :size="32" class="bg-[var(--color-fill-3)] shadow-sm">
+                            <img v-if="authStore.userAvatar" :src="authStore.userAvatar" :alt="authStore.userDisplayName" />
+                            <span v-else class="text-xs">{{ authStore.userDisplayName.slice(0, 2).toUpperCase() }}</span>
+                        </a-avatar>
+                    </div>
+                    <template #content>
+                        <div class="py-1 min-w-[150px]">
+                            <a-doption value="profile" class="py-2.5">
+                                <template #icon><IconUser class="size-4 opacity-70"/></template>
+                                <span class="ml-1">用户中心</span>
+                            </a-doption>
+                            <a-doption value="settings" class="py-2.5">
+                                <template #icon><IconSettings class="size-4 opacity-70"/></template>
+                                <span class="ml-1">用户设置</span>
+                            </a-doption>
+                            <a-doption value="logout" class="text-red-500 py-2.5 font-medium">
+                                <template #icon><LogOut class="size-4"/></template>
+                                <span class="ml-1">退出登录</span>
+                            </a-doption>
+                        </div>
+                    </template>
+                </a-dropdown>
             </div>
         </a-layout-header>
         
@@ -415,9 +421,21 @@ const handleSubNavClick = () => {
     color: rgb(var(--primary-6));
 }
 
+/* 一级导航图标与文字更紧凑 */
+:deep(.arco-menu-item .arco-icon), 
+:deep(.arco-menu-inline-header .arco-icon) {
+    margin-right: 6px !important;
+}
+
+/* 二级导航缩进 (比一级多 20px) */
+/* 一级默认 padding-left 通常在 16px-32px 左右，这里强制二级缩进更多 */
+:deep(.secondary-nav-item) {
+    padding-left: 30px !important;
+}
+
 :deep(.arco-menu-inline-header.arco-menu-selected) {
     background-color: transparent !important;
-    color: var(--color-text-1) !important;
+    color: rgb(var(--primary-6)) !important;
 }
 
 /* 隐藏 Arco 默认的展开箭头 */
@@ -433,13 +451,10 @@ const handleSubNavClick = () => {
     padding-right: 4px;
 }
 
-/* 强制内容区滚动条为细长风格 */
-:deep(.arco-scrollbar-thumb-direction-vertical) {
-    width: 6px !important;
-}
-
+/* 强制内容区滚动条为中等风格 */
+:deep(.arco-scrollbar-thumb-direction-vertical),
 :deep(.arco-scrollbar-track-direction-vertical) {
-    width: 6px !important;
+    width: 10px !important;
 }
 
 :deep(.arco-scrollbar-thumb-bar) {

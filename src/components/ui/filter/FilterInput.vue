@@ -19,7 +19,26 @@ defineEmits<{
       :model-value="modelValue"
       @update:model-value="$emit('update:modelValue', $event)"
       :placeholder="placeholder"
-      class="h-9 text-sm flex-1"
+      class="h-9 text-sm flex-1 filter-input-custom"
     />
   </div>
 </template>
+
+<style scoped>
+/* 移除焦点时的灰色边框，使用更清爽的样式 */
+:deep(.filter-input-custom) {
+  transition: border-color 0.2s ease;
+}
+
+:deep(.filter-input-custom:focus-visible) {
+  outline: none;
+  box-shadow: none;
+  border-color: hsl(var(--primary));
+}
+
+:deep(.filter-input-custom:focus) {
+  outline: none;
+  box-shadow: none;
+  border-color: hsl(var(--primary));
+}
+</style>

@@ -4,6 +4,7 @@ import { setNavGroupsRef, initNavigation } from '@/config/sidebar'
 // 移除默认配置导入 - 改用纯云端配置
 import { supabase } from '@/lib/supabase'
 import { toast } from 'vue-sonner'
+import { IconSettings } from '@arco-design/web-vue/es/icon'
 
 // ============================================
 // 导航配置类型定义
@@ -79,7 +80,7 @@ export const useConfigStore = defineStore('config', () => {
     const previewNavId = ref('preview-temp-id')
 
     // 导航样式偏好: 'shadcn' | 'arco'
-    const navigationStyle = ref<'shadcn' | 'arco'>('shadcn')
+    const navigationStyle = ref<'shadcn' | 'arco'>('arco')
 
     // 加载状态
     const isConfigLoaded = ref(false)
@@ -161,7 +162,7 @@ export const useConfigStore = defineStore('config', () => {
         localStorage.setItem('shadcn_nav_style_pref', style)
     }
 
-    // Init nav style from storage
+    // Init nav style from storage (默认为 arco)
     if (localStorage.getItem('shadcn_nav_style_pref')) {
         navigationStyle.value = localStorage.getItem('shadcn_nav_style_pref') as 'shadcn' | 'arco'
     }
@@ -193,7 +194,12 @@ export const useConfigStore = defineStore('config', () => {
         const group = navGroups.value[groupIndex]
         if (group) {
             const newId = `nav-${Date.now()}`
-            group.items.push({ ...item, id: newId, items: [] })
+            group.items.push({
+                ...item,
+                id: newId,
+                icon: item.icon || IconSettings,
+                items: []
+            })
         }
     }
 
@@ -442,6 +448,36 @@ export const useConfigStore = defineStore('config', () => {
                 if (titleMatch && titleMatch[2] !== mainItem.title) {
                     newBlock = newBlock.replace(titlePattern, `$1${mainItem.title}$3`)
                     blockChanged = true
+                }
+
+                // 2.1 更新 Icon (如果变化)
+                // 注意：这里简单假设 icon 是组件名，直接替换。
+                // 如果是字符串形式，可能需要加引号，这里遵循源码惯例。
+                if (mainItem.icon) {
+                    const iconPattern = /(icon:\s*)([\w]+)(\s*,?)/
+                    const iconMatch = iconPattern.exec(newBlock)
+
+                    // 获取图标名称
+                    let iconName = ''
+                    if (typeof mainItem.icon === 'string') {
+                        iconName = mainItem.icon
+                    } else if (mainItem.icon.name) {
+                        iconName = mainItem.icon.name
+                    } else if (mainItem.icon.__name) {
+                        iconName = mainItem.icon.__name
+                    } else {
+                        // 实在找不到名字，尝试 toString 转换或维持原样
+                        iconName = mainItem.icon.toString().match(/(\w+)/)?.[0] || 'IconSettings'
+                    }
+
+                    if (iconMatch && iconMatch[2] !== iconName) {
+                        newBlock = newBlock.replace(iconPattern, `$1${iconName}$3`)
+                        blockChanged = true
+                    } else if (!iconMatch) {
+                        // 如果块中原来没有 icon 字段，则在 id 或 title 后插入
+                        newBlock = newBlock.replace(/(id:\s*['"].*?['"]\s*,)/, `$1 icon: ${iconName},`)
+                        blockChanged = true
+                    }
                 }
 
                 // 3. 更新 Items (重建数组)
@@ -826,6 +862,7 @@ export function getPage1Config(navId: string): Page1Config | undefined {
             items: Array<{
                 id: string
                 title: string
+                icon?: any
                 isOpen?: boolean
                 items?: Array<{
                     id: string
@@ -889,6 +926,7 @@ export function getPage1Config(navId: string): Page1Config | undefined {
                         {
                             id: 'example-main',
                             title: '示例主导航',
+                            icon: 'IconSettings',
                             isOpen: true,
                             items: [
                                 {
@@ -918,6 +956,7 @@ export function getPage1Config(navId: string): Page1Config | undefined {
             items: group.items.map(mainItem => ({
                 id: mainItem.id,
                 title: mainItem.title,
+                icon: mainItem.icon,
                 isOpen: mainItem.isOpen,
                 items: mainItem.items?.map(subItem => {
                     // 获取页面配置（如果有）
@@ -990,6 +1029,7 @@ export function getPage1Config(navId: string): Page1Config | undefined {
                             return {
                                 id: mainItem.id,
                                 title: mainItem.title || mainItem.label,
+                                icon: mainItem.icon || 'IconSettings',
                                 url: '#',
                                 isOpen: mainItem.isOpen,
                                 items: subItems.map((sub: any) => {
