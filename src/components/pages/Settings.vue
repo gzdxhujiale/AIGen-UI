@@ -1510,6 +1510,15 @@ const handleSaveToCloud = async () => {
                               />
                               <label class="text-xs text-muted-foreground">复选框</label>
                             </div>
+                            <div class="flex items-center gap-1.5">
+                               <input 
+                                type="checkbox" 
+                                :checked="currentPageConfig.tableArea.stickyHeader !== false"
+                                @change="handleUpdateTableArea('stickyHeader', ($event.target as HTMLInputElement).checked)"
+                                class="rounded border-input text-primary focus:ring-primary w-3 h-3"
+                              />
+                              <label class="text-xs text-muted-foreground">吸顶表头</label>
+                            </div>
                           </div>
                           <Button variant="outline" size="sm" class="h-7 text-xs px-2" @click="openAddColumnDialog">
                             <Plus class="w-3 h-3 mr-1" />
@@ -1528,7 +1537,7 @@ const handleSaveToCloud = async () => {
                               <th class="text-left p-2 text-xs font-medium border-r border-border/50">标签</th>
                               <th class="text-left p-2 text-xs font-medium border-r border-border/50">字段名</th>
                               <th class="text-left p-2 text-xs font-medium border-r border-border/50">宽度</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">数据格式</th>
+                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">数据格式 / 按钮配置</th>
                               <th class="text-right p-2 text-xs font-medium w-16">操作</th>
                             </tr>
                           </thead>
@@ -1585,23 +1594,33 @@ const handleSaveToCloud = async () => {
                                     placeholder="100px"
                                   />
                                 </td>
-                                <!-- 数据格式 - 下拉框 -->
-                                <td class="p-1 border-r border-border/50">
-                                  <Select 
-                                    :model-value="col.mockFormat || 'none'"
-                                    @update:model-value="(v) => col.mockFormat = String(v) === 'none' ? undefined : String(v) as 'text' | 'datetime' | 'number'"
-                                  >
-                                    <SelectTrigger class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus:bg-background focus:border-input focus:shadow-sm">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="none">无</SelectItem>
-                                      <SelectItem value="text">文本</SelectItem>
-                                      <SelectItem value="datetime">时间</SelectItem>
-                                      <SelectItem value="number">数字</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </td>
+                                 <!-- 格式 / 按钮配置 -->
+                                 <td class="p-1 border-r border-border/50">
+                                   <!-- 按钮列表: 当类型为按钮时显示 -->
+                                   <Input 
+                                     v-if="col.type === 'text-button'"
+                                     :model-value="col.buttons?.join(', ') || ''" 
+                                     @update:model-value="(v) => col.buttons = String(v).split(/[，,]/).map(s => s.trim()).filter(s => s)"
+                                     class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                     placeholder="按钮列表: 增加, 删除"
+                                   />
+                                   <!-- 数据格式: 其他类型显示 -->
+                                   <Select 
+                                     v-else
+                                     :model-value="col.mockFormat || 'none'"
+                                     @update:model-value="(v) => col.mockFormat = String(v) === 'none' ? undefined : String(v) as 'text' | 'datetime' | 'number'"
+                                   >
+                                     <SelectTrigger class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus:bg-background focus:border-input focus:shadow-sm">
+                                       <SelectValue placeholder="格式" />
+                                     </SelectTrigger>
+                                     <SelectContent>
+                                       <SelectItem value="none">无</SelectItem>
+                                       <SelectItem value="text">文本</SelectItem>
+                                       <SelectItem value="datetime">时间</SelectItem>
+                                       <SelectItem value="number">数字</SelectItem>
+                                     </SelectContent>
+                                   </Select>
+                                 </td>
                                 <!-- 操作按钮 -->
                                 <td class="p-1">
                                   <div class="flex gap-0.5 justify-end">

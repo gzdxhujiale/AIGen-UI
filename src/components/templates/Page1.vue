@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -97,8 +96,8 @@ function generateMockData(): any[] {
       if (col.mockFormat) {
         row[col.key] = generateMockValue(col.mockFormat, col.label, i)
       } else {
-        // 如果没有指定格式，使用默认值
-        row[col.key] = `${col.label}${i + 1}`
+        // 如果没有指定格式，默认为空
+        row[col.key] = ''
       }
     })
     
@@ -344,22 +343,23 @@ const getStatusClass = (status: string) => {
       <!-- 列表区 -->
       <div v-if="pageConfig.tableArea?.show !== false" class="flex-1 bg-background rounded-xl border shadow-sm overflow-hidden flex flex-col">
         <div 
-          class="flex-1"
+          class="flex-1 min-h-0 table-scroll-area"
           :class="{
-            'overflow-x-auto': pageConfig.tableArea.scrollX,
             'overflow-y-auto': pageConfig.tableArea.scrollY,
-            'overflow-x-hidden': !pageConfig.tableArea.scrollX,
-            'overflow-y-hidden': !pageConfig.tableArea.scrollY,
+            'overflow-x-auto': pageConfig.tableArea.scrollX,
           }"
           :style="{ maxHeight: pageConfig.tableArea.height }"
         >
-          <Table :class="{ 'table-fixed': pageConfig.tableArea.fixedLayout }" class="w-full">
-            <TableHeader :class="{ 'sticky top-0 bg-muted/50 z-10': pageConfig.tableArea.stickyHeader !== false }">
+          <table 
+            class="w-full caption-bottom text-sm"
+            :class="{ 'table-fixed': pageConfig.tableArea.fixedLayout }" 
+          >
+            <TableHeader :class="{ 'sticky top-0 bg-background z-30 border-b shadow-sm': pageConfig.tableArea.stickyHeader !== false }">
               <TableRow class="text-xs hover:bg-transparent">
                 <!-- 复选框列 -->
                 <TableHead 
                   v-if="pageConfig.tableArea.showCheckbox"
-                  class="h-11 border-r bg-muted/50"
+                  class="h-11 border-r bg-muted/50 sticky top-0 z-30"
                   :style="{ width: '30px' }"
                 >
                   <Checkbox 
@@ -373,7 +373,8 @@ const getStatusClass = (status: string) => {
                   :key="col.key"
                   class="h-11 font-semibold border-r last:border-r-0"
                   :class="{
-                    'sticky z-20 bg-muted/50': col.fixed && pageConfig.tableArea.stickyHeader !== false,
+                    'sticky z-40 bg-background': col.fixed && pageConfig.tableArea.stickyHeader !== false,
+                    'top-0': col.fixed && pageConfig.tableArea.stickyHeader !== false,
                     'bg-muted/50': col.fixed && pageConfig.tableArea.stickyHeader === false,
                     'left-0': col.fixed === 'left' && !pageConfig.tableArea.showCheckbox,
                     'left-[50px]': col.fixed === 'left' && pageConfig.tableArea.showCheckbox,
@@ -464,7 +465,7 @@ const getStatusClass = (status: string) => {
                 </TableCell>
               </TableRow>
             </TableBody>
-          </Table>
+          </table>
         </div>
 
         <!-- 分页 -->
@@ -507,3 +508,26 @@ const getStatusClass = (status: string) => {
       <p class="text-xs text-muted-foreground mt-2">请检查配置导入日志</p>
   </div>
 </template>
+
+<style scoped>
+/* 
+  Hack to push the vertical scrollbar down so it doesn't overlap the sticky header.
+  45px = h-11 (44px) + border (1px)
+*/
+.table-scroll-area::-webkit-scrollbar-track {
+  margin-top: 45px;
+}
+
+/* Optional: Ensure custom scrollbar styling triggers the track margin behavior */
+.table-scroll-area::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.table-scroll-area::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+.table-scroll-area::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.5);
+}
+</style>

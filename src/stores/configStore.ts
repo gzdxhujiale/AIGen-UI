@@ -608,6 +608,7 @@ export interface TableAreaConfig {
     showCheckbox?: boolean  // 是否显示复选框列
     fixedLayout?: boolean   // 是否使用固定布局
     pageSize?: number       // 每页显示行数
+    stickyHeader?: boolean  // 是否吸顶表头
     columns: TableColumn[]
 }
 
