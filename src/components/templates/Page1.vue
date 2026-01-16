@@ -354,7 +354,7 @@ const getStatusClass = (status: string) => {
           :style="{ maxHeight: pageConfig.tableArea.height }"
         >
           <Table :class="{ 'table-fixed': pageConfig.tableArea.fixedLayout }" class="w-full">
-            <TableHeader class="sticky top-0 bg-muted/50 z-10">
+            <TableHeader :class="{ 'sticky top-0 bg-muted/50 z-10': pageConfig.tableArea.stickyHeader !== false }">
               <TableRow class="text-xs hover:bg-transparent">
                 <!-- 复选框列 -->
                 <TableHead 
@@ -373,7 +373,8 @@ const getStatusClass = (status: string) => {
                   :key="col.key"
                   class="h-11 font-semibold border-r last:border-r-0"
                   :class="{
-                    'sticky z-20 bg-muted/50': col.fixed,
+                    'sticky z-20 bg-muted/50': col.fixed && pageConfig.tableArea.stickyHeader !== false,
+                    'bg-muted/50': col.fixed && pageConfig.tableArea.stickyHeader === false,
                     'left-0': col.fixed === 'left' && !pageConfig.tableArea.showCheckbox,
                     'left-[50px]': col.fixed === 'left' && pageConfig.tableArea.showCheckbox,
                     'right-0': col.fixed === 'right',

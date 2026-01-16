@@ -81,6 +81,7 @@ export interface TableAreaConfig {
     height?: string         // 表格容器高度
     scrollX?: boolean       // 是否启用横向滚动
     scrollY?: boolean       // 是否启用纵向滚动
+    stickyHeader?: boolean  // 是否表头吸顶 (默认 true)
     showCheckbox?: boolean  // 是否显示复选框列
     fixedLayout?: boolean   // 是否使用固定布局
     pageSize?: number       // 每页显示行数

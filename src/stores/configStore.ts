@@ -750,6 +750,7 @@ export const page1Configs: Record<string, Page1Config> = {
             if (config.tableArea.height) code += `            height: '${config.tableArea.height}',\n`
             if (config.tableArea.scrollX !== undefined) code += `            scrollX: ${config.tableArea.scrollX},\n`
             if (config.tableArea.scrollY !== undefined) code += `            scrollY: ${config.tableArea.scrollY},\n`
+            if (config.tableArea.stickyHeader !== undefined) code += `            stickyHeader: ${config.tableArea.stickyHeader},\n`
             if (config.tableArea.showCheckbox !== undefined) code += `            showCheckbox: ${config.tableArea.showCheckbox},\n`
             if (config.tableArea.fixedLayout !== undefined) code += `            fixedLayout: ${config.tableArea.fixedLayout},\n`
             code += `            columns: [\n`
