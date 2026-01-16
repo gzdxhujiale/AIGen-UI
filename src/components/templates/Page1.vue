@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -10,14 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { FilterInput, FilterSelect, FilterDateRange, FilterTreeSelect, FilterCard } from '@/components/ui/filter'
+import { FilterInput, FilterSelect, FilterDateRange, FilterTreeSelect, FilterCard, ArcoTable } from '@/components/ui/filter'
 import { useNavigation } from '@/config/sidebar'
 import { useConfigStore, type Page1Config } from '@/stores/configStore'
 
@@ -37,9 +28,6 @@ const pageConfig = computed<Page1Config | undefined>(() => {
 // --- 响应式数据 ---
 const tableData = ref<any[]>([])
 
-// 选中的行
-const selectedRows = ref<number[]>([])
-
 // 分页
 const currentPage = ref(1)
 const pageSize = computed(() => pageConfig.value?.tableArea.pageSize || 15)
@@ -55,10 +43,8 @@ const filters = reactive<Record<string, any>>({})
 function generateMockValue(format: string | undefined, label: string, index: number): string | number {
   switch (format) {
     case 'text':
-      // 文本格式：标签名 + 数字
       return `${label}${index + 1}`
     case 'datetime':
-      // 时间格式：随机日期时间
       const now = new Date()
       const randomDays = Math.floor(Math.random() * 30)
       const randomHours = Math.floor(Math.random() * 24)
@@ -73,10 +59,9 @@ function generateMockValue(format: string | undefined, label: string, index: num
       const s = String(randomSeconds).padStart(2, '0')
       return `${year}-${month}-${day} ${h}:${m}:${s}`
     case 'number':
-      // 数字格式：随机5位数
       return Math.floor(10000 + Math.random() * 90000)
     default:
-      // 默认返回空或占位值
+      // 默认生成文本数据
       return `${label}${index + 1}`
   }
 }
@@ -86,19 +71,17 @@ function generateMockData(): any[] {
   if (!pageConfig.value) return []
   
   const columns = pageConfig.value.tableArea.columns
-  const rowCount = 20 // 生成20行数据
+  if (!columns || columns.length === 0) return []
+  
+  const rowCount = 20
   const data: any[] = []
   
   for (let i = 0; i < rowCount; i++) {
     const row: Record<string, any> = { id: i + 1 }
     
     columns.forEach(col => {
-      if (col.mockFormat) {
-        row[col.key] = generateMockValue(col.mockFormat, col.label, i)
-      } else {
-        // 如果没有指定格式，默认为空
-        row[col.key] = ''
-      }
+      // 无论是否有 mockFormat，都生成数据
+      row[col.key] = generateMockValue(col.mockFormat, col.label, i)
     })
     
     data.push(row)
@@ -111,18 +94,15 @@ function generateMockData(): any[] {
 function loadData() {
   if (pageConfig.value?.mockData) {
     const mockData = pageConfig.value.mockData()
-    // 如果 mockData 返回空数组，尝试根据列配置生成数据
     if (mockData.length === 0) {
       tableData.value = generateMockData()
     } else {
       tableData.value = mockData
     }
   } else {
-    // 没有 mockData 函数，根据列配置生成
     tableData.value = generateMockData()
   }
   currentPage.value = 1
-  selectedRows.value = []
 }
 
 // 监听导航变化，重新加载数据
@@ -130,7 +110,7 @@ watch(currentNavId, () => {
   loadData()
 }, { immediate: true })
 
-// 监听配置变化，重置筛选状态
+// 监听配置变化，重置筛选状态并重新加载数据
 watch(pageConfig, (config) => {
   if (config) {
     // 清空旧状态
@@ -139,19 +119,15 @@ watch(pageConfig, (config) => {
     config.filterArea.filters.forEach(filter => {
       filters[filter.key] = filter.defaultValue
     })
+    // 重新加载数据（配置变化时）
+    loadData()
   }
-}, { immediate: true })
+}, { immediate: true, deep: true })
 
 // --- 计算属性 ---
 const filteredData = computed(() => {
   return tableData.value
 })
-
-const paginatedData = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredData.value.slice(start, start + pageSize.value)
-})
-const totalPages = computed(() => Math.ceil(filteredData.value.length / pageSize.value) || 1)
 
 // 可见的筛选项
 const visibleFilters = computed(() => {
@@ -168,45 +144,22 @@ const visibleActions = computed(() => {
   return pageConfig.value?.actionsArea?.buttons?.filter((a: { visible?: boolean }) => a.visible !== false) || []
 })
 
-// 全选状态
-const isAllSelected = computed(() => {
-  return paginatedData.value.length > 0 && paginatedData.value.every((item) => selectedRows.value.includes(item.id))
-})
-
 // --- 方法 ---
-const toggleSelectAll = () => {
-  if (isAllSelected.value) {
-    selectedRows.value = selectedRows.value.filter((id) => !paginatedData.value.some((item) => item.id === id))
-  } else {
-    const currentIds = paginatedData.value.map((item) => item.id)
-    selectedRows.value = [...new Set([...selectedRows.value, ...currentIds])]
-  }
+const handleRowClick = (record: any) => {
+  console.log('Row clicked:', record)
 }
 
-const toggleRowSelection = (id: number) => {
-  const index = selectedRows.value.indexOf(id)
-  if (index > -1) {
-    selectedRows.value.splice(index, 1)
-  } else {
-    selectedRows.value.push(id)
-  }
+const handleSelectionChange = (keys: (string | number)[]) => {
+  console.log('Selection changed:', keys)
 }
 
-const getStatusClass = (status: string) => {
-  const map: Record<string, string> = {
-    pending: 'bg-amber-100 text-amber-700 border-amber-200',
-    reviewing: 'bg-blue-100 text-blue-700 border-blue-200',
-    approved: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    rejected: 'bg-red-100 text-red-700 border-red-200',
-    paid: 'bg-green-100 text-green-700 border-green-200',
-    failed: 'bg-rose-100 text-rose-700 border-rose-200',
-  }
-  return map[status] || ''
+const handleActionClick = (action: string, record: any) => {
+  console.log('Action clicked:', action, record)
 }
 </script>
 
 <template>
-  <div v-if="pageConfig" class="h-full flex flex-col">
+  <div v-if="pageConfig" class="h-full flex flex-col overflow-hidden">
     <!-- 顶部操作栏 Teleport -->
     <Teleport to="#breadcrumb-actions" defer>
       <div class="flex items-center gap-4">
@@ -250,8 +203,11 @@ const getStatusClass = (status: string) => {
       </div>
     </Teleport>
 
-    <!-- 主体内容 -->
-    <div class="flex-1 flex flex-col p-6 gap-4 overflow-hidden">
+    <!-- 主体内容 - 根据表格滚动配置决定是否内部滚动 -->
+    <div 
+      class="flex-1 flex flex-col p-6 gap-4"
+      :class="pageConfig.tableArea?.scrollY ? 'overflow-hidden' : 'overflow-y-auto'"
+    >
       
       <!-- 功能区 - 筛选条件 + 操作按钮 -->
       <div v-if="pageConfig.filterArea?.show !== false || pageConfig.actionsArea?.show !== false" class="bg-background rounded-xl border shadow-sm">
@@ -340,164 +296,22 @@ const getStatusClass = (status: string) => {
         />
       </div>
 
-      <!-- 列表区 -->
-      <div v-if="pageConfig.tableArea?.show !== false" class="flex-1 bg-background rounded-xl border shadow-sm overflow-hidden flex flex-col">
-        <div 
-          class="flex-1 min-h-0 table-scroll-area"
-          :class="{
-            'overflow-y-auto': pageConfig.tableArea.scrollY,
-            'overflow-x-auto': pageConfig.tableArea.scrollX,
-          }"
-          :style="{ maxHeight: pageConfig.tableArea.height }"
-        >
-          <table 
-            class="w-full caption-bottom text-sm"
-            :class="{ 'table-fixed': pageConfig.tableArea.fixedLayout }" 
-          >
-            <TableHeader :class="{ 'sticky top-0 bg-background z-30 border-b shadow-sm': pageConfig.tableArea.stickyHeader !== false }">
-              <TableRow class="text-xs hover:bg-transparent">
-                <!-- 复选框列 -->
-                <TableHead 
-                  v-if="pageConfig.tableArea.showCheckbox"
-                  class="h-11 border-r bg-muted/50 sticky top-0 z-30"
-                  :style="{ width: '30px' }"
-                >
-                  <Checkbox 
-                    :model-value="isAllSelected"
-                    @update:model-value="toggleSelectAll"
-                  />
-                </TableHead>
-                <!-- 数据列 -->
-                <TableHead 
-                  v-for="col in visibleColumns" 
-                  :key="col.key"
-                  class="h-11 font-semibold border-r last:border-r-0"
-                  :class="{
-                    'sticky z-40 bg-background': col.fixed && pageConfig.tableArea.stickyHeader !== false,
-                    'top-0': col.fixed && pageConfig.tableArea.stickyHeader !== false,
-                    'bg-muted/50': col.fixed && pageConfig.tableArea.stickyHeader === false,
-                    'left-0': col.fixed === 'left' && !pageConfig.tableArea.showCheckbox,
-                    'left-[50px]': col.fixed === 'left' && pageConfig.tableArea.showCheckbox,
-                    'right-0': col.fixed === 'right',
-                  }"
-                  :style="{ 
-                    width: col.width, 
-                    minWidth: col.minWidth 
-                  }"
-                >
-                  {{ col.label }}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow 
-                v-for="item in paginatedData" 
-                :key="item.id" 
-                class="hover:bg-muted/30 cursor-pointer transition-colors"
-                :class="{ 'bg-primary/5': selectedRows.includes(item.id) }"
-                @click="toggleRowSelection(item.id)"
-              >
-                <!-- 复选框列 -->
-                <TableCell 
-                  v-if="pageConfig.tableArea.showCheckbox"
-                  class="py-3 border-r bg-background"
-                  :style="{ width: '50px' }"
-                  @click.stop
-                >
-                  <Checkbox 
-                    :model-value="selectedRows.includes(item.id)"
-                    @update:model-value="toggleRowSelection(item.id)"
-                  />
-                </TableCell>
-                <!-- 数据列 -->
-                <TableCell 
-                  v-for="col in visibleColumns" 
-                  :key="col.key"
-                  class="py-3 border-r last:border-r-0"
-                  :class="{
-                    'sticky z-10 bg-background': col.fixed,
-                    'left-0': col.fixed === 'left' && !pageConfig.tableArea.showCheckbox,
-                    'left-[50px]': col.fixed === 'left' && pageConfig.tableArea.showCheckbox,
-                    'right-0': col.fixed === 'right',
-                  }"
-                  :style="{ width: col.width }"
-                >
-                  <!-- Badge 类型 (应用) -->
-                  <Badge v-if="col.type === 'badge'" variant="outline" class="font-medium">
-                    {{ item[col.key] }}
-                  </Badge>
-                  <!-- 状态 Badge 类型 -->
-                  <Badge 
-                    v-else-if="col.type === 'status-badge'" 
-                    variant="outline" 
-                    :class="getStatusClass(item.orderStatus)"
-                    class="text-xs font-medium"
-                  >
-                    {{ item[col.key] }}
-                  </Badge>
-                  <!-- 文字按钮类型 -->
-                  <div v-else-if="col.type === 'text-button'" class="flex items-center gap-2">
-                    <template v-if="col.buttons && col.buttons.length > 0">
-                      <template v-for="(btn, idx) in col.buttons" :key="idx">
-                        <div v-if="idx > 0" class="w-px h-3 bg-border"></div>
-                        <Button
-                          variant="link"
-                          size="sm"
-                          class="h-auto p-0 text-blue-600 hover:text-blue-700"
-                          @click.stop="console.log('Clicked:', btn, item)"
-                        >
-                          {{ btn }}
-                        </Button>
-                      </template>
-                    </template>
-                    <Button
-                      v-else
-                      variant="link"
-                      size="sm"
-                      class="h-auto p-0 text-blue-600 hover:text-blue-700"
-                      @click.stop="console.log('Clicked:', item[col.key])"
-                    >
-                      {{ item[col.key] }}
-                    </Button>
-                  </div>
-                  <!-- 普通文本类型 -->
-                  <span v-else class="text-sm">{{ item[col.key] }}</span>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </table>
-        </div>
-
-        <!-- 分页 -->
-        <div class="flex justify-between items-center px-4 py-3 border-t bg-muted/20">
-          <div class="text-xs text-muted-foreground">
-            显示 {{ ((currentPage - 1) * pageSize) + 1 }} - {{ Math.min(currentPage * pageSize, filteredData.length) }} 共 {{ filteredData.length }} 条
-          </div>
-          <div class="flex gap-2 items-center">
-            <div class="text-xs text-muted-foreground mr-2">
-              第 {{ currentPage }} 页 / 共 {{ totalPages }} 页
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs px-3"
-              :disabled="currentPage === 1"
-              @click="currentPage--"
-            >
-              上一页
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs px-3"
-              :disabled="currentPage === totalPages"
-              @click="currentPage++"
-            >
-              下一页
-            </Button>
-          </div>
-        </div>
-      </div>
+      <!-- 列表区 - 使用 ArcoTable 组件 -->
+      <ArcoTable
+        v-if="pageConfig.tableArea?.show !== false"
+        :columns="visibleColumns"
+        :data="filteredData"
+        :show-checkbox="pageConfig.tableArea.showCheckbox"
+        :page-size="pageSize"
+        :height="pageConfig.tableArea.height"
+        :scroll-x="pageConfig.tableArea.scrollX"
+        :scroll-y="pageConfig.tableArea.scrollY"
+        :sticky-header="pageConfig.tableArea.stickyHeader !== false"
+        class="flex-1"
+        @row-click="handleRowClick"
+        @selection-change="handleSelectionChange"
+        @action-click="handleActionClick"
+      />
     </div>
   </div>
 
@@ -510,24 +324,5 @@ const getStatusClass = (status: string) => {
 </template>
 
 <style scoped>
-/* 
-  Hack to push the vertical scrollbar down so it doesn't overlap the sticky header.
-  45px = h-11 (44px) + border (1px)
-*/
-.table-scroll-area::-webkit-scrollbar-track {
-  margin-top: 45px;
-}
-
-/* Optional: Ensure custom scrollbar styling triggers the track margin behavior */
-.table-scroll-area::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.table-scroll-area::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--muted-foreground) / 0.3);
-  border-radius: 4px;
-}
-.table-scroll-area::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(var(--muted-foreground) / 0.5);
-}
+/* Page1 组件样式已移至 ArcoTable 组件 */
 </style>

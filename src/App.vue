@@ -90,7 +90,8 @@ useNetworkStatus()
   <SidebarProvider v-else>
     <AppSidebar />
     <SidebarInset>
-      <header class="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+      <!-- 固定的 Header 区域 -->
+      <header class="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-background z-10">
         <SidebarTrigger class="-ml-1" />
         <Separator orientation="vertical" class="mr-2 h-4" />
         <Breadcrumb class="flex-1">
@@ -128,7 +129,9 @@ useNetworkStatus()
           <!-- 各页面会通过 Teleport 在此渲染内容 -->
         </div>
       </header>
-      <div class="flex flex-1 flex-col overflow-hidden">
+      
+      <!-- 主内容区 - 高度约束容器 -->
+      <div class="flex-1 min-h-0 flex flex-col">
         <Transition
           name="fade-slide"
           mode="out-in"

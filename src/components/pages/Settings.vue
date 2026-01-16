@@ -866,7 +866,7 @@ const handleSaveToCloud = async () => {
 </script>
 
 <template>
-  <div class="settings-root">
+  <div class="settings-root h-full overflow-hidden">
       <!-- 隐藏的文件输入 -->
       <input 
         ref="fileInputRef"
@@ -1990,7 +1990,7 @@ const handleSaveToCloud = async () => {
 <style scoped>
 .settings-root {
   height: 100%;
-  display: contents;
+  overflow: hidden;
 }
 
 /* Custom scrollbar for navigation */
