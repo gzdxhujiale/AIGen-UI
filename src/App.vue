@@ -1,29 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
-import { ChevronRight } from 'lucide-vue-next'
-import AppSidebar from '@/components/AppSidebar.vue'
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
-import { Separator } from '@/components/ui/separator'
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
-import { useNavigation } from '@/config/sidebar'
-import { Toaster } from '@/components/ui/sonner'
-import "vue-sonner/style.css"
-
 // 导入页面模板
-import Page1 from '@/components/templates/Page1.vue'
+import Page1 from '@/components/pages/Page1.vue'
 import Settings from '@/components/pages/Settings.vue'
 import AuthPage from '@/components/pages/AuthPage.vue'
-import SkeletonLoading from '@/components/shared/SkeletonLoading.vue'
+import Billing from '@/components/pages/Billing.vue'
+import Profile from '@/components/pages/Profile.vue'
+import SkeletonLoading from '@/components/pages/SkeletonLoading.vue'
 
-// AI Components
-import { AIChatButton, AIChatWindow } from '@/components/ai'
+// AI Components - Only types or global listeners if needed? 
+// No, the UI buttons are now inside layouts.
+// But wait, the previous code had AIChatButton/Window inside SidebarProvider in simple App.vue
+// Now they are inside ShadcnLayout.
+// What about ArcoLayout? 
+// ArcoLayout doesn't have them yet. The user might want them global?
+// For now I'm removing them from App.vue because I removed them from template.
+// If I need them back I'll add them to layouts.
 
 // Composables
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
@@ -33,7 +25,13 @@ import { useAuthStore } from '@/stores/authStore'
 // Config Store
 import { useConfigStore } from '@/stores/configStore'
 
-const { breadcrumbs, currentPage, setDetailTitle } = useNavigation()
+// Import layouts
+import ArcoLayout from '@/components/ArcoLayout.vue'
+import ShadcnLayout from '@/components/ShadcnLayout.vue'
+
+import { useNavigation } from '@/config/sidebar'
+
+const { currentPage } = useNavigation() 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
 
@@ -41,18 +39,15 @@ const configStore = useConfigStore()
 const pageComponents: Record<string, any> = {
   Page1,
   Settings,
+  Billing,
+  profile: Profile,
   // Page2, // 后续添加更多模板时，在此注册...
 }
 
 // 当前显示的组件 - 如果未找到模板则显示空白占位
 const CurrentPageComponent = computed(() => pageComponents[currentPage.value])
 
-// 点击第二级面包屑返回列表
-const handleSubNavClick = () => {
-  if (breadcrumbs.value.detail) {
-    setDetailTitle(null)
-  }
-}
+
 
 // Initialize auth on mount
 onMounted(async () => {
@@ -60,6 +55,11 @@ onMounted(async () => {
   // 登录成功后加载云端配置
   if (authStore.isAuthenticated) {
     await configStore.loadFromSupabase()
+    
+    // Sync style preference from user profile once on startup
+    if (authStore.stylePreference) {
+        configStore.navigationStyle = authStore.stylePreference
+    }
   }
 })
 
@@ -67,6 +67,11 @@ onMounted(async () => {
 watch(() => authStore.isAuthenticated, async (isAuth) => {
   if (isAuth) {
     await configStore.loadFromSupabase()
+    
+    // Sync style preference from user profile on login
+    if (authStore.stylePreference) {
+        configStore.navigationStyle = authStore.stylePreference
+    }
   }
 })
 
@@ -87,65 +92,19 @@ useNetworkStatus()
   <AuthPage v-else-if="!authStore.isAuthenticated" />
 
   <!-- Authenticated: show main app -->
-  <SidebarProvider v-else>
-    <AppSidebar />
-    <SidebarInset>
-      <!-- 固定的 Header 区域 -->
-      <header class="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-background z-10">
-        <SidebarTrigger class="-ml-1" />
-        <Separator orientation="vertical" class="mr-2 h-4" />
-        <Breadcrumb class="flex-1">
-          <BreadcrumbList>
-            <BreadcrumbItem class="hidden md:block">
-              <BreadcrumbLink href="#">
-                {{ breadcrumbs.main }}
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator class="hidden md:block">
-              <ChevronRight />
-            </BreadcrumbSeparator>
-            <BreadcrumbItem>
-              <!-- 如果有详情页，第二级变为可点击的链接 -->
-              <BreadcrumbLink v-if="breadcrumbs.detail" href="#" @click.prevent="handleSubNavClick">
-                {{ breadcrumbs.sub }}
-              </BreadcrumbLink>
-              <BreadcrumbPage v-else>{{ breadcrumbs.sub }}</BreadcrumbPage>
-            </BreadcrumbItem>
-            
-            <!-- 第三级：详情页 -->
-            <template v-if="breadcrumbs.detail">
-              <BreadcrumbSeparator>
-                <ChevronRight />
-              </BreadcrumbSeparator>
-              <BreadcrumbItem>
-                <BreadcrumbPage>{{ breadcrumbs.detail }}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </template>
-          </BreadcrumbList>
-        </Breadcrumb>
-        
-        <!-- 页面操作区域 - Teleport 目标 -->
-        <div id="breadcrumb-actions" class="flex items-center gap-4">
-          <!-- 各页面会通过 Teleport 在此渲染内容 -->
-        </div>
-      </header>
-      
-      <!-- 主内容区 - 高度约束容器 -->
-      <div class="flex-1 min-h-0 flex flex-col">
-        <Transition
-          name="fade-slide"
-          mode="out-in"
-          appear
-        >
-          <component :is="CurrentPageComponent" :key="currentPage" />
-        </Transition>
-      </div>
-    </SidebarInset>
-    
-    <!-- AI Chat Components -->
-    <AIChatButton />
-    <AIChatWindow />
-  </SidebarProvider>
+  <template v-else>
+      <ArcoLayout v-if="configStore.navigationStyle === 'arco'">
+          <Transition name="fade-slide" mode="out-in" appear>
+            <component :is="CurrentPageComponent" :key="currentPage" />
+          </Transition>
+      </ArcoLayout>
+
+      <ShadcnLayout v-else>
+          <Transition name="fade-slide" mode="out-in" appear>
+            <component :is="CurrentPageComponent" :key="currentPage" />
+          </Transition>
+      </ShadcnLayout>
+  </template>
   
   <Toaster position="top-right" />
 </template>

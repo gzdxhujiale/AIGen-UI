@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { SidebarProps } from '@/components/ui/sidebar'
-import { defaultSidebarConfig, type SidebarConfig } from '@/config/sidebar'
+import { defaultSidebarConfig, type SidebarConfig, type TeamItem, type TeamPermissions } from '@/config/sidebar'
 import { useConfigStore } from '@/stores/configStore'
+import { useAuthStore } from '@/stores/authStore'
+import { GalleryVerticalEnd, AudioWaveform, Command } from 'lucide-vue-next'
 
 import NavMain from '@/components/NavMain.vue'
-import NavProjects from '@/components/NavProjects.vue'
 import NavUser from '@/components/NavUser.vue'
 import TeamSwitcher from '@/components/TeamSwitcher.vue'
 
@@ -28,12 +29,55 @@ const props = withDefaults(defineProps<AppSidebarProps>(), {
 
 // 使用 Pinia store
 const configStore = useConfigStore()
+const authStore = useAuthStore()
 
 // 使用传入的配置或默认配置（用于非 navGroups 的部分）
+// Note: We will override teams if authStore has them
 const sidebarConfig = props.config ?? defaultSidebarConfig
 
+// Default icons for dynamically loaded teams
+const TEAM_ICONS = [GalleryVerticalEnd, AudioWaveform, Command]
+
+// Compute effective teams from Auth Store or fallback to sidebarConfig
+const effectiveTeams = computed<TeamItem[]>(() => {
+  const cloudTeams = authStore.teamsConfig
+  
+  if (Array.isArray(cloudTeams) && cloudTeams.length > 0) {
+    return cloudTeams.map((t: any, index: number) => {
+      // Map simple JSON permissions to TeamPermissions object
+      // For now, if permissions includes 'admin' or 'all', give full access.
+      // Otherwise default to a safe subset or 'all' if loose.
+      // Assuming 'read' or empty means basic access.
+      // Let's implement a simple mapping strategy:
+      const perms = t.permissions || []
+      const isFullAccess = perms.includes('admin') || perms.includes('all') || perms.includes('write') || true // Defaulting to ALL for now to prevent lockout until improved
+      
+      const mappedPermissions: TeamPermissions = {
+         navMain: isFullAccess ? 'all' : [],
+         projects: isFullAccess ? 'all' : []
+      }
+
+      return {
+        name: t.name || 'Unnamed Team',
+        logo: TEAM_ICONS[index % TEAM_ICONS.length],
+        plan: t.role || 'Member',
+        permissions: mappedPermissions
+      }
+    })
+  }
+  
+  return sidebarConfig.teams
+})
+
 // 当前选中的团队
-const activeTeam = ref(sidebarConfig.teams[0])
+const activeTeam = ref<TeamItem>(effectiveTeams.value[0])
+
+// Watch for changes in effectiveTeams (e.g. after auth load) and update activeTeam if needed
+watch(effectiveTeams, (newTeams) => {
+    if (newTeams.length > 0 && !newTeams.find(t => t.name === activeTeam.value.name)) {
+        activeTeam.value = newTeams[0]
+    }
+}, { deep: true })
 
 // 根据权限过滤导航菜单 - 从 Pinia store 读取（支持预览模式）
 const filteredNavGroups = computed(() => {
@@ -42,7 +86,8 @@ const filteredNavGroups = computed(() => {
   const navGroups = configStore.effectiveNavGroups
   
   if (!team || !team.permissions) return navGroups
-
+  
+  // ... (Rest of the logic uses team.permissions)
   const { navMain, navItems } = team.permissions
 
   // 如果 navMain 是 'all'，显示所有，但仍需检查 navItems 的细粒度控制
@@ -54,7 +99,7 @@ const filteredNavGroups = computed(() => {
     // 过滤组内的一级菜单
     const filteredItems = group.items.filter(item => {
       // 1. 检查一级菜单权限
-      const isMainVisible = navMain === 'all' || navMain.includes(item.id)
+      const isMainVisible = navMain === 'all' || (Array.isArray(navMain) && navMain.includes(item.id))
       if (!isMainVisible) return false
 
       // 2. 检查二级菜单权限 (NavItems)
@@ -97,7 +142,7 @@ const filteredProjectGroups = computed(() => {
     if (projects === 'all') return sidebarConfig.projectGroups
 
     return sidebarConfig.projectGroups.map(group => {
-        const filteredProjects = group.projects.filter(project => projects.includes(project.id))
+        const filteredProjects = group.projects.filter(project => Array.isArray(projects) && projects.includes(project.id))
         return {
             ...group,
             projects: filteredProjects
@@ -126,7 +171,7 @@ const previewMode = computed(() => configStore.previewMode)
       </div>
       <!-- 传递 v-model 绑定 activeTeam -->
       <TeamSwitcher 
-        :teams="sidebarConfig.teams" 
+        :teams="effectiveTeams" 
         v-model="activeTeam"
       />
     </SidebarHeader>
@@ -140,7 +185,6 @@ const previewMode = computed(() => configStore.previewMode)
         :items="group.items" 
         :is-open="group.items.some(i => i.isOpen)" 
       />
-      <!-- 渲染过滤后的项目分组 -->
       <NavProjects 
         v-for="(group, index) in filteredProjectGroups" 
         :key="group.id ?? `project-${index}`"

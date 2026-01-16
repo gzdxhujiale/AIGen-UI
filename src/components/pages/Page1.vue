@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { Button } from '@/components/ui/button'
+import { Button as AButton } from '@arco-design/web-vue'
 import {
   Select,
   SelectContent,
@@ -12,8 +13,27 @@ import { FilterInput, FilterSelect, FilterDateRange, FilterTreeSelect, FilterCar
 import { useNavigation } from '@/config/sidebar'
 import { useConfigStore, type Page1Config } from '@/stores/configStore'
 
+// --- Props ---
+const props = defineProps<{
+  navId?: string
+  visibleSections?: ('filter' | 'actions' | 'card' | 'table')[]
+}>()
+
 // --- 获取导航状态 ---
-const { currentNavId } = useNavigation()
+const { currentNavId: routeNavId } = useNavigation()
+
+// 优先使用传入的 prop，否则使用路由中的 navId
+const currentNavId = computed(() => props.navId || routeNavId.value)
+
+// Helper: Check if a section should be visible
+const isSectionVisible = (section: 'filter' | 'actions' | 'card' | 'table') => {
+  // If visibleSections prop is provided, strictly follow it
+  if (props.visibleSections) {
+    return props.visibleSections.includes(section)
+  }
+  // Otherwise, default to always true (visibility will be controlled by pageConfig flags in template)
+  return true
+}
 
 // --- 使用 Pinia store ---
 const configStore = useConfigStore()
@@ -21,7 +41,6 @@ const configStore = useConfigStore()
 // --- 获取当前页面配置 ---
 const pageConfig = computed<Page1Config | undefined>(() => {
   const config = configStore.getPage1Config(currentNavId.value)
-  console.log('Page1: Resolving config for ID:', currentNavId.value, 'Found:', !!config)
   return config
 })
 
@@ -203,18 +222,20 @@ const handleActionClick = (action: string, record: any) => {
       </div>
     </Teleport>
 
-    <!-- 主体内容 - 根据表格滚动配置决定是否内部滚动 -->
+    <!-- 主体内容-->
     <div 
-      class="flex-1 flex flex-col p-6 gap-4"
-      :class="pageConfig.tableArea?.scrollY ? 'overflow-hidden' : 'overflow-y-auto'"
+      class="flex-1 flex flex-col p-6 gap-4 overflow-y-auto"
     >
       
       <!-- 功能区 - 筛选条件 + 操作按钮 -->
-      <div v-if="pageConfig.filterArea?.show !== false || pageConfig.actionsArea?.show !== false" class="bg-background rounded-xl border shadow-sm">
+      <div 
+        v-if="(isSectionVisible('filter') && pageConfig.filterArea?.show !== false) || (isSectionVisible('actions') && pageConfig.actionsArea?.show !== false)"
+        class="bg-background rounded-xl border shadow-sm"
+      >
         <div class="p-5">
           <!-- 动态筛选表单区 -->
           <div 
-            v-if="pageConfig.filterArea?.show !== false"
+            v-if="isSectionVisible('filter') && pageConfig.filterArea?.show !== false"
             class="grid mb-4"
             :style="{
               gridTemplateColumns: `repeat(${pageConfig.filterArea.columns}, 1fr)`,
@@ -257,20 +278,32 @@ const handleActionClick = (action: string, record: any) => {
           </div>
 
           <!-- 底部操作按钮 -->
-          <div v-if="pageConfig.actionsArea?.show !== false" class="flex items-center justify-end pt-2 border-t">
-
-            
+          <div 
+            v-if="isSectionVisible('actions') && pageConfig.actionsArea?.show !== false" 
+            class="flex items-center justify-end pt-2 border-t"
+          >
             <div class="flex items-center gap-3">
               <template v-for="(action, index) in visibleActions" :key="action.key">
                 <!-- 分隔符（在第2个按钮后添加） -->
                 <div v-if="index === 2" class="w-px h-6 bg-border mx-1"></div>
                 <Button 
-                  :variant="action.variant ?? 'default'"
+                  v-if="action.variant === 'shadcn-outline'"
+                  variant="outline"
                   class="h-9 px-5"
                   :class="action.className"
+                  @click="handleActionClick(action.key, null)"
                 >
                   {{ action.label }}
                 </Button>
+                <AButton 
+                  v-else
+                  :type="action.variant as any ?? 'outline'"
+                  class="h-9 px-5"
+                  :class="action.className"
+                  @click="handleActionClick(action.key, null)"
+                >
+                  {{ action.label }}
+                </AButton>
               </template>
             </div>
           </div>
@@ -279,7 +312,7 @@ const handleActionClick = (action: string, record: any) => {
 
       <!-- 卡片区 -->
       <div 
-        v-if="pageConfig.cardArea?.show"
+        v-if="isSectionVisible('card') && pageConfig.cardArea?.show"
         class="grid"
         :style="{
           gridTemplateColumns: `repeat(${pageConfig.cardArea.columns}, 1fr)`,
@@ -297,21 +330,27 @@ const handleActionClick = (action: string, record: any) => {
       </div>
 
       <!-- 列表区 - 使用 ArcoTable 组件 -->
-      <ArcoTable
-        v-if="pageConfig.tableArea?.show !== false"
-        :columns="visibleColumns"
-        :data="filteredData"
-        :show-checkbox="pageConfig.tableArea.showCheckbox"
-        :page-size="pageSize"
-        :height="pageConfig.tableArea.height"
-        :scroll-x="pageConfig.tableArea.scrollX"
-        :scroll-y="pageConfig.tableArea.scrollY"
-        :sticky-header="pageConfig.tableArea.stickyHeader !== false"
+      <div 
+        v-if="isSectionVisible('table') && pageConfig.tableArea?.show !== false"
         class="flex-1"
-        @row-click="handleRowClick"
-        @selection-change="handleSelectionChange"
-        @action-click="handleActionClick"
-      />
+        :class="{ 'shrink-0': !pageConfig.tableArea.scrollY }"
+      >
+        <ArcoTable
+          :columns="visibleColumns"
+          :data="filteredData"
+          :show-checkbox="pageConfig.tableArea.showCheckbox"
+          :page-size="pageSize"
+          :height="pageConfig.tableArea.scrollY ? '100%' : pageConfig.tableArea.height"
+          :scroll-x="pageConfig.tableArea.scrollX"
+          :scroll-y="pageConfig.tableArea.scrollY"
+          :sticky-header="pageConfig.tableArea.stickyHeader !== false"
+          :bordered="{ wrapper: true, cell: true }"
+          class="h-full"
+          @row-click="handleRowClick"
+          @selection-change="handleSelectionChange"
+          @action-click="handleActionClick"
+        />
+      </div>
     </div>
   </div>
 

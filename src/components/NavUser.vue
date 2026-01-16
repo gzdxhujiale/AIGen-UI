@@ -81,7 +81,14 @@ const handleSettingsClick = () => {
 
 // 点击账户按钮
 const handleAccountClick = () => {
-  accountDialogOpen.value = true
+  setNavigation('账户', '个人资料', 'profile')
+  setDetailTitle(null)
+}
+
+// 点击 Billing 按钮
+const handleBillingClick = () => {
+  setNavigation('Account', 'Billing', 'billing')
+  setDetailTitle(null)
 }
 
 // 登出
@@ -155,7 +162,7 @@ const handleLogout = async () => {
               <BadgeCheck />
               Account
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem @click="handleBillingClick">
               <CreditCard />
               Billing
             </DropdownMenuItem>

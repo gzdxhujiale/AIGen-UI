@@ -9,12 +9,19 @@ export const useAuthStore = defineStore('auth', () => {
     const session = ref<Session | null>(null)
     const isLoading = ref(true)
     const error = ref<string | null>(null)
+
+    // Custom user config state
+    const customUserName = ref('')
+    const teamsConfig = ref<any>(null)
+    const stylePreference = ref<'shadcn' | 'arco'>('shadcn')
+
     let authSubscription: { unsubscribe: () => void } | null = null
 
     // Getters
     const isAuthenticated = computed(() => !!user.value)
 
     const userDisplayName = computed(() => {
+        if (customUserName.value) return customUserName.value
         if (!user.value) return ''
         return user.value.user_metadata?.full_name ||
             user.value.user_metadata?.name ||
@@ -31,11 +38,38 @@ export const useAuthStore = defineStore('auth', () => {
             ''
     })
 
+    // Helper to fetch user configs
+    const fetchUserConfigs = async (userId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('user_configs')
+                .select('user_name, teams_config, style')
+                .eq('user_id', userId)
+                .single()
+
+            if (error) {
+                if (error.code === 'PGRST116') { // code for no rows found
+                    console.log('No user_config found, using defaults')
+                } else {
+                    console.error('Error fetching user_configs:', error)
+                }
+                return
+            }
+
+            if (data) {
+                customUserName.value = data.user_name || ''
+                teamsConfig.value = data.teams_config || []
+                stylePreference.value = data.style || 'shadcn'
+            }
+        } catch (e) {
+            console.error('Failed to fetch user configs:', e)
+        }
+    }
+
     // Actions
 
     /**
      * Initialize auth state and set up listener
-     * Call this once when app mounts
      */
     const initialize = async () => {
         isLoading.value = true
@@ -51,30 +85,34 @@ export const useAuthStore = defineStore('auth', () => {
             } else {
                 session.value = currentSession
                 user.value = currentSession?.user ?? null
+
+                // Fetch user configs if logged in
+                if (user.value) {
+                    await fetchUserConfigs(user.value.id)
+                }
             }
 
             // Set up auth state change listener
-            // Clean up old subscription first
             if (authSubscription) {
                 authSubscription.unsubscribe()
             }
 
             const { data: { subscription } } = supabase.auth.onAuthStateChange(
-                (event: AuthChangeEvent, newSession: Session | null) => {
+                async (event: AuthChangeEvent, newSession: Session | null) => {
                     console.log('Auth state changed:', event)
                     session.value = newSession
                     user.value = newSession?.user ?? null
 
-                    if (event === 'SIGNED_OUT') {
-                        // Clear any cached data
+                    if (event === 'SIGNED_IN' && user.value) {
+                        await fetchUserConfigs(user.value.id)
+                    } else if (event === 'SIGNED_OUT') {
                         error.value = null
+                        customUserName.value = ''
+                        teamsConfig.value = null
                     }
                 }
             )
             authSubscription = subscription
-
-            // Store subscription for cleanup if needed
-            // Note: In a real app, you might want to store this and unsubscribe on app unmount
 
         } catch (err: any) {
             console.error('Error initializing auth:', err)
@@ -132,7 +170,6 @@ export const useAuthStore = defineStore('auth', () => {
                 return { success: false, error: signUpError.message }
             }
 
-            // Check if email confirmation is required
             if (data.user && !data.session) {
                 return {
                     success: true,
@@ -203,8 +240,42 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     /**
+     * Update user profile configuration
+     */
+    const updateUserProfile = async (name: string, teams: any, style?: 'shadcn' | 'arco') => {
+        if (!user.value) return { success: false, error: 'Not authenticated' }
+
+        try {
+            const updates: any = {
+                user_id: user.value.id,
+                user_name: name,
+                teams_config: teams,
+                updated_at: new Date().toISOString()
+            }
+
+            if (style) {
+                updates.style = style
+            }
+
+            const { error: upsertError } = await supabase
+                .from('user_configs')
+                .upsert(updates, { onConflict: 'user_id' })
+
+            if (upsertError) throw upsertError
+
+            customUserName.value = name
+            teamsConfig.value = teams
+            if (style) stylePreference.value = style
+
+            return { success: true }
+        } catch (err: any) {
+            console.error('Error updating profile:', err)
+            return { success: false, error: err.message }
+        }
+    }
+
+    /**
      * Cleanup subscriptions
-     * Call this on app unmount
      */
     const cleanup = () => {
         if (authSubscription) {
@@ -219,6 +290,9 @@ export const useAuthStore = defineStore('auth', () => {
         session,
         isLoading,
         error,
+        customUserName,
+        teamsConfig,
+        stylePreference,
         // Getters
         isAuthenticated,
         userDisplayName,
@@ -230,6 +304,7 @@ export const useAuthStore = defineStore('auth', () => {
         signUp,
         signOut,
         resetPassword,
+        updateUserProfile,
         cleanup
     }
 })

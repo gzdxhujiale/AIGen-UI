@@ -66,7 +66,10 @@ const isProjectActive = (projectName: string) => {
         <SidebarMenuButton 
           as-child
           @click="handleProjectClick(item.name)"
-          :class="{ 'bg-primary/10 text-primary font-medium': isProjectActive(item.name) }"
+          :class="{ 
+            'bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm transition-all': isProjectActive(item.name),
+            'text-muted-foreground hover:text-foreground': !isProjectActive(item.name)
+          }"
         >
           <a :href="item.url">
             <component :is="item.icon" />

@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 // Card components removed - using plain divs with border/bg-card
 import { Layers, Plus, Pencil, Trash2, Settings2, Save, FileCode, GripVertical, Info, ChevronRight, ChevronDown, Eye, EyeOff, Square, Download, Upload, FileDown, Search, MoreHorizontal, RefreshCw } from 'lucide-vue-next'
 
+import { Button as AButton } from '@arco-design/web-vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -40,6 +41,7 @@ import {
 import { toast } from 'vue-sonner'
 import draggable from 'vuedraggable'
 import { useConfigStore, type NavSubItem, type FilterConfig, type TableColumn } from '@/stores/configStore'
+import Page1 from '@/components/pages/Page1.vue'
 
 // Store
 const configStore = useConfigStore()
@@ -127,6 +129,10 @@ const columnForm = ref({
   type: 'text' as 'text' | 'badge' | 'status-badge' | 'text-button',
   mockFormat: 'none' as 'none' | 'text' | 'datetime' | 'number',
   buttons: '', // 按钮列表，逗号分隔
+  fixed: 'none' as 'none' | 'left' | 'right',
+  align: 'left' as 'left' | 'center' | 'right',
+  ellipsis: false,
+  tooltip: false
 })
 
 // Action Button Dialog State
@@ -136,8 +142,25 @@ const editingActionIndex = ref<number | null>(null)
 const actionForm = ref({
   key: '',
   label: '',
-  variant: 'default' as 'default' | 'outline' | 'secondary' | 'ghost',
+  variant: 'shadcn-outline' as 'primary' | 'outline' | 'text' | 'shadcn-outline',
   className: ''
+})
+
+// Active Tab State for Preview Control
+const activeTab = ref('filter')
+
+const previewVisibleSections = computed(() => {
+  switch (activeTab.value) {
+    case 'filter':
+    case 'actions':
+      return ['filter', 'actions'] as ('filter' | 'actions' | 'card' | 'table')[]
+    case 'card':
+      return ['card'] as ('filter' | 'actions' | 'card' | 'table')[]
+    case 'table':
+      return ['table'] as ('filter' | 'actions' | 'card' | 'table')[]
+    default:
+      return undefined // Show all
+  }
 })
 
 // Card Dialog State
@@ -467,8 +490,40 @@ const toggleActionVisibility = (index: number) => {
 
 const openAddColumnDialog = () => {
   editingColumnIndex.value = null
-  columnForm.value = { key: '', label: '', width: '100px', type: 'text', mockFormat: 'none', buttons: '' }
+  columnForm.value = { 
+    key: '', 
+    label: '', 
+    width: '100px', 
+    type: 'text', 
+    mockFormat: 'none', 
+    buttons: '',
+    fixed: 'none',
+    align: 'left',
+    ellipsis: false,
+    tooltip: false
+  }
   columnDialogOpen.value = true
+}
+
+const openEditColumnDialog = (index: number) => {
+  const config = configStore.page1Configs[selectedNavId.value!]
+  if (config) {
+    const col = config.tableArea.columns[index]
+    editingColumnIndex.value = index
+    columnForm.value = {
+      key: col.key,
+      label: col.label,
+      width: col.width || '100px',
+      type: col.type || 'text',
+      mockFormat: col.mockFormat || 'none',
+      buttons: col.buttons ? col.buttons.join(', ') : '',
+      fixed: col.fixed || 'none',
+      align: col.align || 'left',
+      ellipsis: col.ellipsis || false,
+      tooltip: col.tooltip || false
+    }
+    columnDialogOpen.value = true
+  }
 }
 
 const closeColumnDialog = () => {
@@ -488,7 +543,11 @@ const handleSaveColumn = () => {
         mockFormat: columnForm.value.mockFormat === 'none' ? undefined : columnForm.value.mockFormat,
         buttons: columnForm.value.type === 'text-button' && columnForm.value.buttons 
           ? columnForm.value.buttons.split(/[，,]/).map(s => s.trim()).filter(s => s) 
-          : undefined
+          : undefined,
+        fixed: columnForm.value.fixed === 'none' ? undefined : columnForm.value.fixed,
+        align: columnForm.value.align === 'left' ? undefined : columnForm.value.align,
+        ellipsis: columnForm.value.ellipsis || undefined,
+        tooltip: columnForm.value.tooltip || undefined
       }
       
       if (editingColumnIndex.value !== null) {
@@ -536,7 +595,7 @@ const handleUpdateTableArea = (key: string, value: any) => {
 
 const openAddActionDialog = () => {
   editingActionIndex.value = null
-  actionForm.value = { key: '', label: '', variant: 'default', className: '' }
+  actionForm.value = { key: '', label: '', variant: 'shadcn-outline', className: '' }
   actionDialogOpen.value = true
 }
 
@@ -557,7 +616,7 @@ const handleSaveAction = () => {
       const newAction = {
         key: actionForm.value.key,
         label: actionForm.value.label,
-        variant: actionForm.value.variant === 'default' ? undefined : actionForm.value.variant,
+        variant: actionForm.value.variant,
         className: actionForm.value.className || undefined
       }
       
@@ -1038,7 +1097,7 @@ const handleSaveToCloud = async () => {
           </div>
 
           <!-- 内容区 (Compact) -->
-          <div class="flex-1 overflow-auto p-4 space-y-4">
+          <div class="flex-1 overflow-auto p-4 space-y-4 scrollbar-thin">
             <!-- 无配置时 -->
             <div v-if="!currentPageConfig" class="text-center py-8 border-2 border-dashed rounded-lg">
               <FileCode class="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
@@ -1051,13 +1110,15 @@ const handleSaveToCloud = async () => {
 
             <!-- 有配置时 -->
             <template v-else>
-            <Tabs default-value="filter" class="w-full">
+            <Tabs v-model="activeTab" class="w-full">
                 <TabsList class="grid w-full grid-cols-4 h-9">
                   <TabsTrigger value="filter" class="text-xs">筛选区</TabsTrigger>
                   <TabsTrigger value="actions" class="text-xs">操作区</TabsTrigger>
                   <TabsTrigger value="card" class="text-xs">卡片区</TabsTrigger>
                   <TabsTrigger value="table" class="text-xs">表格区</TabsTrigger>
                 </TabsList>
+
+
 
                 <div class="mt-3">
                   <!-- 筛选区配置 -->
@@ -1278,17 +1339,17 @@ const handleSaveToCloud = async () => {
                                 <!-- 样式 - 下拉框 -->
                                 <td class="p-1 border-r border-border/50">
                                   <Select 
-                                    :model-value="action.variant || 'default'"
-                                    @update:model-value="(v) => action.variant = String(v) as 'default' | 'outline' | 'secondary' | 'ghost'"
+                                    :model-value="action.variant || 'shadcn-outline'"
+                                    @update:model-value="(v) => action.variant = String(v) as 'primary' | 'outline' | 'text' | 'shadcn-outline'"
                                   >
                                     <SelectTrigger class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus:bg-background focus:border-input focus:shadow-sm">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="default">Default</SelectItem>
+                                      <SelectItem value="primary">Primary</SelectItem>
                                       <SelectItem value="outline">Outline</SelectItem>
-                                      <SelectItem value="secondary">Secondary</SelectItem>
-                                      <SelectItem value="ghost">Ghost</SelectItem>
+                                      <SelectItem value="text">Text</SelectItem>
+                                      <SelectItem value="shadcn-outline">Shadcn Outline</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 </td>
@@ -1628,6 +1689,15 @@ const handleSaveToCloud = async () => {
                                       variant="ghost"
                                       size="sm"
                                       class="h-6 w-6 p-0"
+                                      @click="openEditColumnDialog(index)"
+                                      title="高级配置"
+                                    >
+                                      <Settings2 class="w-3 h-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      class="h-6 w-6 p-0"
                                       :class="col.visible === false ? 'text-muted-foreground' : 'text-foreground'"
                                       @click="toggleColumnVisibility(index)"
                                       :title="col.visible === false ? '点击显示' : '点击隐藏'"
@@ -1657,6 +1727,29 @@ const handleSaveToCloud = async () => {
                         </div>
                     </div>
                   </TabsContent>
+                </div>
+
+                <!-- Page Preview Area (Moved) -->
+                <div class="mt-6 mb-4 border rounded-lg bg-background shadow-sm overflow-hidden">
+                   <div class="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+                     <div class="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+                       <Eye class="w-3.5 h-3.5" />
+                       页面预览
+                     </div>
+                     <div class="text-[10px] text-muted-foreground">
+                       (实时预览当前配置效果)
+                     </div>
+                   </div>
+                   <div class="h-[400px] overflow-hidden relative">
+                      <!-- Use key to force re-render when switching nav items -->
+                      <component 
+                        :is="Page1" 
+                        :key="selectedNavId" 
+                        :nav-id="selectedNavId"
+                        :visible-sections="previewVisibleSections"
+                        class="h-full"
+                      />
+                   </div>
                 </div>
               </Tabs>
             </template>
@@ -1811,6 +1904,57 @@ const handleSaveToCloud = async () => {
           </Select>
           <p class="text-xs text-muted-foreground">选择后将自动生成对应格式的模拟数据</p>
         </div>
+
+        <!-- 高级布局配置 -->
+        <div class="grid grid-cols-2 gap-4 pt-2 border-t">
+          <div class="space-y-2">
+            <label class="text-sm font-medium">固定方式</label>
+            <Select v-model="columnForm.fixed">
+              <SelectTrigger class="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">不固定</SelectItem>
+                <SelectItem value="left">固定在左侧</SelectItem>
+                <SelectItem value="right">固定在右侧</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium">对齐方式</label>
+             <Select v-model="columnForm.align">
+              <SelectTrigger class="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="left">左对齐</SelectItem>
+                <SelectItem value="center">居中</SelectItem>
+                <SelectItem value="right">右对齐</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+           <div class="flex items-center gap-2 pt-2">
+            <input 
+              type="checkbox" 
+              v-model="columnForm.ellipsis"
+              id="col-ellipsis"
+              class="rounded border-input text-primary focus:ring-primary w-4 h-4"
+            />
+            <label for="col-ellipsis" class="text-sm">内容过长省略 (Ellipsis)</label>
+          </div>
+          <div class="flex items-center gap-2 pt-2">
+            <input 
+              type="checkbox" 
+              v-model="columnForm.tooltip"
+              id="col-tooltip"
+              class="rounded border-input text-primary focus:ring-primary w-4 h-4"
+            />
+            <label for="col-tooltip" class="text-sm">显示提示 (Tooltip)</label>
+          </div>
+        </div>
       </div>
       <DialogFooter>
         <Button variant="outline" @click="closeColumnDialog">取消</Button>
@@ -1845,10 +1989,10 @@ const handleSaveToCloud = async () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="default">Default (蓝色)</SelectItem>
-                <SelectItem value="outline">Outline (边框)</SelectItem>
-                <SelectItem value="secondary">Secondary (灰色)</SelectItem>
-                <SelectItem value="ghost">Ghost (透明)</SelectItem>
+                <SelectItem value="primary">Primary (主要)</SelectItem>
+                <SelectItem value="outline">Outline (线形)</SelectItem>
+                <SelectItem value="text">Text (文本)</SelectItem>
+                <SelectItem value="shadcn-outline">Shadcn Outline (Shadcn 边框)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1862,13 +2006,21 @@ const handleSaveToCloud = async () => {
         <div class="space-y-2 pt-2 border-t">
           <label class="text-sm font-medium text-muted-foreground">预览</label>
           <div class="flex items-center gap-3 p-3 rounded-md bg-muted/30">
-            <Button 
-              :variant="actionForm.variant"
+            <Button
+              v-if="actionForm.variant === 'shadcn-outline'"
+              variant="outline"
               class="h-9 px-5"
               :class="actionForm.className"
             >
               {{ actionForm.label || '按钮文本' }}
             </Button>
+            <AButton 
+              v-else
+              :type="actionForm.variant as any"
+              :class="actionForm.className"
+            >
+              {{ actionForm.label || '按钮文本' }}
+            </AButton>
             <span class="text-xs text-muted-foreground">← 按钮实际样式</span>
           </div>
         </div>

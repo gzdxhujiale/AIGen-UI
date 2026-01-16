@@ -68,6 +68,9 @@ export interface TableColumn {
     minWidth?: string                 // 最小宽度
     type?: 'text' | 'badge' | 'status-badge' | 'text-button'
     fixed?: 'left' | 'right'          // 列固定位置
+    align?: 'left' | 'center' | 'right' // 对齐方式
+    ellipsis?: boolean                // 是否显示省略号
+    tooltip?: boolean                 // 是否显示提示
     visible?: boolean
     mockFormat?: 'text' | 'datetime' | 'number' // 虚拟数据格式
     buttons?: string[] // 文字按钮列表
@@ -94,7 +97,7 @@ export interface TableAreaConfig {
 export interface ActionButtonConfig {
     key: string
     label: string
-    variant?: 'default' | 'outline' | 'secondary' | 'ghost'
+    variant?: 'primary' | 'outline' | 'text' | 'shadcn-outline'
     className?: string       // 自定义样式类
     visible?: boolean
 }

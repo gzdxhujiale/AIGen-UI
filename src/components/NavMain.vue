@@ -89,7 +89,8 @@ const hasActiveChild = (item: any) => {
                   as-child 
                   @click="handleNavClick(item.title, subItem.title, subItem.id)"
                   :class="{ 
-                    'bg-primary/10 text-primary font-medium': isSubItemActive(subItem.title)
+                    'bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm transition-all': isSubItemActive(subItem.title),
+                    'text-muted-foreground hover:text-foreground': !isSubItemActive(subItem.title)
                   }"
                 >
                   <a :href="subItem.url">

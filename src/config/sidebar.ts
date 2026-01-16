@@ -344,6 +344,12 @@ export function useNavigation() {
         if (_currentNavId.value === 'settings') {
             return 'Settings'
         }
+        if (_currentNavId.value === 'billing') {
+            return 'Billing'
+        }
+        if (_currentNavId.value === 'profile') {
+            return 'profile'
+        }
         if (currentTemplate.value) {
             return currentTemplate.value
         }

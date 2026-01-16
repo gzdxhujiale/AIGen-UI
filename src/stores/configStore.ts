@@ -78,6 +78,9 @@ export const useConfigStore = defineStore('config', () => {
     const previewConfig = ref<Page1Config | null>(null)
     const previewNavId = ref('preview-temp-id')
 
+    // 导航样式偏好: 'shadcn' | 'arco'
+    const navigationStyle = ref<'shadcn' | 'arco'>('shadcn')
+
     // 加载状态
     const isConfigLoaded = ref(false)
     const isConfigLoading = ref(false)
@@ -150,6 +153,18 @@ export const useConfigStore = defineStore('config', () => {
         }
         return undefined
     })
+
+    // Set Navigation Style
+    function setNavigationStyle(style: 'shadcn' | 'arco') {
+        navigationStyle.value = style
+        // Persist to local storage if needed, or just keep in session
+        localStorage.setItem('shadcn_nav_style_pref', style)
+    }
+
+    // Init nav style from storage
+    if (localStorage.getItem('shadcn_nav_style_pref')) {
+        navigationStyle.value = localStorage.getItem('shadcn_nav_style_pref') as 'shadcn' | 'arco'
+    }
 
     // Preview Actions
     function setPreviewConfig(config: Page1Config, mode: 'append' | 'override' = 'override') {
@@ -592,6 +607,9 @@ export interface TableColumn {
     minWidth?: string                 // 最小宽度
     type?: 'text' | 'badge' | 'status-badge' | 'text-button'
     fixed?: 'left' | 'right'          // 列固定位置
+    align?: 'left' | 'center' | 'right' // 对齐方式
+    ellipsis?: boolean                // 是否显示省略号
+    tooltip?: boolean                 // 是否显示提示
     visible?: boolean
     mockFormat?: 'text' | 'datetime' | 'number' // 虚拟数据格式
     buttons?: string[] // 文字按钮列表
@@ -618,7 +636,7 @@ export interface TableAreaConfig {
 export interface ActionButtonConfig {
     key: string
     label: string
-    variant?: 'default' | 'outline' | 'secondary' | 'ghost'
+    variant?: 'primary' | 'outline' | 'text' | 'shadcn-outline'
     className?: string       // 自定义样式类
     visible?: boolean
 }
@@ -761,6 +779,9 @@ export const page1Configs: Record<string, Page1Config> = {
                 if (col.minWidth) code += `, minWidth: '${col.minWidth}'`
                 if (col.type) code += `, type: '${col.type}'`
                 if (col.fixed) code += `, fixed: '${col.fixed}'`
+                if (col.align) code += `, align: '${col.align}'`
+                if (col.ellipsis) code += `, ellipsis: ${col.ellipsis}`
+                if (col.tooltip) code += `, tooltip: ${col.tooltip}`
                 if (col.visible === false) code += `, visible: false`
                 if (col.mockFormat) code += `, mockFormat: '${col.mockFormat}'`
                 if (col.buttons && col.buttons.length > 0) {
@@ -1161,6 +1182,9 @@ export function getPage1Config(navId: string): Page1Config | undefined {
         // State
         navGroups,
         page1Configs,
+        // Style State
+        navigationStyle,
+        setNavigationStyle,
         // Preview State
         previewMode,
         previewConfig,
