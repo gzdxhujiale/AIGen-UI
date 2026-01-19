@@ -28,7 +28,7 @@ function handleOpenChange(val: boolean) {
       <DialogHeader>
         <DialogTitle class="text-xl font-bold">📢 更新公告</DialogTitle>
         <DialogDescription>
-          最新版本功能更新说明
+          V4.3大版本功能更新说明
         </DialogDescription>
       </DialogHeader>
 
@@ -61,7 +61,7 @@ function handleOpenChange(val: boolean) {
             <div class="space-y-1">
               <p class="text-sm font-medium text-amber-800 dark:text-amber-400">注意事项</p>
               <p class="text-xs text-amber-700 dark:text-amber-500/90 leading-relaxed">
-                由于 JSON 配置项大幅增加，AI 功能需要重新调试和优化，暂时无法正常使用，预计 2 天左右恢复正常。
+                由于 JSON 配置项大幅增加，AI 功能需要重新调试和优化，暂时无法正常使用，预计 2 天左右恢复正常。用户设置的手动配置功能正常，欢迎体验！
               </p>
             </div>
           </div>
