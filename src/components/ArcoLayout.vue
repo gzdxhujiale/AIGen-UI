@@ -344,7 +344,13 @@ const handleSubNavClick = () => {
                     <!-- 下拉菜单 (Label + Select) -->
                     <div v-else-if="item.type === 'dropdown'" class="flex items-center gap-2">
                         <span class="text-xs text-[var(--color-text-2)]">{{ item.label }}</span>
-                        <a-select :style="{width:'100px'}" placeholder="请选择" size="small" :trigger-props="{ autoFitPopupMinWidth: true }">
+                        <a-select 
+                            :style="{width:'100px'}" 
+                            :default-value="item.options?.[0]" 
+                            placeholder="请选择" 
+                            size="small" 
+                            :trigger-props="{ autoFitPopupMinWidth: true }"
+                        >
                             <a-option v-for="opt in item.options" :key="opt">{{ opt }}</a-option>
                         </a-select>
                     </div>
