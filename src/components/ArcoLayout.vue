@@ -361,9 +361,13 @@ const handleSubNavClick = () => {
                 <!-- 用户头像 Dropdown -->
                 <a-dropdown @select="handleUserAction" trigger="click" position="br">
                     <div class="p-0.5 rounded-full hover:bg-[var(--color-fill-2)] cursor-pointer transition-colors border border-[var(--color-border-2)] flex items-center justify-center">
-                        <a-avatar :size="32" class="bg-[var(--color-fill-3)] shadow-sm">
+                        <a-avatar 
+                            :size="32" 
+                            :style="{ backgroundColor: 'rgb(var(--primary-6))' }"
+                            class="shadow-sm text-white"
+                        >
                             <img v-if="authStore.userAvatar" :src="authStore.userAvatar" :alt="authStore.userDisplayName" />
-                            <span v-else class="text-xs">{{ authStore.userDisplayName.slice(0, 2).toUpperCase() }}</span>
+                            <IconUser v-else />
                         </a-avatar>
                     </div>
                     <template #content>
