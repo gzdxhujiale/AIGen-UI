@@ -81,6 +81,8 @@ export const useConfigStore = defineStore('config', () => {
 
     // 导航样式偏好: 'shadcn' | 'arco'
     const navigationStyle = ref<'shadcn' | 'arco'>('arco')
+    // 筛选区与功能区融合设置
+    const filterActionFusion = ref(false)
 
     // 加载状态
     const isConfigLoaded = ref(false)
@@ -162,9 +164,20 @@ export const useConfigStore = defineStore('config', () => {
         localStorage.setItem('shadcn_nav_style_pref', style)
     }
 
-    // Init nav style from storage (默认为 arco)
+    // Set Filter Action Fusion
+    function setFilterActionFusion(enable: boolean) {
+        filterActionFusion.value = enable
+        localStorage.setItem('shadcn_filter_action_fusion', String(enable))
+    }
+
+    // Init nav style from storage
     if (localStorage.getItem('shadcn_nav_style_pref')) {
         navigationStyle.value = localStorage.getItem('shadcn_nav_style_pref') as 'shadcn' | 'arco'
+    }
+
+    // Init fusion setting from storage
+    if (localStorage.getItem('shadcn_filter_action_fusion')) {
+        filterActionFusion.value = localStorage.getItem('shadcn_filter_action_fusion') === 'true'
     }
 
     // Preview Actions
@@ -1224,7 +1237,8 @@ export function getPage1Config(navId: string): Page1Config | undefined {
         page1Configs,
         // Style State
         navigationStyle,
-        setNavigationStyle,
+        // Filter State
+        filterActionFusion,
         // Preview State
         previewMode,
         previewConfig,
@@ -1236,6 +1250,10 @@ export function getPage1Config(navId: string): Page1Config | undefined {
         effectiveNavGroups,
         getNavGroup,
         getPage1Config,
+        // Style Actions
+        setNavigationStyle,
+        // Filter Actions
+        setFilterActionFusion,
         // Preview Actions
         setPreviewConfig,
         clearPreviewConfig,

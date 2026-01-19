@@ -163,6 +163,22 @@ const visibleActions = computed(() => {
   return pageConfig.value?.actionsArea?.buttons?.filter((a: { visible?: boolean }) => a.visible !== false) || []
 })
 
+// 融合模式状态
+const fusionMode = computed(() => configStore.filterActionFusion)
+
+// 计算融合模式下按钮容器需要占据的网格列数
+const actionButtonSpan = computed(() => {
+  if (!pageConfig.value || !visibleFilters.value) return 1
+  const cols = pageConfig.value.filterArea.columns
+  const count = visibleFilters.value.length
+  const remainder = count % cols
+  
+  // 如果恰好填满一行，或者没有筛选项，则占据整行
+  if (remainder === 0) return cols
+  // 否则占据剩余空间
+  return cols - remainder
+})
+
 // --- 方法 ---
 const handleRowClick = (record: any) => {
   console.log('Row clicked:', record)
@@ -225,7 +241,8 @@ const handleActionClick = (action: string, record: any) => {
           <!-- 动态筛选表单区 -->
           <div 
             v-if="isSectionVisible('filter') && pageConfig.filterArea?.show !== false"
-            class="grid mb-4"
+            class="grid"
+            :class="{ 'mb-4': !fusionMode }"
             :style="{
               gridTemplateColumns: `repeat(${pageConfig.filterArea.columns}, 1fr)`,
               gap: pageConfig.filterArea.gap,
@@ -264,11 +281,41 @@ const handleActionClick = (action: string, record: any) => {
                 :placeholder="config.placeholder"
               />
             </template>
+
+            <!-- 融合模式下的操作按钮 -->
+            <div 
+                v-if="fusionMode && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false"
+                class="flex items-end justify-end gap-3"
+                :style="{ gridColumn: `span ${actionButtonSpan}` }"
+            >
+                <template v-for="(action, index) in visibleActions" :key="action.key">
+                    <!-- 分隔符（在第2个按钮后添加） -->
+                    <div v-if="index === 2" class="w-px h-6 bg-border mx-1"></div>
+                    <Button 
+                        v-if="action.variant === 'shadcn-outline'"
+                        variant="outline"
+                        class="h-9 px-5"
+                        :class="action.className"
+                        @click="handleActionClick(action.key, null)"
+                    >
+                        {{ action.label }}
+                    </Button>
+                    <AButton 
+                        v-else
+                        :type="action.variant as any ?? 'outline'"
+                        class="h-9 px-5"
+                        :class="action.className"
+                        @click="handleActionClick(action.key, null)"
+                    >
+                        {{ action.label }}
+                    </AButton>
+                </template>
+            </div>
           </div>
 
-          <!-- 底部操作按钮 -->
+          <!-- 底部操作按钮 (非融合模式) -->
           <div 
-            v-if="isSectionVisible('actions') && pageConfig.actionsArea?.show !== false" 
+            v-if="!fusionMode && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false" 
             class="flex items-center justify-end pt-2 border-t"
           >
             <div class="flex items-center gap-3">

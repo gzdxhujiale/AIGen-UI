@@ -11,11 +11,11 @@ import {
   FormItem as AFormItem, 
   Space as ASpace, 
   Typography as ATypography,
-  Avatar as AAvatar,
   Grid as AGrid,
   Divider as ADivider,
   Tooltip as ATooltip,
-  Scrollbar as AScrollbar
+  Scrollbar as AScrollbar,
+  Switch as ASwitch
 } from '@arco-design/web-vue'
 import { 
   IconUser, 
@@ -153,30 +153,24 @@ const columns = [
               </a-space>
             </template>
             
-            <div class="flex flex-col md:flex-row gap-8">
-              <!-- 头像区域 -->
-              <div class="flex flex-col items-center md:items-start justify-center" style="flex: 0 0 30%; max-width: 30%;">
-                <a-avatar :size="100" class="shadow-md mb-3 bg-primary-light">
-                  <img v-if="authStore.userAvatar" :src="authStore.userAvatar" />
-                  <span v-else class="text-3xl font-bold">{{ authStore.userDisplayName.slice(0, 1).toUpperCase() }}</span>
-                </a-avatar>
-                <a-text strong class="text-lg text-center md:text-left">{{ authStore.userDisplayName }}</a-text>
-                <a-text type="secondary" class="text-xs">{{ authStore.userEmail }}</a-text>
-              </div>
-
+            <div class="flex flex-col gap-8">
               <!-- 表单编辑区域 -->
-              <div style="flex: 0 0 60%; max-width: 60%;">
+              <div class="w-full">
                 <a-form :model="form" layout="vertical">
                   <a-form-item label="显示名称" feedback="修改后自动保存">
-                    <a-input v-model="form.userName" placeholder="请输入您的名字">
-                      <template #prefix><icon-edit /></template>
-                    </a-input>
+                    <div class="w-1/2">
+                      <a-input v-model="form.userName" placeholder="请输入您的名字">
+                        <template #prefix><icon-edit /></template>
+                      </a-input>
+                    </div>
                   </a-form-item>
                   
                   <a-form-item label="关联邮箱" disabled>
-                    <a-input :model-value="authStore.userEmail" disabled>
-                      <template #prefix><icon-at /></template>
-                    </a-input>
+                    <div class="w-1/2">
+                      <a-input :model-value="authStore.userEmail" disabled>
+                        <template #prefix><icon-at /></template>
+                      </a-input>
+                    </div>
                     <template #extra>
                       <div class="flex items-center gap-1 mt-1 text-xs opacity-70">
                         <icon-info-circle /> 邮箱暂不支持修改
@@ -186,7 +180,7 @@ const columns = [
 
                   <a-form-item label="导航风格">
                     <a-row :gutter="12">
-                      <a-col :span="12" :sm="6">
+                      <a-col :span="12" :sm="12">
                         <div 
                           class="style-card transition-all"
                           :class="{ 'active': configStore.navigationStyle === 'shadcn' }"
@@ -196,7 +190,7 @@ const columns = [
                           <span class="name">Shadcn UI</span>
                         </div>
                       </a-col>
-                      <a-col :span="12" :sm="6">
+                      <a-col :span="12" :sm="12">
                         <div 
                           class="style-card transition-all"
                           :class="{ 'active': configStore.navigationStyle === 'arco' }"
@@ -207,6 +201,21 @@ const columns = [
                         </div>
                       </a-col>
                     </a-row>
+                  </a-form-item>
+
+                  <a-form-item label="界面布局配置">
+                    <div class="flex items-center justify-between p-3 border rounded-lg bg-[var(--color-bg-1)]">
+                        <span class="text-[13px] font-medium text-[var(--color-text-2)]">筛选区与功能区融合</span>
+                        <a-switch 
+                            :model-value="configStore.filterActionFusion"
+                            @update:model-value="(val: any) => configStore.setFilterActionFusion(val)"
+                        />
+                    </div>
+                    <template #extra>
+                        <div class="mt-1 text-xs text-[var(--color-text-3)]">
+                            开启后，功能区的按钮将显示在筛选区最后一行的右侧
+                        </div>
+                    </template>
                   </a-form-item>
                 </a-form>
               </div>
