@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { Button } from '@/components/ui/button'
-import { Button as AButton } from '@arco-design/web-vue'
+import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar } from '@arco-design/web-vue'
 import {
   Select,
   SelectContent,
@@ -57,6 +57,13 @@ const currentLang = ref(pageConfig.value?.topBar?.langOptions?.[0] ?? '')
 
 // 从配置自动生成筛选状态
 const filters = reactive<Record<string, any>>({})
+
+// 弹窗状态
+const effectModalVisible = ref(false)
+const effectModalTitle = ref('')
+const effectModalContent = ref('')
+const effectModalFormItems = ref<any[]>([])
+const effectModalFormData = reactive<Record<string, any>>({})
 
 // 根据 mockFormat 生成虚拟数据
 function generateMockValue(format: string | undefined, label: string, index: number): string | number {
@@ -188,213 +195,285 @@ const handleSelectionChange = (keys: (string | number)[]) => {
   console.log('Selection changed:', keys)
 }
 
-const handleActionClick = (action: string, record: any) => {
-  console.log('Action clicked:', action, record)
+const handleActionClick = (actionKey: string, record: any) => {
+  console.log('Action clicked:', actionKey, record)
+  
+  // 查找动作配置
+  const actionConfig = pageConfig.value?.actionsArea?.buttons?.find(b => b.key === actionKey)
+  
+  if (actionConfig?.effectType === 'modal') {
+    effectModalTitle.value = actionConfig.effectConfig?.title || '提示'
+    effectModalContent.value = actionConfig.effectConfig?.content || ''
+    effectModalFormItems.value = actionConfig.effectConfig?.formItems || []
+    
+    // 重置并初始化表单数据
+    Object.keys(effectModalFormData).forEach(key => delete effectModalFormData[key])
+    effectModalFormItems.value.forEach(item => {
+      effectModalFormData[item.key] = item.defaultValue
+    })
+    
+    effectModalVisible.value = true
+  }
+}
+
+const handleEffectModalOk = () => {
+  console.log('Modal Form Submitted:', effectModalFormData)
+  effectModalVisible.value = false
 }
 </script>
 
 <template>
-  <div v-if="pageConfig" class="h-full flex flex-col overflow-hidden">
-    <!-- 顶部操作栏 Teleport -->
-    <Teleport to="#breadcrumb-actions" defer>
-      <div class="flex items-center gap-4">
-        <!-- topBar 选择器（如果配置了的话） -->
-        <template v-if="pageConfig.topBar">
-          <!-- App 选择 -->
-          <Select v-if="pageConfig.topBar.appOptions" v-model="currentApp">
-            <SelectTrigger class="w-[120px] h-8 text-xs">
-              <SelectValue placeholder="选择应用" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="app in pageConfig.topBar.appOptions" :key="app" :value="app">
-                {{ app }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+  <div class="page1-container h-full w-full">
+    <div v-if="pageConfig" class="h-full flex flex-col overflow-hidden">
+      <!-- 顶部操作栏 Teleport -->
+      <Teleport to="#breadcrumb-actions" defer>
+        <div class="flex items-center gap-4">
+          <!-- topBar 选择器（如果配置了的话） -->
+          <template v-if="pageConfig.topBar">
+            <!-- App 选择 -->
+            <Select v-if="pageConfig.topBar.appOptions" v-model="currentApp">
+              <SelectTrigger class="w-[120px] h-8 text-xs">
+                <SelectValue placeholder="选择应用" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="app in pageConfig.topBar.appOptions" :key="app" :value="app">
+                  {{ app }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
 
-          <!-- 语言选择 -->
-          <Select v-if="pageConfig.topBar.langOptions" v-model="currentLang">
-            <SelectTrigger class="w-[100px] h-8 text-xs">
-              <SelectValue placeholder="选择语言" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="lang in pageConfig.topBar.langOptions" :key="lang" :value="lang">
-                {{ lang }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </template>
-      </div>
-    </Teleport>
+            <!-- 语言选择 -->
+            <Select v-if="pageConfig.topBar.langOptions" v-model="currentLang">
+              <SelectTrigger class="w-[100px] h-8 text-xs">
+                <SelectValue placeholder="选择语言" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="lang in pageConfig.topBar.langOptions" :key="lang" :value="lang">
+                  {{ lang }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </template>
+        </div>
+      </Teleport>
 
-    <!-- 主体内容-->
-    <div 
-      class="flex-1 flex flex-col p-4 gap-4"
-    >
-      
-      <!-- 功能区 - 筛选条件 + 操作按钮 -->
+      <!-- 主体内容-->
       <div 
-        v-if="(isSectionVisible('filter') && pageConfig.filterArea?.show !== false) || (isSectionVisible('actions') && pageConfig.actionsArea?.show !== false)"
-        class="bg-background rounded-xl border shadow-sm"
+        class="flex-1 flex flex-col p-4 gap-4"
       >
-        <div class="p-5">
-          <!-- 动态筛选表单区 -->
-          <div 
-            v-if="isSectionVisible('filter') && pageConfig.filterArea?.show !== false"
-            class="grid"
-            :class="{ 'mb-4': !fusionMode }"
-            :style="{
-              gridTemplateColumns: `repeat(${pageConfig.filterArea.columns}, 1fr)`,
-              gap: pageConfig.filterArea.gap,
-            }"
-          >
-            <template v-for="config in visibleFilters" :key="config.key">
-              <!-- 输入框类型 -->
-              <FilterInput
-                v-if="config.type === 'input'"
-                :label="config.label"
-                v-model="filters[config.key]"
-                :placeholder="config.placeholder"
-              />
-              
-              <!-- 下拉框类型 -->
-              <FilterSelect
-                v-else-if="config.type === 'select'"
-                :label="config.label"
-                v-model="filters[config.key]"
-                :options="config.options ?? []"
-              />
-
-              <!-- 日期范围选择类型 -->
-              <FilterDateRange
-                v-else-if="config.type === 'date-range'"
-                :label="config.label"
-                v-model="filters[config.key]"
-              />
-
-              <!-- 树形下拉框类型 -->
-              <FilterTreeSelect
-                v-else-if="config.type === 'tree-select'"
-                :label="config.label"
-                v-model="filters[config.key]"
-                :options="config.treeOptions ?? []"
-                :placeholder="config.placeholder"
-              />
-            </template>
-
-            <!-- 融合模式下的操作按钮 -->
+        
+        <!-- 功能区 - 筛选条件 + 操作按钮 -->
+        <div 
+          v-if="(isSectionVisible('filter') && pageConfig.filterArea?.show !== false) || (isSectionVisible('actions') && pageConfig.actionsArea?.show !== false)"
+          class="bg-background rounded-xl border shadow-sm"
+        >
+          <div class="p-5">
+            <!-- 动态筛选表单区 -->
             <div 
-                v-if="fusionMode && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false"
-                class="flex items-end justify-end gap-3"
-                :style="{ gridColumn: `span ${actionButtonSpan}` }"
+              v-if="isSectionVisible('filter') && pageConfig.filterArea?.show !== false"
+              class="grid"
+              :class="{ 'mb-4': !fusionMode }"
+              :style="{
+                gridTemplateColumns: `repeat(${pageConfig.filterArea.columns}, 1fr)`,
+                gap: pageConfig.filterArea.gap,
+              }"
             >
-                <template v-for="(action, index) in visibleActions" :key="action.key">
-                    <!-- 分隔符（在第2个按钮后添加） -->
-                    <div v-if="index === 2" class="w-px h-6 bg-border mx-1"></div>
-                    <Button 
-                        v-if="action.variant === 'shadcn-outline'"
-                        variant="outline"
-                        class="h-9 px-5"
-                        :class="action.className"
-                        @click="handleActionClick(action.key, null)"
-                    >
-                        {{ action.label }}
-                    </Button>
-                    <AButton 
-                        v-else
-                        :type="action.variant as any ?? 'outline'"
-                        class="h-9 px-5"
-                        :class="action.className"
-                        @click="handleActionClick(action.key, null)"
-                    >
-                        {{ action.label }}
-                    </AButton>
-                </template>
-            </div>
-          </div>
+              <template v-for="config in visibleFilters" :key="config.key">
+                <!-- 输入框类型 -->
+                <FilterInput
+                  v-if="config.type === 'input'"
+                  :label="config.label"
+                  v-model="filters[config.key]"
+                  :placeholder="config.placeholder"
+                />
+                
+                <!-- 下拉框类型 -->
+                <FilterSelect
+                  v-else-if="config.type === 'select'"
+                  :label="config.label"
+                  v-model="filters[config.key]"
+                  :options="config.options ?? []"
+                />
 
-          <!-- 底部操作按钮 (非融合模式) -->
-          <div 
-            v-if="!fusionMode && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false" 
-            class="flex items-center justify-end pt-2 border-t"
-          >
-            <div class="flex items-center gap-3">
-              <template v-for="(action, index) in visibleActions" :key="action.key">
-                <!-- 分隔符（在第2个按钮后添加） -->
-                <div v-if="index === 2" class="w-px h-6 bg-border mx-1"></div>
-                <Button 
-                  v-if="action.variant === 'shadcn-outline'"
-                  variant="outline"
-                  class="h-9 px-5"
-                  :class="action.className"
-                  @click="handleActionClick(action.key, null)"
-                >
-                  {{ action.label }}
-                </Button>
-                <AButton 
-                  v-else
-                  :type="action.variant as any ?? 'outline'"
-                  class="h-9 px-5"
-                  :class="action.className"
-                  @click="handleActionClick(action.key, null)"
-                >
-                  {{ action.label }}
-                </AButton>
+                <!-- 日期范围选择类型 -->
+                <FilterDateRange
+                  v-else-if="config.type === 'date-range'"
+                  :label="config.label"
+                  v-model="filters[config.key]"
+                />
+
+                <!-- 树形下拉框类型 -->
+                <FilterTreeSelect
+                  v-else-if="config.type === 'tree-select'"
+                  :label="config.label"
+                  v-model="filters[config.key]"
+                  :options="config.treeOptions ?? []"
+                  :placeholder="config.placeholder"
+                />
               </template>
+
+              <!-- 融合模式下的操作按钮 -->
+              <div 
+                  v-if="fusionMode && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false"
+                  class="flex items-end justify-end gap-3"
+                  :style="{ gridColumn: `span ${actionButtonSpan}` }"
+              >
+                  <template v-for="(action, index) in visibleActions" :key="action.key">
+                      <!-- 分隔符（在第2个按钮后添加） -->
+                      <div v-if="index === 2" class="w-px h-6 bg-border mx-1"></div>
+                      <Button 
+                          v-if="action.variant === 'shadcn-outline'"
+                          variant="outline"
+                          class="h-9 px-5"
+                          :class="action.className"
+                          @click="handleActionClick(action.key, null)"
+                      >
+                          {{ action.label }}
+                      </Button>
+                      <AButton 
+                          v-else
+                          :type="action.variant as any ?? 'outline'"
+                          class="h-9 px-5"
+                          :class="action.className"
+                          @click="handleActionClick(action.key, null)"
+                      >
+                          {{ action.label }}
+                      </AButton>
+                  </template>
+              </div>
+            </div>
+
+            <!-- 底部操作按钮 (非融合模式) -->
+            <div 
+              v-if="!fusionMode && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false" 
+              class="flex items-center justify-end pt-2 border-t"
+            >
+              <div class="flex items-center gap-3">
+                <template v-for="(action, index) in visibleActions" :key="action.key">
+                  <!-- 分隔符（在第2个按钮后添加） -->
+                  <div v-if="index === 2" class="w-px h-6 bg-border mx-1"></div>
+                  <Button 
+                    v-if="action.variant === 'shadcn-outline'"
+                    variant="outline"
+                    class="h-9 px-5"
+                    :class="action.className"
+                    @click="handleActionClick(action.key, null)"
+                  >
+                    {{ action.label }}
+                  </Button>
+                  <AButton 
+                    v-else
+                    :type="action.variant as any ?? 'outline'"
+                    class="h-9 px-5"
+                    :class="action.className"
+                    @click="handleActionClick(action.key, null)"
+                  >
+                    {{ action.label }}
+                  </AButton>
+                </template>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- 卡片区 -->
-      <div 
-        v-if="isSectionVisible('card') && pageConfig.cardArea?.show"
-        class="grid"
-        :style="{
-          gridTemplateColumns: `repeat(${pageConfig.cardArea.columns}, 1fr)`,
-          gap: pageConfig.cardArea.gap,
-        }"
-      >
-        <FilterCard
-          v-for="card in pageConfig.cardArea.cards"
-          :key="card.key"
-          :title="card.title"
-          :data="card.data"
-          :height="pageConfig.cardArea.cardHeight"
-          :width="pageConfig.cardArea.cardWidth"
-        />
-      </div>
+        <!-- 卡片区 -->
+        <div 
+          v-if="isSectionVisible('card') && pageConfig.cardArea?.show"
+          class="grid"
+          :style="{
+            gridTemplateColumns: `repeat(${pageConfig.cardArea.columns}, 1fr)`,
+            gap: pageConfig.cardArea.gap,
+          }"
+        >
+          <FilterCard
+            v-for="card in pageConfig.cardArea.cards"
+            :key="card.key"
+            :title="card.title"
+            :data="card.data"
+            :height="pageConfig.cardArea.cardHeight"
+            :width="pageConfig.cardArea.cardWidth"
+          />
+        </div>
 
-      <!-- 列表区 - 使用 ArcoTable 组件 -->
-      <div 
-        v-if="isSectionVisible('table') && pageConfig.tableArea?.show !== false"
-        class="flex-1"
-        :class="{ 'shrink-0': !pageConfig.tableArea.scrollY }"
-      >
-        <ArcoTable
-          :columns="visibleColumns"
-          :data="filteredData"
-          :show-checkbox="pageConfig.tableArea.showCheckbox"
-          :page-size="pageSize"
-          :height="pageConfig.tableArea.scrollY ? '100%' : pageConfig.tableArea.height"
-          :scroll-x="pageConfig.tableArea.scrollX"
-          :scroll-y="pageConfig.tableArea.scrollY"
-          :sticky-header="pageConfig.tableArea.stickyHeader !== false"
-          :bordered="{ wrapper: true, cell: true }"
-          class="h-full"
-          @row-click="handleRowClick"
-          @selection-change="handleSelectionChange"
-          @action-click="handleActionClick"
-        />
+        <!-- 列表区 - 使用 ArcoTable 组件 -->
+        <div 
+          v-if="isSectionVisible('table') && pageConfig.tableArea?.show !== false"
+          class="flex-1"
+          :class="{ 'shrink-0': !pageConfig.tableArea.scrollY }"
+        >
+          <ArcoTable
+            :columns="visibleColumns"
+            :data="filteredData"
+            :show-checkbox="pageConfig.tableArea.showCheckbox"
+            :page-size="pageSize"
+            :height="pageConfig.tableArea.scrollY ? '100%' : pageConfig.tableArea.height"
+            :scroll-x="pageConfig.tableArea.scrollX"
+            :scroll-y="pageConfig.tableArea.scrollY"
+            :sticky-header="pageConfig.tableArea.stickyHeader !== false"
+            :bordered="{ wrapper: true, cell: true }"
+            class="h-full"
+            @row-click="handleRowClick"
+            @selection-change="handleSelectionChange"
+            @action-click="handleActionClick"
+          />
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- 无配置时显示占位 -->
-  <div v-else class="flex flex-col items-center justify-center h-full text-muted-foreground">
-      <p class="text-lg font-medium">配置未找到</p>
-      <p class="text-sm">Config ID: {{ currentNavId }}</p>
-      <p class="text-xs text-muted-foreground mt-2">请检查配置导入日志</p>
+    <!-- 无配置时显示占位 -->
+    <div v-else class="flex flex-col items-center justify-center h-full text-muted-foreground">
+        <p class="text-lg font-medium">配置未找到</p>
+        <p class="text-sm">Config ID: {{ currentNavId }}</p>
+        <p class="text-xs text-muted-foreground mt-2">请检查配置导入日志</p>
+    </div>
+
+    <!-- 效果弹窗 -->
+    <AModal
+      v-model:visible="effectModalVisible"
+      :title="effectModalTitle"
+      @ok="handleEffectModalOk"
+      @cancel="effectModalVisible = false"
+      :width="520"
+    >
+      <AScrollbar style="max-height: 400px; overflow: auto;" class="pr-2">
+        <div v-if="effectModalContent" class="whitespace-pre-wrap py-2 text-sm leading-6 mb-4">
+          {{ effectModalContent }}
+        </div>
+
+        <!-- 动态表单 -->
+        <div v-if="effectModalFormItems.length > 0" class="space-y-4 py-2">
+          <template v-for="config in effectModalFormItems" :key="config.key">
+            <FilterInput
+              v-if="config.type === 'input'"
+              :label="config.label"
+              v-model="effectModalFormData[config.key]"
+              :placeholder="config.placeholder"
+            />
+            
+            <FilterSelect
+              v-else-if="config.type === 'select'"
+              :label="config.label"
+              v-model="effectModalFormData[config.key]"
+              :options="config.options ?? []"
+            />
+
+            <FilterDateRange
+              v-else-if="config.type === 'date-range'"
+              :label="config.label"
+              v-model="effectModalFormData[config.key]"
+            />
+
+            <FilterTreeSelect
+              v-else-if="config.type === 'tree-select'"
+              :label="config.label"
+              v-model="effectModalFormData[config.key]"
+              :options="config.treeOptions ?? []"
+              :placeholder="config.placeholder"
+            />
+          </template>
+        </div>
+      </AScrollbar>
+    </AModal>
   </div>
 </template>
 

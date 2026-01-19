@@ -2,9 +2,9 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 // Card components removed - using plain divs with border/bg-card
-import { Layers, Plus, Pencil, Trash2, Settings2, Save, FileCode, GripVertical, Info, ChevronRight, Eye, EyeOff, Download, Upload, FileDown, Search, MoreHorizontal, RefreshCw } from 'lucide-vue-next'
+import { Layers, Plus, Pencil, Trash2, Settings2, Save, FileCode, GripVertical, Info, ChevronRight, Eye, EyeOff, Download, Upload, FileDown, Search, MoreHorizontal, RefreshCw, FormInput } from 'lucide-vue-next'
 
-import { Button as AButton, Card as ACard, Select as ASelect, Option as AOption } from '@arco-design/web-vue'
+import { Button as AButton, Card as ACard, Select as ASelect, Option as AOption, Scrollbar as AScrollbar } from '@arco-design/web-vue'
 import { 
   IconSettings, 
   IconApps, 
@@ -181,7 +181,11 @@ const actionForm = ref({
   key: '',
   label: '',
   variant: 'shadcn-outline' as 'primary' | 'outline' | 'text' | 'shadcn-outline',
-  className: ''
+  className: '',
+  effectType: 'none' as 'none' | 'modal',
+  effectTitle: '',
+  effectContent: '',
+  effectFormItems: [] as any[]
 })
 
 // Active Tab State for Preview Control
@@ -670,10 +674,52 @@ const handleUpdateTableArea = (key: string, value: any) => {
 
 const openAddActionDialog = () => {
   editingActionIndex.value = null
-  actionForm.value = { key: '', label: '', variant: 'shadcn-outline', className: '' }
+  actionForm.value = { 
+    key: '', 
+    label: '', 
+    variant: 'shadcn-outline', 
+    className: '',
+    effectType: 'none',
+    effectTitle: '',
+    effectContent: '',
+    effectFormItems: []
+  }
   actionDialogOpen.value = true
 }
 
+const openEditActionDialog = (index: number) => {
+  const config = configStore.page1Configs[selectedNavId.value!]
+  if (config?.actionsArea?.buttons) {
+    const action = config.actionsArea.buttons[index]
+    editingActionIndex.value = index
+    actionForm.value = {
+      key: action.key,
+      label: action.label,
+      variant: action.variant || 'shadcn-outline',
+      className: action.className || '',
+      effectType: action.effectType || 'none',
+      effectTitle: action.effectConfig?.title || '',
+      effectContent: action.effectConfig?.content || '',
+      effectFormItems: action.effectConfig?.formItems ? JSON.parse(JSON.stringify(action.effectConfig.formItems)) : []
+    }
+    actionDialogOpen.value = true
+  }
+}
+
+
+
+const addEffectFormItem = () => {
+  actionForm.value.effectFormItems.push({
+    key: 'field_' + (actionForm.value.effectFormItems.length + 1),
+    label: '新字段',
+    type: 'input',
+    placeholder: ''
+  })
+}
+
+const removeEffectFormItem = (index: number) => {
+  actionForm.value.effectFormItems.splice(index, 1)
+}
 
 
 const closeActionDialog = () => {
@@ -688,11 +734,20 @@ const handleSaveAction = () => {
       if (!config.actionsArea) config.actionsArea = { buttons: [] }
       if (!config.actionsArea.buttons) config.actionsArea.buttons = []
       
-      const newAction = {
+      const newAction: any = {
         key: actionForm.value.key,
         label: actionForm.value.label,
         variant: actionForm.value.variant,
-        className: actionForm.value.className || undefined
+        className: actionForm.value.className || undefined,
+        effectType: actionForm.value.effectType === 'none' ? undefined : actionForm.value.effectType
+      }
+      
+      if (actionForm.value.effectType === 'modal') {
+        newAction.effectConfig = {
+          title: actionForm.value.effectTitle,
+          content: actionForm.value.effectContent,
+          formItems: actionForm.value.effectFormItems.length > 0 ? actionForm.value.effectFormItems : undefined
+        }
       }
       
       if (editingActionIndex.value !== null) {
@@ -1372,7 +1427,8 @@ const handleSaveToCloud = async () => {
                               <th class="w-8 p-2 border-r border-border/50"></th>
                               <th class="text-left p-2 text-xs font-medium border-r border-border/50">标签</th>
                               <th class="text-left p-2 text-xs font-medium border-r border-border/50">Key</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">样式</th>
+                               <th class="text-left p-2 text-xs font-medium border-r border-border/50">样式</th>
+                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">效果</th>
                               <th class="text-left p-2 text-xs font-medium border-r border-border/50">自定义类名</th>
                               <th class="text-right p-2 text-xs font-medium w-16">操作</th>
                             </tr>
@@ -1406,7 +1462,7 @@ const handleSaveToCloud = async () => {
                                   />
                                 </td>
                                 <!-- 样式 - 下拉框 -->
-                                <td class="p-1 border-r border-border/50">
+                                 <td class="p-1 border-r border-border/50">
                                   <Select 
                                     :model-value="action.variant || 'shadcn-outline'"
                                     @update:model-value="(v) => action.variant = String(v) as 'primary' | 'outline' | 'text' | 'shadcn-outline'"
@@ -1421,6 +1477,13 @@ const handleSaveToCloud = async () => {
                                       <SelectItem value="shadcn-outline">Shadcn Outline</SelectItem>
                                     </SelectContent>
                                   </Select>
+                                </td>
+                                <!-- 效果 - 显示文本 -->
+                                <td class="p-1 border-r border-border/50">
+                                   <div class="px-2 py-1 text-[10px] w-full">
+                                      <span v-if="!action.effectType || action.effectType === 'none'" class="text-muted-foreground">无</span>
+                                      <span v-else-if="action.effectType === 'modal'" class="text-blue-500 font-medium">弹窗: {{ action.effectConfig?.title || '未配置' }}</span>
+                                   </div>
                                 </td>
                                 <!-- 自定义类名 - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
@@ -1441,8 +1504,17 @@ const handleSaveToCloud = async () => {
                                       @click="toggleActionVisibility(index)"
                                       :title="action.visible === false ? '点击显示' : '点击隐藏'"
                                     >
-                                      <EyeOff v-if="action.visible === false" class="w-3 h-3" />
+                                       <EyeOff v-if="action.visible === false" class="w-3 h-3" />
                                       <Eye v-else class="w-3 h-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      class="h-6 w-6 p-0 text-primary hover:text-primary"
+                                      @click="openEditActionDialog(index)"
+                                      title="编辑详情"
+                                    >
+                                      <Pencil class="w-3 h-3" />
                                     </Button>
                                     <Button
                                       variant="ghost"
@@ -2039,61 +2111,172 @@ const handleSaveToCloud = async () => {
         <DialogTitle>{{ editingActionIndex !== null ? '编辑操作按钮' : '添加操作按钮' }}</DialogTitle>
         <DialogDescription>{{ editingActionIndex !== null ? '修改操作按钮配置' : '添加新的操作按钮' }}</DialogDescription>
       </DialogHeader>
-      <div class="space-y-4 py-4">
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-2">
-            <label class="text-sm font-medium">Key</label>
-            <Input v-model="actionForm.key" placeholder="如 search" />
+      <AScrollbar style="max-height: 500px; overflow: auto;" class="pr-2">
+        <div class="space-y-4 py-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Key</label>
+              <Input v-model="actionForm.key" placeholder="如 search" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium">按钮文本</label>
+              <Input v-model="actionForm.label" placeholder="如 查询" />
+            </div>
           </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium">按钮文本</label>
-            <Input v-model="actionForm.label" placeholder="如 查询" />
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <label class="text-sm font-medium">样式</label>
+              <Select v-model="actionForm.variant">
+                <SelectTrigger class="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="primary">Primary (主要)</SelectItem>
+                  <SelectItem value="outline">Outline (线形)</SelectItem>
+                  <SelectItem value="text">Text (文本)</SelectItem>
+                  <SelectItem value="shadcn-outline">Shadcn Outline (Shadcn 边框)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium">自定义样式类</label>
+              <Input v-model="actionForm.className" placeholder="可选，如 bg-emerald-50" />
+            </div>
+          </div>
+
+          <div class="space-y-4 pt-2 border-t">
+            <div class="space-y-2">
+              <label class="text-sm font-medium">交互效果</label>
+              <Select v-model="actionForm.effectType">
+                <SelectTrigger class="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">无反应 (默认)</SelectItem>
+                  <SelectItem value="modal">弹窗 (Modal)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <!-- 弹窗配置项 -->
+            <div v-if="actionForm.effectType === 'modal'" class="space-y-4 p-3 border rounded-md bg-muted/20 animate-in fade-in slide-in-from-top-1">
+              <div class="space-y-2">
+                <label class="text-xs font-medium">弹窗标题</label>
+                <Input v-model="actionForm.effectTitle" placeholder="请输入弹窗标题" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-xs font-medium">弹窗内容</label>
+                <textarea 
+                  v-model="actionForm.effectContent"
+                  class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="请输入弹窗展示的详细信息"
+                ></textarea>
+              </div>
+
+              <!-- 弹窗表单项配置 -->
+              <div class="space-y-3 pt-2 border-t mt-2">
+                <div class="flex items-center justify-between">
+                  <label class="text-xs font-bold flex items-center gap-1">
+                    <FormInput class="w-3 h-3" />
+                    弹窗表单项 (可选)
+                  </label>
+                  <AButton size="mini" type="outline" @click="addEffectFormItem">
+                    <template #icon><Plus class="w-3 h-3" /></template>
+                    添加项
+                  </AButton>
+                </div>
+
+                <div v-if="actionForm.effectFormItems.length === 0" class="text-[10px] text-muted-foreground text-center py-4 border border-dashed rounded bg-muted/10">
+                  暂无表单项，点击上方按钮添加
+                </div>
+                
+                <div v-else class="space-y-3">
+                  <div 
+                    v-for="(item, index) in actionForm.effectFormItems" 
+                    :key="index"
+                    class="p-3 border rounded-lg bg-background/50 relative group"
+                  >
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      class="h-6 w-6 p-0 absolute top-2 right-2 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                      @click="removeEffectFormItem(index)"
+                    >
+                      <Trash2 class="w-3 h-3" />
+                    </Button>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <div class="space-y-1">
+                        <label class="text-[10px] text-muted-foreground">标签 (Label)</label>
+                        <Input v-model="item.label" class="h-7 text-xs" placeholder="如 用户名" />
+                      </div>
+                      <div class="space-y-1">
+                        <label class="text-[10px] text-muted-foreground">字段名 (Key)</label>
+                        <Input v-model="item.key" class="h-7 text-xs" placeholder="如 username" />
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 mt-2">
+                      <div class="space-y-1">
+                        <label class="text-[10px] text-muted-foreground">类型 (Type)</label>
+                        <Select v-model="item.type">
+                          <SelectTrigger class="h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="input">文本输入 (Input)</SelectItem>
+                            <SelectItem value="select">下拉选择 (Select)</SelectItem>
+                            <SelectItem value="date-range">时间范围 (DateRange)</SelectItem>
+                            <SelectItem value="tree-select">树形选择 (TreeSelect)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div class="space-y-1">
+                        <label class="text-[10px] text-muted-foreground">提示 (Placeholder)</label>
+                        <Input v-model="item.placeholder" class="h-7 text-xs" placeholder="请输入..." />
+                      </div>
+                    </div>
+
+                    <!-- 下拉项配置 (如果是 Select) -->
+                    <div v-if="item.type === 'select'" class="mt-2 space-y-1">
+                       <label class="text-[10px] text-muted-foreground">选项 (逗号隔开)</label>
+                       <Input 
+                          :model-value="item.options?.join(',')" 
+                          @update:model-value="(v) => item.options = String(v).split(',').filter(Boolean)"
+                          class="h-7 text-xs" 
+                          placeholder="选项1,选项2,选项3" 
+                        />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Preview Section -->
+          <div class="space-y-2 pt-2 border-t">
+            <label class="text-sm font-medium text-muted-foreground">预览</label>
+            <div class="flex items-center gap-3 p-3 rounded-md bg-muted/30">
+              <Button
+                v-if="actionForm.variant === 'shadcn-outline'"
+                variant="outline"
+                class="h-9 px-5"
+                :class="actionForm.className"
+              >
+                {{ actionForm.label || '按钮文本' }}
+              </Button>
+              <AButton 
+                v-else
+                :type="actionForm.variant as any"
+                :class="actionForm.className"
+              >
+                {{ actionForm.label || '按钮文本' }}
+              </AButton>
+              <span class="text-xs text-muted-foreground">← 按钮实际样式</span>
+            </div>
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-2">
-            <label class="text-sm font-medium">样式</label>
-            <Select v-model="actionForm.variant">
-              <SelectTrigger class="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="primary">Primary (主要)</SelectItem>
-                <SelectItem value="outline">Outline (线形)</SelectItem>
-                <SelectItem value="text">Text (文本)</SelectItem>
-                <SelectItem value="shadcn-outline">Shadcn Outline (Shadcn 边框)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium">自定义样式类</label>
-            <Input v-model="actionForm.className" placeholder="可选，如 bg-emerald-50" />
-          </div>
-        </div>
-        
-        <!-- Preview Section -->
-        <div class="space-y-2 pt-2 border-t">
-          <label class="text-sm font-medium text-muted-foreground">预览</label>
-          <div class="flex items-center gap-3 p-3 rounded-md bg-muted/30">
-            <Button
-              v-if="actionForm.variant === 'shadcn-outline'"
-              variant="outline"
-              class="h-9 px-5"
-              :class="actionForm.className"
-            >
-              {{ actionForm.label || '按钮文本' }}
-            </Button>
-            <AButton 
-              v-else
-              :type="actionForm.variant as any"
-              :class="actionForm.className"
-            >
-              {{ actionForm.label || '按钮文本' }}
-            </AButton>
-            <span class="text-xs text-muted-foreground">← 按钮实际样式</span>
-          </div>
-        </div>
-      </div>
+      </AScrollbar>
       <DialogFooter>
         <Button variant="outline" @click="closeActionDialog">取消</Button>
         <Button @click="handleSaveAction">{{ editingActionIndex !== null ? '保存' : '添加' }}</Button>

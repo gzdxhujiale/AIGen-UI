@@ -100,6 +100,12 @@ export interface ActionButtonConfig {
     variant?: 'primary' | 'outline' | 'text' | 'shadcn-outline'
     className?: string       // 自定义样式类
     visible?: boolean
+    effectType?: 'none' | 'modal'
+    effectConfig?: {
+        title?: string
+        content?: string
+        formItems?: FilterConfig[]
+    }
 }
 
 /**

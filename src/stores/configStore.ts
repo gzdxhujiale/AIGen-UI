@@ -688,6 +688,12 @@ export interface ActionButtonConfig {
     variant?: 'primary' | 'outline' | 'text' | 'shadcn-outline'
     className?: string       // 自定义样式类
     visible?: boolean
+    effectType?: 'none' | 'modal'
+    effectConfig?: {
+        title?: string
+        content?: string
+        formItems?: FilterConfig[]
+    }
 }
 
 /**
@@ -791,6 +797,18 @@ export const page1Configs: Record<string, Page1Config> = {
                     if (action.variant) code += `, variant: '${action.variant}'`
                     if (action.className) code += `,\n                    className: '${action.className}'`
                     if (action.visible === false) code += `, visible: false`
+                    if (action.effectType && action.effectType !== 'none') {
+                        code += `, effectType: '${action.effectType}'`
+                        if (action.effectConfig) {
+                            code += `, effectConfig: {\n`
+                            if (action.effectConfig.title) code += `                    title: '${action.effectConfig.title}',\n`
+                            if (action.effectConfig.content) code += `                    content: \`${action.effectConfig.content.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`,\n`
+                            if (action.effectConfig.formItems && action.effectConfig.formItems.length > 0) {
+                                code += `                    formItems: ${JSON.stringify(action.effectConfig.formItems, null, 2).replace(/\n/g, '\n                    ')},\n`
+                            }
+                            code += `                }`
+                        }
+                    }
                     code += ` },\n`
                 })
                 code += `            ],\n`
