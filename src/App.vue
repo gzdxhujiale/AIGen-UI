@@ -4,7 +4,6 @@ import { computed, onMounted, onUnmounted, watch } from 'vue'
 import Page1 from '@/components/pages/Page1.vue'
 import Settings from '@/components/pages/Settings.vue'
 import AuthPage from '@/components/pages/AuthPage.vue'
-import Billing from '@/components/pages/Billing.vue'
 import Profile from '@/components/pages/Profile.vue'
 import SkeletonLoading from '@/components/pages/SkeletonLoading.vue'
 
@@ -19,6 +18,7 @@ import SkeletonLoading from '@/components/pages/SkeletonLoading.vue'
 
 // Composables
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
+import { useOnboarding } from '@/composables/useOnboarding'
 
 // Auth Store
 import { useAuthStore } from '@/stores/authStore'
@@ -34,12 +34,12 @@ import { useNavigation } from '@/config/sidebar'
 const { currentPage } = useNavigation() 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
+const { startOnboarding } = useOnboarding()
 
 // 页面模板映射
 const pageComponents: Record<string, any> = {
   Page1,
   Settings,
-  Billing,
   profile: Profile,
   // Page2, // 后续添加更多模板时，在此注册...
 }
@@ -60,6 +60,9 @@ onMounted(async () => {
     if (authStore.stylePreference) {
         configStore.navigationStyle = authStore.stylePreference
     }
+    
+    // 启动用户引导
+    startOnboarding(authStore.userEmail)
   }
 })
 
@@ -72,6 +75,9 @@ watch(() => authStore.isAuthenticated, async (isAuth) => {
     if (authStore.stylePreference) {
         configStore.navigationStyle = authStore.stylePreference
     }
+    
+    // 启动用户引导
+    startOnboarding(authStore.userEmail)
   }
 })
 

@@ -165,7 +165,8 @@ const columnForm = ref({
   label: '',
   width: '100px',
   type: 'text' as 'text' | 'badge' | 'status-badge' | 'text-button',
-  mockFormat: 'none' as 'none' | 'text' | 'datetime' | 'number',
+  mockFormat: 'none' as 'none' | 'text' | 'datetime' | 'number' | 'list',
+  mockList: '', // 逗号分隔的列表项
   buttons: '', // 按钮列表，逗号分隔
   fixed: 'none' as 'none' | 'left' | 'right',
   align: 'left' as 'left' | 'center' | 'right',
@@ -575,6 +576,7 @@ const openAddColumnDialog = () => {
     width: '100px', 
     type: 'text', 
     mockFormat: 'none', 
+    mockList: '',
     buttons: '',
     fixed: 'none',
     align: 'left',
@@ -595,6 +597,7 @@ const openEditColumnDialog = (index: number) => {
       width: col.width || '100px',
       type: col.type || 'text',
       mockFormat: col.mockFormat || 'none',
+      mockList: col.mockList ? col.mockList.join(',') : '',
       buttons: col.buttons ? col.buttons.join(', ') : '',
       fixed: col.fixed || 'none',
       align: col.align || 'left',
@@ -620,6 +623,7 @@ const handleSaveColumn = () => {
         width: columnForm.value.width || undefined,
         type: columnForm.value.type === 'text' ? undefined : columnForm.value.type,
         mockFormat: columnForm.value.mockFormat === 'none' ? undefined : columnForm.value.mockFormat,
+        mockList: columnForm.value.mockFormat === 'list' ? columnForm.value.mockList.split(',').map(s => s.trim()).filter(Boolean) : undefined,
         buttons: columnForm.value.type === 'text-button' && columnForm.value.buttons 
           ? columnForm.value.buttons.split(/[，,]/).map(s => s.trim()).filter(s => s) 
           : undefined,
@@ -1820,6 +1824,7 @@ const handleSaveToCloud = async () => {
                                        <SelectItem value="text">文本</SelectItem>
                                        <SelectItem value="datetime">时间</SelectItem>
                                        <SelectItem value="number">数字</SelectItem>
+                                       <SelectItem value="list">列表项目随机选择</SelectItem>
                                      </SelectContent>
                                    </Select>
                                  </td>
@@ -2041,9 +2046,17 @@ const handleSaveToCloud = async () => {
               <SelectItem value="text">文本格式 (标签1, 标签2...)</SelectItem>
               <SelectItem value="datetime">时间格式 (2026-1-15 xx:xx:xx)</SelectItem>
               <SelectItem value="number">数字格式 (随机5位数)</SelectItem>
+              <SelectItem value="list">列表项目随机选择</SelectItem>
             </SelectContent>
           </Select>
           <p class="text-xs text-muted-foreground">选择后将自动生成对应格式的模拟数据</p>
+        </div>
+        
+        <!-- 列表配置 (如果是 list) -->
+        <div v-if="columnForm.mockFormat === 'list'" class="space-y-2 animate-in fade-in slide-in-from-top-1">
+          <label class="text-sm font-medium">列表项 (逗号隔开)</label>
+          <Input v-model="columnForm.mockList" placeholder="如：a, b, c, d" />
+          <p class="text-[10px] text-muted-foreground">生成的虚拟数据将随机从这些项中选择其一</p>
         </div>
 
         <!-- 高级布局配置 -->

@@ -66,8 +66,18 @@ const effectModalFormItems = ref<any[]>([])
 const effectModalFormData = reactive<Record<string, any>>({})
 
 // 根据 mockFormat 生成虚拟数据
-function generateMockValue(format: string | undefined, label: string, index: number): string | number {
+function generateMockValue(col: any, index: number): string | number {
+  const format = col.mockFormat
+  const label = col.label
+  const mockList = col.mockList
+  
   switch (format) {
+    case 'list':
+      if (mockList && mockList.length > 0) {
+        const randomIndex = Math.floor(Math.random() * mockList.length)
+        return mockList[randomIndex]
+      }
+      return `${label}${index + 1}`
     case 'text':
       return `${label}${index + 1}`
     case 'datetime':
@@ -107,7 +117,7 @@ function generateMockData(): any[] {
     
     columns.forEach(col => {
       // 无论是否有 mockFormat，都生成数据
-      row[col.key] = generateMockValue(col.mockFormat, col.label, i)
+      row[col.key] = generateMockValue(col, i)
     })
     
     data.push(row)

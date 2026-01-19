@@ -5,8 +5,6 @@ import {
   ChevronsUpDown,
   Plus,
   BadgeCheck,
-  Bell,
-  CreditCard,
   LogOut,
   Settings,
   Loader2,
@@ -304,7 +302,7 @@ const initials = computed(() => userDisplayName.value.slice(0, 2).toUpperCase())
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger as-child>
-                <SidebarMenuButton size="lg" class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
+                <SidebarMenuButton id="user-avatar-trigger" size="lg" class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
                   <Avatar class="h-8 w-8 rounded-lg">
                     <AvatarImage :src="userAvatar" :alt="userDisplayName" />
                     <AvatarFallback class="rounded-lg">{{ initials }}</AvatarFallback>
@@ -331,19 +329,17 @@ const initials = computed(() => userDisplayName.value.slice(0, 2).toUpperCase())
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem @click="handleNavClick('系统', '配置设置', 'settings')"><Settings />Upgrade for Setting</DropdownMenuItem>
+                  <DropdownMenuItem id="nav-settings" @click="handleNavClick('系统', '配置设置', 'settings')"><Settings />用户设置</DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem @click="handleNavClick('账户', '个人资料', 'profile')"><BadgeCheck />Account</DropdownMenuItem>
-                  <DropdownMenuItem @click="handleNavClick('Account', 'Billing', 'billing')"><CreditCard />Billing</DropdownMenuItem>
-                  <DropdownMenuItem><Bell />Notifications</DropdownMenuItem>
+                  <DropdownMenuItem id="nav-profile" @click="handleNavClick('账户', '个人资料', 'profile')"><BadgeCheck />用户中心</DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem @click="handleLogout" :disabled="isLoggingOut">
                   <Loader2 v-if="isLoggingOut" class="animate-spin" />
                   <LogOut v-else />
-                  {{ isLoggingOut ? '正在退出...' : 'Log out' }}
+                  {{ isLoggingOut ? '正在退出...' : '退出登录' }}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

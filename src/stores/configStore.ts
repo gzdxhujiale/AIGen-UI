@@ -660,7 +660,8 @@ export interface TableColumn {
     ellipsis?: boolean                // 是否显示省略号
     tooltip?: boolean                 // 是否显示提示
     visible?: boolean
-    mockFormat?: 'text' | 'datetime' | 'number' // 虚拟数据格式
+    mockFormat?: 'text' | 'datetime' | 'number' | 'list' // 虚拟数据格式
+    mockList?: string[] // 当格式为 'list' 时的候选数据
     buttons?: string[] // 文字按钮列表
 }
 
@@ -851,6 +852,9 @@ export const page1Configs: Record<string, Page1Config> = {
                 if (col.tooltip) code += `, tooltip: ${col.tooltip}`
                 if (col.visible === false) code += `, visible: false`
                 if (col.mockFormat) code += `, mockFormat: '${col.mockFormat}'`
+                if (col.mockFormat === 'list' && col.mockList && col.mockList.length > 0) {
+                    code += `, mockList: ${JSON.stringify(col.mockList)}`
+                }
                 if (col.buttons && col.buttons.length > 0) {
                     code += `, buttons: [${col.buttons.map(b => `'${b}'`).join(', ')}]`
                 }

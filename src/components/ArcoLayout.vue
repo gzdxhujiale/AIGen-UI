@@ -50,6 +50,7 @@ import { useConfigStore } from '@/stores/configStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNavigation } from '@/config/sidebar'
 import type { TeamItem, TeamPermissions } from '@/config/sidebar'
+import { AIChatButton, AIChatWindow } from '@/components/ai'
 
 const configStore = useConfigStore()
 const authStore = useAuthStore()
@@ -360,7 +361,7 @@ const handleSubNavClick = () => {
 
                 <!-- 用户头像 Dropdown -->
                 <a-dropdown @select="handleUserAction" trigger="click" position="br">
-                    <div class="p-0.5 rounded-full hover:bg-[var(--color-fill-2)] cursor-pointer transition-colors border border-[var(--color-border-2)] flex items-center justify-center">
+                    <div id="user-avatar-trigger" class="p-0.5 rounded-full hover:bg-[var(--color-fill-2)] cursor-pointer transition-colors border border-[var(--color-border-2)] flex items-center justify-center">
                         <a-avatar 
                             :size="32" 
                             :style="{ backgroundColor: 'rgb(var(--primary-6))' }"
@@ -372,11 +373,11 @@ const handleSubNavClick = () => {
                     </div>
                     <template #content>
                         <div class="py-1 min-w-[150px]">
-                            <a-doption value="profile" class="py-2.5">
+                            <a-doption value="profile" class="py-2.5" id="nav-profile">
                                 <template #icon><IconUser class="size-4 opacity-70"/></template>
                                 <span class="ml-1">用户中心</span>
                             </a-doption>
-                            <a-doption value="settings" class="py-2.5">
+                            <a-doption value="settings" class="py-2.5" id="nav-settings">
                                 <template #icon><IconSettings class="size-4 opacity-70"/></template>
                                 <span class="ml-1">用户设置</span>
                             </a-doption>
@@ -400,6 +401,10 @@ const handleSubNavClick = () => {
           </a-scrollbar>
         </a-layout-content>
     </a-layout>
+
+    <!-- AI 悬浮组件 -->
+    <AIChatButton />
+    <AIChatWindow />
   </a-layout>
 </template>
 
