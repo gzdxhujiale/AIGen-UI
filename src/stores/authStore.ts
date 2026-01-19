@@ -14,6 +14,7 @@ export const useAuthStore = defineStore('auth', () => {
     const customUserName = ref('')
     const teamsConfig = ref<any>(null)
     const stylePreference = ref<'shadcn' | 'arco'>('shadcn')
+    const menuConfig = ref<any[]>([])
 
     let authSubscription: { unsubscribe: () => void } | null = null
 
@@ -38,18 +39,25 @@ export const useAuthStore = defineStore('auth', () => {
             ''
     })
 
+    const DEFAULT_MENU_CONFIG = [
+        { type: 'text-button', label: '权限申请' },
+        { type: 'dropdown', label: '语言', options: ['中文', 'English'] }
+    ]
+
     // Helper to fetch user configs
     const fetchUserConfigs = async (userId: string) => {
         try {
             const { data, error } = await supabase
                 .from('user_configs')
-                .select('user_name, teams_config, style')
+                .select('user_name, teams_config, style, menu_config')
                 .eq('user_id', userId)
                 .single()
 
             if (error) {
                 if (error.code === 'PGRST116') { // code for no rows found
                     console.log('No user_config found, using defaults')
+                    // Not persisting creates, just using defaults in memory for now until save
+                    menuConfig.value = JSON.parse(JSON.stringify(DEFAULT_MENU_CONFIG))
                 } else {
                     console.error('Error fetching user_configs:', error)
                 }
@@ -69,9 +77,60 @@ export const useAuthStore = defineStore('auth', () => {
                         permissions: ['read']
                     }]
                 stylePreference.value = data.style || 'shadcn'
+
+                menuConfig.value = data.menu_config && data.menu_config.length > 0
+                    ? data.menu_config
+                    : JSON.parse(JSON.stringify(DEFAULT_MENU_CONFIG))
             }
         } catch (e) {
             console.error('Failed to fetch user configs:', e)
+        }
+    }
+
+    // Actions
+    // ... (rest of actions unchanged until update)
+
+    /**
+     * Update user profile configuration
+     */
+    const updateUserProfile = async (name: string, teams: any, style?: 'shadcn' | 'arco', menu?: any[]) => {
+        if (!user.value) return { success: false, error: 'Not authenticated' }
+
+        try {
+            const updates: any = {
+                user_id: user.value.id,
+                user_name: name,
+                teams_config: teams,
+                updated_at: new Date().toISOString()
+            }
+
+            if (style) {
+                updates.style = style
+            }
+
+            if (menu) {
+                updates.menu_config = menu
+            } else {
+                // If not provided, keep current? or pass current? 
+                // Better to pass current value ensuring we don't erase it if called from somewhere else
+                updates.menu_config = menuConfig.value
+            }
+
+            const { error: upsertError } = await supabase
+                .from('user_configs')
+                .upsert(updates, { onConflict: 'user_id' })
+
+            if (upsertError) throw upsertError
+
+            customUserName.value = name
+            teamsConfig.value = teams
+            if (style) stylePreference.value = style
+            if (menu) menuConfig.value = menu
+
+            return { success: true }
+        } catch (err: any) {
+            console.error('Error updating profile:', err)
+            return { success: false, error: err.message }
         }
     }
 
@@ -249,41 +308,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     /**
-     * Update user profile configuration
-     */
-    const updateUserProfile = async (name: string, teams: any, style?: 'shadcn' | 'arco') => {
-        if (!user.value) return { success: false, error: 'Not authenticated' }
-
-        try {
-            const updates: any = {
-                user_id: user.value.id,
-                user_name: name,
-                teams_config: teams,
-                updated_at: new Date().toISOString()
-            }
-
-            if (style) {
-                updates.style = style
-            }
-
-            const { error: upsertError } = await supabase
-                .from('user_configs')
-                .upsert(updates, { onConflict: 'user_id' })
-
-            if (upsertError) throw upsertError
-
-            customUserName.value = name
-            teamsConfig.value = teams
-            if (style) stylePreference.value = style
-
-            return { success: true }
-        } catch (err: any) {
-            console.error('Error updating profile:', err)
-            return { success: false, error: err.message }
-        }
-    }
-
-    /**
      * Cleanup subscriptions
      */
     const cleanup = () => {
@@ -302,6 +326,7 @@ export const useAuthStore = defineStore('auth', () => {
         customUserName,
         teamsConfig,
         stylePreference,
+        menuConfig,
         // Getters
         isAuthenticated,
         userDisplayName,

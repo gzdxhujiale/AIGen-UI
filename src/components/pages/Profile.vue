@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, reactive } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 import { 
   Message, 
@@ -10,13 +10,21 @@ import {
   Form as AForm, 
   FormItem as AFormItem, 
   Space as ASpace, 
-  Typography as ATypography,
   Grid as AGrid,
+  Alert as AAlert,
+  Typography as ATypography,
   Divider as ADivider,
   Tooltip as ATooltip,
   Scrollbar as AScrollbar,
-  Switch as ASwitch
+  Switch as ASwitch,
+  Modal as AModal,
+  RadioGroup as ARadioGroup,
+  Radio as ARadio,
+  Textarea as ATextarea,
+  Select as ASelect,
+  Option as AOption
 } from '@arco-design/web-vue'
+import draggable from 'vuedraggable'
 import { 
   IconUser, 
   IconEdit, 
@@ -25,30 +33,110 @@ import {
   IconSafe, 
   IconCode, 
   IconAt,
-  IconInfoCircle
+  IconInfoCircle,
+  IconDragDotVertical,
+  IconRefresh
 } from '@arco-design/web-vue/es/icon'
 import { useConfigStore } from '@/stores/configStore'
 
 const { Row: ARow, Col: ACol } = AGrid
-const { Text: AText } = ATypography
+
+// Use ATypography directly instead of destructuring
+// 直接使用 ATypography 而不是解构
+// const { Text: AText } = ATypography 
 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
 const isSaving = ref(false)
 
 // Form state
-const form = ref({
+// 表单状态
+const form = reactive({
   userName: '',
-  teams: [] as any[]
+  teams: [] as any[],
+  menuConfig: [] as any[]
+})
+
+const menuDialog = reactive({
+    visible: false,
+    isEdit: false,
+    editIndex: -1,
+    form: {
+        type: 'text-button',
+        label: '',
+        options: '' // 用于输入的逗号分隔字符串
+    }
 })
 
 // Debounce timer
+// 防抖定时器
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
+// --- Menu Configuration Methods ---
+// --- 菜单配置方法 ---
+
+const openAddMenuDialog = () => {
+    menuDialog.isEdit = false
+    menuDialog.editIndex = -1
+    menuDialog.form = { type: 'text-button', label: '', options: '' }
+    menuDialog.visible = true
+}
+
+const openEditMenuDialog = (index: number) => {
+    const item = form.menuConfig[index]
+    menuDialog.isEdit = true
+    menuDialog.editIndex = index
+    menuDialog.form = {
+        type: item.type,
+        label: item.label,
+        options: item.options ? item.options.join(',') : ''
+    }
+    menuDialog.visible = true
+}
+
+const removeMenuItem = (index: number) => {
+    form.menuConfig.splice(index, 1)
+    autoSave() // 删除后触发自动保存
+}
+
+const saveMenuItem = () => {
+    if (!menuDialog.form.label) {
+        Message.warning('请输入按钮文字')
+        return
+    }
+
+    const newItem: any = {
+        type: menuDialog.form.type,
+        label: menuDialog.form.label
+    }
+
+    if (menuDialog.form.type === 'dropdown') {
+        if (!menuDialog.form.options) {
+             Message.warning('请输入选项（以逗号分隔）')
+             return
+        }
+        newItem.options = menuDialog.form.options.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
+    }
+
+    if (menuDialog.isEdit && menuDialog.editIndex > -1) {
+        form.menuConfig[menuDialog.editIndex] = newItem
+    } else {
+        form.menuConfig.push(newItem)
+    }
+    menuDialog.visible = false
+    autoSave() // 添加/编辑后触发自动保存
+}
+
+const onMenuReorder = () => {
+    autoSave()
+}
+
 // Initialize form data from store
+// 从 store 初始化表单数据
 const initForm = () => {
-  form.value.userName = authStore.customUserName || authStore.userDisplayName
-  form.value.teams = JSON.parse(JSON.stringify(authStore.teamsConfig || []))
+  form.userName = authStore.customUserName || authStore.userDisplayName
+  form.teams = JSON.parse(JSON.stringify(authStore.teamsConfig || []))
+  form.menuConfig = JSON.parse(JSON.stringify(authStore.menuConfig || []))
 }
 
 onMounted(() => {
@@ -58,41 +146,40 @@ onMounted(() => {
 })
 
 // Auto-save function with debouncing
-const autoSave = async () => {
+// 带防抖的自动保存函数
+const autoSave = () => {
   if (saveTimer) {
     clearTimeout(saveTimer)
   }
-  
+
   saveTimer = setTimeout(async () => {
     if (!authStore.user) return
-    
+
     isSaving.value = true
     try {
       const result = await authStore.updateUserProfile(
-        form.value.userName, 
-        form.value.teams,
-        configStore.navigationStyle
+        form.userName,
+        form.teams,
+        configStore.navigationStyle,
+        form.menuConfig // Pass menu config
       )
-      
+
       if (result.success) {
-        // Silent success - no message for auto-save
+        // success feedback usually skipped for auto-save unless specific requirement
       } else {
-        Message.error(result.error || '保存失败')
+         Message.error('保存失败: ' + (result.error || 'Unknown error'))
       }
-    } catch (e: any) {
-      Message.error(e.message || '保存过程中发生错误')
+    } catch (e) {
+      console.error(e)
     } finally {
       isSaving.value = false
     }
-  }, 1000) // 1 second debounce
+  }, 1000) // 1 秒防抖
 }
 
 // Watch for changes and auto-save
-watch(() => form.value.userName, () => {
-  autoSave()
-})
-
-watch(() => form.value.teams, () => {
+// 监听变化并自动保存
+watch(() => form.teams, () => {
   autoSave()
 }, { deep: true })
 
@@ -101,21 +188,23 @@ watch(() => configStore.navigationStyle, () => {
 })
 
 // Watch for store changes
+// 监听 store 变化
 watch(() => authStore.customUserName, (newVal) => {
-    if (newVal && !form.value.userName) {
-        form.value.userName = newVal
+    if (newVal && !form.userName) {
+        form.userName = newVal
     }
 })
 
 watch(() => authStore.teamsConfig, (newVal) => {
-    if (newVal && form.value.teams.length === 0) {
-        form.value.teams = JSON.parse(JSON.stringify(newVal))
+    if (newVal && form.teams.length === 0) {
+        form.teams = JSON.parse(JSON.stringify(newVal))
     }
 })
 
 // Team Management Actions
+// 团队管理操作
 const addTeam = () => {
-  form.value.teams.push({
+  form.teams.push({
     id: `team-${Date.now()}`,
     name: '新团队',
     role: 'member',
@@ -124,12 +213,14 @@ const addTeam = () => {
 }
 
 const removeTeam = (id: string) => {
-  const index = form.value.teams.findIndex(t => t.id === id)
+  const index = form.teams.findIndex(t => t.id === id)
   if (index !== -1) {
-    form.value.teams.splice(index, 1)
+    form.teams.splice(index, 1)
   }
 }
 
+// Columns definition for table (kept for reference if needed, though we use custom slot rendering in template mostly)
+// 表格列定义（保留作为参考，尽管主要在模板中使用自定义插槽渲染）
 const columns = [
   { title: 'ID', dataIndex: 'id', slotName: 'id', width: 100 },
   { title: '团队名称', dataIndex: 'name', slotName: 'name' },
@@ -141,109 +232,180 @@ const columns = [
 
 <template>
   <div class="flex flex-col h-full bg-[var(--color-fill-2)] overflow-hidden">
-    <a-scrollbar style="height: 100%; overflow: auto;">
-      <div class="p-8 max-w-[1400px] mx-auto">
-        <a-space direction="vertical" size="large" fill>
-          <!-- 基本信息：头像在左侧 -->
-          <a-card :bordered="false" class="shadow-sm rounded-xl overflow-hidden">
-            <template #title>
-              <a-space>
-                <icon-user class="text-primary" />
-                <span class="font-bold">基本信息</span>
-              </a-space>
-            </template>
-            
-            <div class="flex flex-col gap-8">
-              <!-- 表单编辑区域 -->
-              <div class="w-full">
-                <a-form :model="form" layout="vertical">
-                  <a-form-item label="显示名称" feedback="修改后自动保存">
-                    <div class="w-1/2">
-                      <a-input v-model="form.userName" placeholder="请输入您的名字">
+    <AScrollbar style="height: 100%; overflow: auto;">
+      <div class="p-4 max-w-[1400px] mx-auto">
+        <ASpace direction="vertical" size="large" fill>
+          
+          <!-- Menu Config Dialog (Global within page) -->
+          <!-- 菜单配置弹窗（页面全局） -->
+          <AModal v-model:visible="menuDialog.visible" :title="menuDialog.isEdit ? '编辑按钮' : '新增按钮'" @ok="saveMenuItem">
+              <AForm :model="menuDialog.form" layout="vertical">
+                  <AFormItem label="按钮类型">
+                      <ARadioGroup v-model="menuDialog.form.type" type="button">
+                          <ARadio value="text-button">文字按钮</ARadio>
+                          <ARadio value="dropdown">下拉菜单</ARadio>
+                      </ARadioGroup>
+                  </AFormItem>
+                  <AFormItem label="按钮文字">
+                      <AInput v-model="menuDialog.form.label" placeholder="例如：权限申请" />
+                  </AFormItem>
+                  <AFormItem v-if="menuDialog.form.type === 'dropdown'" label="选项配置" help="多个选项请用逗号分隔">
+                      <ATextarea v-model="menuDialog.form.options" placeholder="例如：中文, English" />
+                  </AFormItem>
+              </AForm>
+          </AModal>
+
+          <!-- 顶部区域：基本信息与界面配置 -->
+          <!-- 使用带间距的 ARow 和 ACol 进行布局 -->
+          <ARow :gutter="24">
+            <!-- 左侧列：基本信息 -->
+            <ACol :span="24" :lg="12">
+              <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden h-full">
+                <template #title>
+                  <ASpace>
+                    <icon-user class="text-primary" />
+                    <span class="font-bold">基本信息</span>
+                  </ASpace>
+                </template>
+                
+                <AForm :model="form" layout="vertical">
+                  <AFormItem label="显示名称" help="修改后自动保存">
+                      <AInput v-model="form.userName" placeholder="请输入您的名字">
                         <template #prefix><icon-edit /></template>
-                      </a-input>
-                    </div>
-                  </a-form-item>
+                      </AInput>
+                  </AFormItem>
                   
-                  <a-form-item label="关联邮箱" disabled>
-                    <div class="w-1/2">
-                      <a-input :model-value="authStore.userEmail" disabled>
+                  <AFormItem label="关联邮箱" disabled>
+                      <AInput :model-value="authStore.userEmail" disabled>
                         <template #prefix><icon-at /></template>
-                      </a-input>
-                    </div>
+                      </AInput>
                     <template #extra>
                       <div class="flex items-center gap-1 mt-1 text-xs opacity-70">
                         <icon-info-circle /> 邮箱暂不支持修改
                       </div>
                     </template>
-                  </a-form-item>
-
-                  <a-form-item label="导航风格">
-                    <a-row :gutter="12">
-                      <a-col :span="12" :sm="12">
-                        <div 
-                          class="style-card transition-all"
-                          :class="{ 'active': configStore.navigationStyle === 'shadcn' }"
-                          @click="configStore.setNavigationStyle('shadcn')"
-                        >
-                          <div class="preview shadcn-preview"></div>
-                          <span class="name">Shadcn UI</span>
+                  </AFormItem>
+                </AForm>
+              </ACard>
+            </ACol>
+            
+            <!-- 右侧列：界面布局配置 -->
+            <ACol :span="24" :lg="12">
+              <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden h-full">
+                <template #title>
+                  <ASpace>
+                    <icon-code class="text-primary" />
+                    <span class="font-bold">界面布局配置</span>
+                  </ASpace>
+                </template>
+                
+                 <AForm :model="form" layout="vertical">
+                     <!-- 1. 筛选区与功能区融合 -->
+                    <AFormItem label="筛选区与功能区融合">
+                        <div class="flex items-center justify-between p-3 border rounded-lg bg-[var(--color-bg-1)] w-full">
+                            <span class="text-[13px] font-medium text-[var(--color-text-2)]">开启融合</span>
+                            <ASwitch
+                                :model-value="configStore.filterActionFusion"
+                                @update:model-value="(val: any) => configStore.setFilterActionFusion(val)"
+                            />
                         </div>
-                      </a-col>
-                      <a-col :span="12" :sm="12">
-                        <div 
-                          class="style-card transition-all"
-                          :class="{ 'active': configStore.navigationStyle === 'arco' }"
-                          @click="configStore.setNavigationStyle('arco')"
-                        >
-                          <div class="preview arco-preview"></div>
-                          <span class="name">Arco Design</span>
-                        </div>
-                      </a-col>
-                    </a-row>
-                  </a-form-item>
+                        <template #extra>
+                            <div class="mt-1 text-xs text-[var(--color-text-3)]">
+                                功能区按钮将显示在筛选区右侧
+                            </div>
+                        </template>
+                    </AFormItem>
 
-                  <a-form-item label="界面布局配置">
-                    <div class="flex items-center justify-between p-3 border rounded-lg bg-[var(--color-bg-1)]">
-                        <span class="text-[13px] font-medium text-[var(--color-text-2)]">筛选区与功能区融合</span>
-                        <a-switch 
-                            :model-value="configStore.filterActionFusion"
-                            @update:model-value="(val: any) => configStore.setFilterActionFusion(val)"
-                        />
-                    </div>
-                    <template #extra>
-                        <div class="mt-1 text-xs text-[var(--color-text-3)]">
-                            开启后，功能区的按钮将显示在筛选区最后一行的右侧
-                        </div>
-                    </template>
-                  </a-form-item>
-                </a-form>
-              </div>
-            </div>
-          </a-card>
+                    <!-- 2. 导航风格 -->
+                    <AFormItem label="导航风格">
+                      <ASelect 
+                        :model-value="configStore.navigationStyle"
+                        @change="(val: any) => configStore.setNavigationStyle(val)"
+                        placeholder="请选择导航风格"
+                      >
+                        <AOption value="shadcn">Shadcn UI</AOption>
+                        <AOption value="arco">Arco Design</AOption>
+                      </ASelect>
+                    </AFormItem>
 
-          <!-- Teams -->
-          <a-card :bordered="false" class="shadow-sm rounded-xl flex flex-col">
+                    <!-- 3. 菜单栏配置 -->
+                    <AFormItem label="菜单栏配置">
+                      <div class="w-full flex flex-col gap-3">
+                          <div class="flex items-center justify-between">
+                              <span class="text-xs text-[var(--color-text-3)]">支持拖拽排序</span>
+                              <AButton type="outline" size="mini" @click="openAddMenuDialog">
+                                  <template #icon><icon-plus /></template>
+                                  新增
+                              </AButton>
+                          </div>
+                          
+                          <div class="border rounded-lg bg-[var(--color-bg-1)] overflow-hidden">
+                              <div v-if="form.menuConfig.length === 0" class="p-4 text-center text-[var(--color-text-3)] text-xs">
+                                  暂无配置
+                              </div>
+                              <draggable 
+                                  v-else 
+                                  v-model="form.menuConfig" 
+                                  item-key="label" 
+                                  handle=".drag-handle"
+                                  @end="onMenuReorder"
+                                  class="divide-y divide-[var(--color-border-1)]"
+                              >
+                                  <template #item="{ element, index }">
+                                      <div class="p-2 pl-3 flex items-center justify-between text-sm hover:bg-[var(--color-fill-2)] group">
+                                          <div class="flex items-center gap-2 overflow-hidden">
+                                              <icon-drag-dot-vertical class="drag-handle text-[var(--color-text-4)] cursor-move hover:text-[var(--color-text-2)] flex-shrink-0" />
+                                              <div class="flex flex-col truncate">
+                                                  <span class="font-medium text-[var(--color-text-1)] truncate">{{ element.label }}</span>
+                                                  <span class="text-[10px] text-[var(--color-text-3)] truncate">
+                                                      {{ element.type === 'text-button' ? '按钮' : '下拉' }}
+                                                      <span v-if="element.type === 'dropdown' && element.options">
+                                                          ({{ element.options.length }})
+                                                      </span>
+                                                  </span>
+                                              </div>
+                                          </div>
+                                          <div class="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                              <AButton type="text" size="mini" @click="openEditMenuDialog(index)">
+                                                  <template #icon><icon-edit /></template>
+                                              </AButton>
+                                              <AButton type="text" status="danger" size="mini" @click="removeMenuItem(index)">
+                                                  <template #icon><icon-delete /></template>
+                                              </AButton>
+                                          </div>
+                                      </div>
+                                  </template>
+                              </draggable>
+                          </div>
+                      </div>
+                    </AFormItem>
+                 </AForm>
+              </ACard>
+            </ACol>
+          </ARow>
+          
+          <!-- Team Management (Full Width) -->
+          <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden">
             <template #title>
-              <div class="flex items-center justify-between">
-                <a-space>
-                  <icon-safe class="text-primary" />
-                  <span class="font-bold">团队与权限配置</span>
-                </a-space>
-                <a-button type="outline" size="small" @click="addTeam">
-                  <template #icon><icon-plus /></template>
-                  新增团队
-                </a-button>
-              </div>
+              <ASpace>
+                <icon-safe class="text-primary" />
+                <span class="font-bold">团队管理</span>
+              </ASpace>
+            </template>
+            <template #extra>
+              <AButton type="primary" size="small" @click="addTeam">
+                <template #icon><icon-plus /></template>
+                新增团队
+              </AButton>
             </template>
             
             <div class="mb-4">
-              <a-alert type="info" show-icon>
+              <AAlert type="info" show-icon>
                 配置您在各个团队中的角色和操作权限。所有更改将自动保存。
-              </a-alert>
+              </AAlert>
             </div>
 
-            <a-table 
+            <ATable 
               :columns="columns" 
               :data="form.teams" 
               :pagination="false"
@@ -251,16 +413,20 @@ const columns = [
               class="rounded-lg overflow-hidden border-none"
             >
               <template #id="{ record }">
-                <a-text code class="text-[10px]">{{ record.id.replace('team-', '#') }}</a-text>
+                <ATypography.Text code class="text-[10px]">{{ record.id.replace('team-', '#') }}</ATypography.Text>
               </template>
               <template #name="{ record }">
-                <a-input v-model="record.name" size="small" class="border-transparent hover:border-gray-300" />
+                <AInput v-model="record.name" size="small" class="border-transparent hover:border-gray-300" />
               </template>
               <template #role="{ record }">
-                <a-input v-model="record.role" size="small" class="border-transparent hover:border-gray-300" />
+                <ASelect v-model="record.role" size="small">
+                  <AOption value="admin">管理员 (Admin)</AOption>
+                  <AOption value="member">成员 (Member)</AOption>
+                  <AOption value="viewer">访客 (Viewer)</AOption>
+                </ASelect>
               </template>
               <template #permissions="{ record }">
-                 <a-input 
+                <AInput 
                   :model-value="record.permissions?.join(', ')" 
                   @update:model-value="(val: string | number) => record.permissions = String(val).split(',').map((s: string) => s.trim()).filter(Boolean)" 
                   size="small" 
@@ -269,26 +435,33 @@ const columns = [
                 />
               </template>
               <template #actions="{ record }">
-                <a-tooltip content="删除团队">
-                  <a-button type="text" status="danger" size="small" @click="removeTeam(record.id)">
+                <ATooltip content="删除团队">
+                  <AButton type="text" status="danger" size="small" @click="removeTeam(record.id)">
                     <template #icon><icon-delete /></template>
-                  </a-button>
-                </a-tooltip>
+                  </AButton>
+                </ATooltip>
               </template>
-            </a-table>
+            </ATable>
 
             <div class="mt-6">
-              <a-divider orientation="left">原始 JSON 数据</a-divider>
+              <ADivider orientation="left">原始 JSON 数据</ADivider>
               <div class="relative group">
                 <pre class="json-code">
                   <icon-code class="code-icon" />{{ JSON.stringify(form.teams, null, 2) }}
                 </pre>
               </div>
             </div>
-          </a-card>
-        </a-space>
+          </ACard>
+
+          <!-- 底部保存状态提示 -->
+          <div v-if="isSaving" class="fixed bottom-4 right-4 bg-white/80 backdrop-blur shadow-lg border rounded-full px-4 py-2 flex items-center gap-2 text-primary animate-fade-in z-50">
+            <icon-refresh class="animate-spin" />
+            <span class="text-xs font-medium">自动保存中...</span>
+          </div>
+          
+        </ASpace>
       </div>
-    </a-scrollbar>
+    </AScrollbar>
   </div>
 </template>
 

@@ -17,6 +17,8 @@ import {
   Avatar as AAvatar,
   Divider as ADivider,
   Scrollbar as AScrollbar,
+  Select as ASelect,
+  Option as AOption
 } from '@arco-design/web-vue'
 import {
   IconMenuFold,
@@ -327,12 +329,26 @@ const handleSubNavClick = () => {
 
             <!-- 页眉右侧 -->
             <div class="flex items-center gap-2">
-                <a-button type="text" size="small" class="text-[var(--color-text-2)] hover:text-[rgb(var(--primary-6))]">
-                    更新记录
-                </a-button>
-                <a-button type="text" size="small" class="text-[var(--color-text-2)] hover:text-[rgb(var(--primary-6))]">
-                    权限申请
-                </a-button>
+                <!-- 动态菜单按钮 -->
+                <template v-for="(item, index) in authStore.menuConfig" :key="index">
+                    <!-- 文字按钮 -->
+                    <a-button 
+                        v-if="item.type === 'text-button'" 
+                        type="text" 
+                        size="small" 
+                        class="text-[var(--color-text-2)] hover:text-[rgb(var(--primary-6))]"
+                    >
+                        {{ item.label }}
+                    </a-button>
+
+                    <!-- 下拉菜单 (Label + Select) -->
+                    <div v-else-if="item.type === 'dropdown'" class="flex items-center gap-2">
+                        <span class="text-xs text-[var(--color-text-2)]">{{ item.label }}</span>
+                        <a-select :style="{width:'100px'}" placeholder="请选择" size="small" :trigger-props="{ autoFitPopupMinWidth: true }">
+                            <a-option v-for="opt in item.options" :key="opt">{{ opt }}</a-option>
+                        </a-select>
+                    </div>
+                </template>
                 
                 <a-divider direction="vertical" class="mx-1 opacity-50" />
 
@@ -363,10 +379,10 @@ const handleSubNavClick = () => {
                 </a-dropdown>
             </div>
         </a-layout-header>
-        
+        <!-- 2.1 主内容 -->
         <a-layout-content class="flex-1 overflow-hidden min-h-0 bg-[var(--color-fill-2)]">
           <a-scrollbar style="height: 100%; overflow: auto;" outer-style="height: 100%;">
-            <div class="p-4 min-h-full flex flex-col container-content">
+            <div class="p-3 min-h-full flex flex-col container-content">
                <div class="bg-[var(--color-bg-2)] rounded-lg shadow-sm border border-[var(--color-border-2)] flex-1 relative min-h-full overflow-hidden">
                    <slot></slot>
                </div>

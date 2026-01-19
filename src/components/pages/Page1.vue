@@ -229,7 +229,7 @@ const handleActionClick = (action: string, record: any) => {
 
     <!-- 主体内容-->
     <div 
-      class="flex-1 flex flex-col p-6 gap-4"
+      class="flex-1 flex flex-col p-4 gap-4"
     >
       
       <!-- 功能区 - 筛选条件 + 操作按钮 -->
