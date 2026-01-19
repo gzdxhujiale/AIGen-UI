@@ -1,3 +1,4 @@
+import { ref } from 'vue'
 import { driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 
@@ -7,6 +8,8 @@ import 'driver.js/dist/driver.css'
  */
 export function useOnboarding() {
     const STORAGE_KEY = 'onboarding_completed'
+    // 是否显示更新公告
+    const showAnnouncement = ref(false)
 
     /**
      * 检查是否应该显示引导
@@ -60,6 +63,13 @@ export function useOnboarding() {
                     // 只有非测试账号才标记完成
                     if (!userEmail.toLowerCase().includes('test')) {
                         markOnboardingCompleted()
+                    }
+
+                    // 测试账号在引导结束后显示更新公告
+                    if (userEmail.toLowerCase().includes('test')) {
+                        setTimeout(() => {
+                            showAnnouncement.value = true
+                        }, 500)
                     }
                 },
                 steps: [
@@ -120,6 +130,7 @@ export function useOnboarding() {
     return {
         startOnboarding,
         resetOnboarding,
-        shouldShowOnboarding
+        shouldShowOnboarding,
+        showAnnouncement
     }
 }

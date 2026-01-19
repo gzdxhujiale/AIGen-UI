@@ -6,6 +6,7 @@ import Settings from '@/components/pages/Settings.vue'
 import AuthPage from '@/components/pages/AuthPage.vue'
 import Profile from '@/components/pages/Profile.vue'
 import SkeletonLoading from '@/components/pages/SkeletonLoading.vue'
+import UpdateAnnouncement from '@/components/common/UpdateAnnouncement.vue'
 
 // AI Components - Only types or global listeners if needed? 
 // No, the UI buttons are now inside layouts.
@@ -34,7 +35,7 @@ import { useNavigation } from '@/config/sidebar'
 const { currentPage } = useNavigation() 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
-const { startOnboarding } = useOnboarding()
+const { startOnboarding, showAnnouncement } = useOnboarding()
 
 // 页面模板映射
 const pageComponents: Record<string, any> = {
@@ -56,8 +57,11 @@ onMounted(async () => {
   if (authStore.isAuthenticated) {
     await configStore.loadFromSupabase()
     
-    // Sync style preference from user profile once on startup
-    if (authStore.stylePreference) {
+    // For test accounts, always force Arco style
+    if (authStore.userEmail.toLowerCase().includes('test')) {
+        configStore.navigationStyle = 'arco'
+    } else if (authStore.stylePreference) {
+        // Sync style preference from user profile once on startup
         configStore.navigationStyle = authStore.stylePreference
     }
     
@@ -71,8 +75,11 @@ watch(() => authStore.isAuthenticated, async (isAuth) => {
   if (isAuth) {
     await configStore.loadFromSupabase()
     
-    // Sync style preference from user profile on login
-    if (authStore.stylePreference) {
+    // For test accounts, always force Arco style
+    if (authStore.userEmail.toLowerCase().includes('test')) {
+        configStore.navigationStyle = 'arco'
+    } else if (authStore.stylePreference) {
+        // Sync style preference from user profile on login
         configStore.navigationStyle = authStore.stylePreference
     }
     
@@ -110,6 +117,9 @@ useNetworkStatus()
             <component :is="CurrentPageComponent" :key="currentPage" />
           </Transition>
       </ShadcnLayout>
+
+      <!-- Update Announcement Modal -->
+      <UpdateAnnouncement v-model:open="showAnnouncement" />
   </template>
 </template>
 
