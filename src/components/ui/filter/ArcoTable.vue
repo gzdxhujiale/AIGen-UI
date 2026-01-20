@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { Table as ATable, type TableColumnData } from '@arco-design/web-vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { TableColumn } from '@/config/page1'
+import type { TableColumn } from '@/config/schema'
 
 // Props
 interface Props {
@@ -217,13 +217,8 @@ const handleActionClick = (action: string, record: any, e: Event) => {
           </div>
           
           <!-- Default Text -->
-          <span v-else class="text-sm text-foreground/80">{{ record[col.key] ?? '-' }}</span>
+          <span v-else class="text-sm text-foreground/80 inline-block min-h-[22px]">{{ record[col.key] || '' }}</span>
         </slot>
-      </template>
-
-      <!-- Forward Footer Slot -->
-      <template #footer>
-        <slot name="footer"></slot>
       </template>
     </ATable>
   </div>

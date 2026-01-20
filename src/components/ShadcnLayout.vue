@@ -15,6 +15,8 @@ import {
   Forward,
   MoreHorizontal,
   Trash2,
+  Pencil,
+  Eye,
 } from 'lucide-vue-next'
 
 // --- UI Components ---
@@ -79,8 +81,8 @@ import { Message } from '@arco-design/web-vue'
 // --- Logic & Config ---
 import { useConfigStore } from '@/stores/configStore'
 import { useAuthStore } from '@/stores/authStore'
-import { useNavigation, defaultSidebarConfig } from '@/config/sidebar'
-import type { TeamItem, TeamPermissions } from '@/config/sidebar'
+import { useNavigation, defaultSidebarConfig } from '@/config/schema'
+import type { TeamItem, TeamPermissions } from '@/config/schema'
 
 const configStore = useConfigStore()
 const authStore = useAuthStore()
@@ -327,6 +329,14 @@ const initials = computed(() => userDisplayName.value.slice(0, 2).toUpperCase())
                     </div>
                   </div>
                 </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem @click="configStore.setEditMode(!configStore.isEditMode)">
+                    <Pencil v-if="!configStore.isEditMode" />
+                    <Eye v-else />
+                    {{ configStore.isEditMode ? '预览模式' : '编辑模式' }}
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
                   <DropdownMenuItem id="nav-settings" @click="handleNavClick('系统', '配置设置', 'settings')"><Settings />用户设置</DropdownMenuItem>

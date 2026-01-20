@@ -30,7 +30,7 @@ import { useConfigStore } from '@/stores/configStore'
 import ArcoLayout from '@/components/ArcoLayout.vue'
 import ShadcnLayout from '@/components/ShadcnLayout.vue'
 
-import { useNavigation } from '@/config/sidebar'
+import { useNavigation } from '@/config/schema'
 
 const { currentPage } = useNavigation() 
 const authStore = useAuthStore()
@@ -68,6 +68,24 @@ onMounted(async () => {
     // 启动用户引导
     startOnboarding(authStore.userEmail)
   }
+
+  // 页面关闭/刷新前确保同步完成
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+// 页面关闭前处理
+const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (configStore.isSyncing) {
+    // 提示用户有未保存的更改
+    e.preventDefault()
+    e.returnValue = '配置正在同步中，确定要离开吗？'
+    // 尝试完成同步
+    configStore.ensureSynced()
+  }
+}
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 
 // 监听认证状态变化，登录后加载配置

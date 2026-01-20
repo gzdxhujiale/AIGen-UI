@@ -1,32 +1,25 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { setNavGroupsRef, initNavigation } from '@/config/sidebar'
-// 移除默认配置导入 - 改用纯云端配置
+import {
+    setNavGroupsRef,
+    initNavigation,
+    type NavGroup,
+    type NavMainItem,
+    type NavSubItem,
+    type Page1Config,
+    type FilterAreaConfig,
+    type FilterConfig,
+    type TableAreaConfig,
+    type TableColumn,
+    type ActionButtonConfig,
+    type ActionsAreaConfig,
+    type TreeNode,
+    type CardAreaConfig,
+    type CardItemConfig
+} from '@/config/schema'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'vue-sonner'
 import { IconSettings } from '@arco-design/web-vue/es/icon'
-
-// ============================================
-// 导航配置类型定义
-// ============================================
-
-import type {
-    NavGroup,
-    NavMainItem,
-    NavSubItem
-} from '@/config/sidebar'
-import type {
-    Page1Config,
-    FilterAreaConfig,
-    FilterConfig,
-    TableAreaConfig,
-    TableColumn,
-    ActionButtonConfig,
-    ActionsAreaConfig,
-    TreeNode,
-    CardAreaConfig,
-    CardItemConfig
-} from '@/config/page1'
 
 // Re-export types for convenience if needed, or components should import from config files directly.
 // For now, let's export them so existing imports in components don't break.
@@ -43,13 +36,40 @@ export type {
     ActionsAreaConfig,
     TreeNode,
     CardAreaConfig,
-    CardItemConfig
+    CardItemConfig,
+    ExportData
 }
 
 // ============================================
 // LocalStorage Keys
 // ============================================
 const STORAGE_KEY_PAGE1_CONFIGS = 'shadcn_page1_configs'
+
+// ============================================
+// 导出/导入数据结构
+// ============================================
+interface ExportData {
+    version: string
+    exportedAt: string
+    navGroups: Array<{
+        label: string
+        showLabel?: boolean
+        items: Array<{
+            id: string
+            title: string
+            icon?: any
+            isOpen?: boolean
+            items?: Array<{
+                id: string
+                title: string
+                url?: string
+                template?: string
+                component?: Omit<Page1Config, 'mockData'>
+            }>
+        }>
+    }>
+    pageConfigs: Record<string, Omit<Page1Config, 'mockData'>>
+}
 
 // ============================================
 // Helper: Save to localStorage
@@ -60,6 +80,51 @@ function savePage1ConfigsToStorage(configs: Record<string, Page1Config>) {
     } catch (e) {
         console.warn('Failed to save page1Configs to localStorage:', e)
     }
+}
+
+// ============================================
+// Helper: Debounced Sync Utility
+// ============================================
+function createDebouncedSync(delay = 1500) {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let pendingPromise: Promise<void> | null = null
+    let resolvePending: (() => void) | null = null
+
+    const debouncedSave = (saveFn: () => Promise<any>): void => {
+        // 清除之前的定时器
+        if (timeoutId) {
+            clearTimeout(timeoutId)
+        }
+
+        timeoutId = setTimeout(async () => {
+            timeoutId = null
+            pendingPromise = saveFn().finally(() => {
+                pendingPromise = null
+                if (resolvePending) {
+                    resolvePending()
+                    resolvePending = null
+                }
+            })
+        }, delay)
+    }
+
+    const flush = (): Promise<void> => {
+        return new Promise((resolve) => {
+            if (timeoutId) {
+                clearTimeout(timeoutId)
+                timeoutId = null
+            }
+            if (pendingPromise) {
+                resolvePending = resolve
+            } else {
+                resolve()
+            }
+        })
+    }
+
+    const hasPending = () => timeoutId !== null || pendingPromise !== null
+
+    return { debouncedSave, flush, hasPending }
 }
 
 // ============================================
@@ -88,6 +153,23 @@ export const useConfigStore = defineStore('config', () => {
     const isConfigLoaded = ref(false)
     const isConfigLoading = ref(false)
 
+    // 页面编辑模式 (用于 Page1 内嵌编辑)
+    const isEditMode = ref(false)
+
+    function setEditMode(enabled: boolean) {
+        isEditMode.value = enabled
+    }
+
+    // ============================================
+    // 自动同步状态
+    // ============================================
+    const isSyncing = ref(false)
+    const lastSyncTime = ref<Date | null>(null)
+    const syncError = ref<string | null>(null)
+
+    // 创建防抖同步器 (500ms 无操作后自动同步)
+    const { debouncedSave, flush: flushPendingSync, hasPending } = createDebouncedSync(500)
+
     // 监听配置变化，自动保存到 localStorage（仅在配置已加载后）
     watch(page1Configs, (newConfigs) => {
         if (isConfigLoaded.value) {
@@ -99,6 +181,47 @@ export const useConfigStore = defineStore('config', () => {
     watch(navGroups, (newNavGroups) => {
         setNavGroupsRef(newNavGroups)
     }, { deep: true, immediate: true })
+
+    // ============================================
+    // 自动同步到云端 (防抖 1.5 秒)
+    // ============================================
+    watch(
+        [navGroups, page1Configs],
+        () => {
+            // 仅在配置已加载后才自动同步（避免初始化时触发）
+            if (!isConfigLoaded.value) return
+            // 预览模式下不自动同步
+            if (previewMode.value !== null) return
+
+            syncError.value = null
+            isSyncing.value = true
+
+            debouncedSave(async () => {
+                try {
+                    const result = await saveToSupabaseInternal()
+                    if (result.success) {
+                        lastSyncTime.value = new Date()
+                        syncError.value = null
+                    } else {
+                        syncError.value = result.message
+                    }
+                } catch (e) {
+                    syncError.value = (e as Error).message
+                } finally {
+                    isSyncing.value = hasPending()
+                }
+            })
+        },
+        { deep: true }
+    )
+
+    /**
+     * 确保所有待处理的同步操作完成
+     * 用于页面关闭前或路由切换前调用
+     */
+    async function ensureSynced(): Promise<void> {
+        await flushPendingSync()
+    }
 
     // Getters
     const isInPreviewMode = computed(() => previewMode.value !== null)
@@ -353,11 +476,9 @@ export const useConfigStore = defineStore('config', () => {
     // 保存配置到源码文件 (仅开发环境)
     // ============================================
     async function saveToSourceFile(): Promise<boolean> {
-        // 并行保存两份配置
-        const [page1Success, sidebarSuccess] = await Promise.all([
-            savePage1Config(),
-            syncSidebarConfig()
-        ])
+        // 由于它们现在都在 schema.ts 中，改用顺序执行以避免并发读写冲突
+        const page1Success = await savePage1Config()
+        const sidebarSuccess = await syncSidebarConfig()
         return page1Success && sidebarSuccess
     }
 
@@ -434,7 +555,7 @@ export const useConfigStore = defineStore('config', () => {
 
     // 同步 sidebar 配置到源码
     async function syncSidebarConfig(): Promise<boolean> {
-        const filename = 'sidebar.ts'
+        const filename = 'schema.ts'
         let content = await readSourceFile(filename)
         if (!content) return false
 
@@ -555,25 +676,44 @@ export const useConfigStore = defineStore('config', () => {
             })
             return response.ok
         } catch (e) {
-            console.error('Failed to update sidebar.ts:', e)
+            console.error('Failed to update schema.ts (sidebar):', e)
             return false
         }
     }
 
     async function savePage1Config(): Promise<boolean> {
-        const code = generatePage1ConfigCode()
+        const configsCode = generatePage1ConfigCode()
+        const filename = 'schema.ts'
+        let content = await readSourceFile(filename)
+        if (!content) return false
+
+        const marker = 'export const page1Configs: Record<string, Page1Config> = {'
+        const startIndex = content.indexOf(marker)
+        if (startIndex === -1) {
+            console.error('Could not find page1Configs marker in schema.ts')
+            return false
+        }
+
+        const block = findBalancedBlock(content, startIndex + marker.length - 1)
+        if (!block) {
+            console.error('Could not find balanced block for page1Configs')
+            return false
+        }
+
+        const newContent = content.substring(0, startIndex) + configsCode + content.substring(block.end)
+
         try {
             const response = await fetch('/__api/write-config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    filename: 'page1.ts',
-                    content: code
+                    filename,
+                    content: newContent
                 })
             })
             return response.ok
         } catch (e) {
-            console.error('Failed to save page1.ts:', e)
+            console.error('Failed to save schema.ts (pageconfigs):', e)
             return false
         }
     }
@@ -586,162 +726,8 @@ export const useConfigStore = defineStore('config', () => {
     function generatePage1ConfigCode(): string {
         const configs = page1Configs.value
 
-        let code = `import type { DateRange } from 'radix-vue'
+        let code = `export const page1Configs: Record<string, Page1Config> = {\n`
 
-// ============================================
-// 类型定义
-// ============================================
-
-/**
- * 树形选择节点类型
- */
-export interface TreeNode {
-    value: string
-    label: string
-    children?: TreeNode[]
-}
-
-/**
- * 筛选项配置
- */
-export interface FilterConfig {
-    key: string
-    type: 'input' | 'select' | 'date-range' | 'tree-select'
-    label: string
-    placeholder?: string
-    options?: string[]
-    treeOptions?: TreeNode[]
-    defaultValue?: string | DateRange | undefined
-    visible?: boolean
-}
-
-/**
- * 筛选区布局配置
- */
-export interface FilterAreaConfig {
-    show?: boolean     // 是否显示筛选区
-    columns: number    // 每行显示的筛选项数量
-    gap: string        // 筛选项之间的间距
-    filters: FilterConfig[]
-}
-
-/**
- * 卡片项配置
- */
-export interface CardItemConfig {
-    key: string
-    title: string      // 卡片标题
-    data: string | number  // 卡片数据
-}
-
-/**
- * 卡片区配置
- */
-export interface CardAreaConfig {
-    show: boolean           // 是否显示卡片区
-    columns: number         // 每行显示的卡片数量
-    gap: string             // 卡片之间的间距
-    cardHeight?: string     // 卡片高度
-    cardWidth?: string      // 卡片宽度
-    cards: CardItemConfig[] // 卡片列表
-}
-
-/**
- * 表格列配置
- */
-export interface TableColumn {
-    key: string
-    label: string
-    width?: string                    // 列宽，如 '100px'
-    minWidth?: string                 // 最小宽度
-    type?: 'text' | 'badge' | 'status-badge' | 'text-button'
-    fixed?: 'left' | 'right'          // 列固定位置
-    align?: 'left' | 'center' | 'right' // 对齐方式
-    ellipsis?: boolean                // 是否显示省略号
-    tooltip?: boolean                 // 是否显示提示
-    visible?: boolean
-    mockFormat?: 'text' | 'datetime' | 'number' | 'list' // 虚拟数据格式
-    mockList?: string[] // 当格式为 'list' 时的候选数据
-    buttons?: string[] // 文字按钮列表
-}
-
-/**
- * 表格区配置
- */
-export interface TableAreaConfig {
-    show?: boolean          // 是否显示表格区
-    height?: string         // 表格容器高度
-    scrollX?: boolean       // 是否启用横向滚动
-    scrollY?: boolean       // 是否启用纵向滚动
-    showCheckbox?: boolean  // 是否显示复选框列
-    fixedLayout?: boolean   // 是否使用固定布局
-    pageSize?: number       // 每页显示行数
-    stickyHeader?: boolean  // 是否吸顶表头
-    columns: TableColumn[]
-}
-
-/**
- * 操作按钮配置
- */
-export interface ActionButtonConfig {
-    key: string
-    label: string
-    variant?: 'primary' | 'outline' | 'text' | 'shadcn-outline'
-    className?: string       // 自定义样式类
-    visible?: boolean
-    effectType?: 'none' | 'modal'
-    effectConfig?: {
-        title?: string
-        content?: string
-        formItems?: FilterConfig[]
-    }
-}
-
-/**
- * 操作区配置
- */
-export interface ActionsAreaConfig {
-    show?: boolean                  // 是否显示操作区
-    buttons: ActionButtonConfig[]   // 操作按钮列表
-}
-
-/**
- * Page1 模板完整配置
- */
-export interface Page1Config {
-    // 顶部栏选项（可选）
-    topBar?: {
-        appOptions?: string[]
-        langOptions?: string[]
-    }
-    // 筛选区配置
-    filterArea: FilterAreaConfig
-    // 操作区配置（可选）
-    actionsArea?: ActionsAreaConfig
-    // 卡片区配置（可选）
-    cardArea?: CardAreaConfig
-    // 表格区配置
-    tableArea: TableAreaConfig
-    // 模拟数据生成函数
-    mockData: () => any[]
-}
-
-// ============================================
-// 公共选项常量
-// ============================================
-
-export const COMMON_OPTIONS = {
-    YES_NO: ['全部', '是', '否'],
-    APP: ['SoulChill', 'TikTok', 'Bigo Live', 'Likee'],
-    LANG: ['中文', 'English', 'Español', 'العربية'],
-}
-
-// ============================================
-// 按导航 ID 索引的页面配置
-// ============================================
-
-export const page1Configs: Record<string, Page1Config> = {
-`
         // 生成每个配置
         Object.keys(configs).forEach(navId => {
             const config = configs[navId]
@@ -872,15 +858,7 @@ export const page1Configs: Record<string, Page1Config> = {
             code += `    },\n`
         })
 
-        code += `}
-
-/**
- * 获取指定导航 ID 的页面配置
- */
-export function getPage1Config(navId: string): Page1Config | undefined {
-    return page1Configs[navId]
-}
-`
+        code += `}`
         return code
     }
 
@@ -888,28 +866,6 @@ export function getPage1Config(navId: string): Page1Config | undefined {
     // 导入/导出配置 (JSON 格式)
     // ============================================
 
-    interface ExportData {
-        version: string
-        exportedAt: string
-        navGroups: Array<{
-            label: string
-            showLabel?: boolean
-            items: Array<{
-                id: string
-                title: string
-                icon?: any
-                isOpen?: boolean
-                items?: Array<{
-                    id: string
-                    title: string
-                    url?: string
-                    template?: string
-                    component?: Omit<Page1Config, 'mockData'> // 内嵌页面配置 (Phase 2)
-                }>
-            }>
-        }>
-        pageConfigs: Record<string, Omit<Page1Config, 'mockData'>>
-    }
 
     /**
      * 获取模板配置（供下载）
@@ -1125,9 +1081,9 @@ export function getPage1Config(navId: string): Page1Config | undefined {
     // ============================================
 
     /**
-     * 保存配置到 Supabase
+     * 保存配置到 Supabase (内部版本，不显示 Toast)
      */
-    async function saveToSupabase(): Promise<{ success: boolean; message: string }> {
+    async function saveToSupabaseInternal(): Promise<{ success: boolean; message: string }> {
         try {
             // 获取当前用户
             const { data: { user } } = await supabase.auth.getUser()
@@ -1150,18 +1106,27 @@ export function getPage1Config(navId: string): Page1Config | undefined {
 
             if (error) {
                 console.error('Failed to save to Supabase:', error)
-                toast.error('保存失败', { description: error.message })
                 return { success: false, message: error.message }
             }
-
-            toast.success('配置已保存到云端')
 
             return { success: true, message: '配置已保存到云端' }
         } catch (e) {
             console.error('Failed to save to Supabase:', e)
-            toast.error('保存失败', { description: (e as Error).message })
             return { success: false, message: '保存失败: ' + (e as Error).message }
         }
+    }
+
+    /**
+     * 保存配置到 Supabase (公开版本，显示 Toast 通知)
+     */
+    async function saveToSupabase(): Promise<{ success: boolean; message: string }> {
+        const result = await saveToSupabaseInternal()
+        if (result.success) {
+            toast.success('配置已保存到云端')
+        } else {
+            toast.error('保存失败', { description: result.message })
+        }
+        return result
     }
 
     /**
@@ -1187,9 +1152,18 @@ export function getPage1Config(navId: string): Page1Config | undefined {
             if (error) {
                 // PGRST116 表示没有找到记录
                 if (error.code === 'PGRST116') {
-                    console.log('用户没有云端配置，显示空状态')
+                    console.log('用户没有云端配置，自动初始化默认模板')
+                    const template = getTemplateConfig()
+                    const importResult = importFullConfig(template)
+                    if (importResult.success) {
+                        await saveToSupabase() // 自动保存到云端
+                        toast.success('已为您初始化默认配置')
+                        isConfigLoaded.value = true
+                        isConfigLoading.value = false
+                        return { success: true, message: '初始化默认配置成功' }
+                    }
+
                     toast.info('未找到云端配置', { description: '请通过 AI 助手创建配置' })
-                    // 保持空状态
                     isConfigLoaded.value = true
                     isConfigLoading.value = false
                     return { success: true, message: '无云端配置' }
@@ -1305,5 +1279,13 @@ export function getPage1Config(navId: string): Page1Config | undefined {
         saveToSupabase,
         loadFromSupabase,
         importAndSyncToCloud,
+        // Auto-sync State
+        isSyncing,
+        lastSyncTime,
+        syncError,
+        ensureSynced,
+        // Edit Mode
+        isEditMode,
+        setEditMode,
     }
 })

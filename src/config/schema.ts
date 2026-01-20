@@ -9,10 +9,146 @@ import {
 } from '@arco-design/web-vue/es/icon'
 
 // ============================================
-// 类型定义
+// 类型定义 - 页面配置 (原 page1.ts)
 // ============================================
 
-import type { Page1Config } from './page1'
+/**
+ * 树形选择节点类型
+ */
+export interface TreeNode {
+    value: string
+    label: string
+    children?: TreeNode[]
+}
+
+/**
+ * 筛选项配置
+ */
+export interface FilterConfig {
+    key: string
+    type: 'input' | 'select' | 'date-range' | 'tree-select'
+    label: string
+    placeholder?: string
+    options?: string[]
+    treeOptions?: TreeNode[]
+    defaultValue?: string | any | undefined
+    visible?: boolean
+}
+
+/**
+ * 筛选区布局配置
+ */
+export interface FilterAreaConfig {
+    show?: boolean     // 是否显示筛选区
+    columns: number    // 每行显示的筛选项数量
+    gap: string        // 筛选项之间的间距
+    filters: FilterConfig[]
+}
+
+/**
+ * 卡片项配置
+ */
+export interface CardItemConfig {
+    key: string
+    title: string      // 卡片标题
+    data: string | number  // 卡片数据
+}
+
+/**
+ * 卡片区配置
+ */
+export interface CardAreaConfig {
+    show: boolean           // 是否显示卡片区
+    columns: number         // 每行显示的卡片数量
+    gap: string             // 卡片之间的间距
+    cardHeight?: string     // 卡片高度
+    cardWidth?: string      // 卡片宽度
+    cards: CardItemConfig[] // 卡片列表
+}
+
+/**
+ * 表格列配置
+ */
+export interface TableColumn {
+    key: string
+    label: string
+    width?: string                    // 列宽，如 '100px'
+    minWidth?: string                 // 最小宽度
+    type?: 'text' | 'badge' | 'status-badge' | 'text-button'
+    fixed?: 'left' | 'right'          // 列固定位置
+    align?: 'left' | 'center' | 'right' // 对齐方式
+    ellipsis?: boolean                // 是否显示省略号
+    tooltip?: boolean                 // 是否显示提示
+    visible?: boolean
+    mockFormat?: 'text' | 'datetime' | 'number' | 'list' // 虚拟数据格式
+    mockList?: string[] // 当格式为 'list' 时的候选数据
+    buttons?: string[] // 文字按钮列表
+}
+
+/**
+ * 表格区配置
+ */
+export interface TableAreaConfig {
+    show?: boolean          // 是否显示表格区
+    height?: string         // 表格容器高度
+    scrollX?: boolean       // 是否启用横向滚动
+    scrollY?: boolean       // 是否启用纵向滚动
+    stickyHeader?: boolean  // 是否表头吸顶 (默认 true)
+    showCheckbox?: boolean  // 是否显示复选框列
+    fixedLayout?: boolean   // 是否使用固定布局
+    pageSize?: number       // 每页显示行数
+    columns: TableColumn[]
+}
+
+/**
+ * 操作按钮配置
+ */
+export interface ActionButtonConfig {
+    key: string
+    label: string
+    variant?: 'primary' | 'outline' | 'text' | 'shadcn-outline'
+    className?: string       // 自定义样式类
+    visible?: boolean
+    effectType?: 'none' | 'modal'
+    effectConfig?: {
+        title?: string
+        content?: string
+        formItems?: FilterConfig[]
+    }
+}
+
+/**
+ * 操作区配置
+ */
+export interface ActionsAreaConfig {
+    show?: boolean                  // 是否显示操作区
+    buttons: ActionButtonConfig[]   // 操作按钮列表
+}
+
+/**
+ * Page1 模板完整配置
+ */
+export interface Page1Config {
+    // 顶部栏选项（可选）
+    topBar?: {
+        appOptions?: string[]
+        langOptions?: string[]
+    }
+    // 筛选区配置
+    filterArea: FilterAreaConfig
+    // 操作区配置（可选）
+    actionsArea?: ActionsAreaConfig
+    // 卡片区配置（可选）
+    cardArea?: CardAreaConfig
+    // 表格区配置
+    tableArea: TableAreaConfig
+    // 模拟数据生成函数
+    mockData: () => any[]
+}
+
+// ============================================
+// 类型定义 - 导航配置 (原 sidebar.ts)
+// ============================================
 
 export interface NavSubItem {
     id: string
@@ -22,7 +158,6 @@ export interface NavSubItem {
     template?: 'Page1' | 'Page2' | '' // 使用的页面模板
     component?: Page1Config // 内嵌页面配置 (Phase 2)
 }
-
 
 export interface NavMainItem {
     id: string
@@ -93,11 +228,25 @@ export interface SidebarConfig {
 }
 
 // ============================================
-// 默认配置数据
+// 公共选项与常量
 // ============================================
 
+export const COMMON_OPTIONS = {
+    YES_NO: ['全部', '是', '否'],
+    APP: ['SoulChill', 'TikTok', 'Bigo Live', 'Likee'],
+    LANG: ['中文', 'English', 'Español', 'العربية'],
+}
+
 // Custom Logo Component
-const AIGenLogo = (props: any) => h('img', { src: import.meta.env.BASE_URL + 'ai.svg', ...props, style: 'width: 100%; height: 100%; object-fit: contain;' })
+const AIGenLogo = (props: any) => h('img', {
+    src: import.meta.env.BASE_URL + 'ai.svg',
+    ...props,
+    style: 'width: 100%; height: 100%; object-fit: contain;'
+})
+
+// ============================================
+// 默认配置数据
+// ============================================
 
 export const defaultSidebarConfig: SidebarConfig = {
     user: {
@@ -109,7 +258,7 @@ export const defaultSidebarConfig: SidebarConfig = {
     teams: [
         {
             name: 'AIGen UI',
-            logo: AIGenLogo, // Using custom logo
+            logo: AIGenLogo,
             plan: 'online',
             permissions: {
                 navMain: 'all',
@@ -156,15 +305,13 @@ export const defaultSidebarConfig: SidebarConfig = {
             label: ' ',
             showLabel: false,
             showMoreButton: false,
-            projects: [
-
-            ],
+            projects: [],
         },
     ],
 }
 
 // ============================================
-// 配置管理函数
+// 配置管理与辅助函数
 // ============================================
 
 /**
@@ -176,16 +323,12 @@ export function mergeSidebarConfig(
     return {
         ...defaultSidebarConfig,
         ...customConfig,
-        // 深度合并数组类型的字段
         navGroups: customConfig.navGroups ?? defaultSidebarConfig.navGroups,
         projectGroups: customConfig.projectGroups ?? defaultSidebarConfig.projectGroups,
         teams: customConfig.teams ?? defaultSidebarConfig.teams,
     }
 }
 
-/**
- * 创建导航项
- */
 /**
  * 创建导航项
  */
@@ -242,13 +385,10 @@ export function createProjectGroup(
 // 导航状态管理
 // ============================================
 
-// 导航状态（模块级别的单例状态）
 const currentMainNav = ref('')
 const currentSubNav = ref('')
 const _currentNavId = ref('')
 const detailTitle = ref<string | null>(null)
-
-// 外部注入的 navGroups 引用（来自 configStore，避免循环依赖）
 const _navGroupsRef = ref<NavGroup[] | null>(null)
 
 /**
@@ -279,17 +419,14 @@ export function setNavGroupsRef(navGroups: NavGroup[]) {
 
 /**
  * 导航状态管理 Composable
- * 用于管理当前选中的导航项和面包屑
  */
 export function useNavigation() {
-    // 设置当前导航
     const setNavigation = (mainNav: string, subNav: string, navId?: string) => {
         currentMainNav.value = mainNav
         currentSubNav.value = subNav
         if (navId) {
             _currentNavId.value = navId
         } else {
-            // 如果没有传 navId，尝试从配置中查找（使用云端配置）
             const navGroups = _navGroupsRef.value || []
             for (const group of navGroups) {
                 for (const mainItem of group.items) {
@@ -303,26 +440,19 @@ export function useNavigation() {
         }
     }
 
-    // 设置详情标题（用于第三级面包屑）
     const setDetailTitle = (title: string | null) => {
         detailTitle.value = title
     }
 
-    // 计算面包屑数据
     const breadcrumbs = computed(() => ({
         main: currentMainNav.value,
         sub: currentSubNav.value,
         detail: detailTitle.value,
     }))
 
-    // 当前导航项 ID
     const currentNavId = computed(() => _currentNavId.value)
 
-    // 计算当前页面模板 - 从配置中动态查找
-    // 注意：需要从外部注入 configStore 的 navGroups 引用以避免循环依赖
-    // 这里先从默认配置查找，configStore 会在加载后更新
     const currentTemplate = computed(() => {
-        // 从 _navGroupsRef 查找（由 configStore 注入的云端配置）
         if (_navGroupsRef.value) {
             for (const group of _navGroupsRef.value) {
                 for (const mainItem of group.items) {
@@ -330,33 +460,23 @@ export function useNavigation() {
                     if (subItem?.template) {
                         return subItem.template
                     }
-                    // Phase 2: Support component field (implies Page1)
                     if (subItem?.component) {
                         return 'Page1'
                     }
                 }
             }
         }
-        // 未配置 template 则返回 undefined
         return undefined
     })
 
-    // 计算当前页面组件名称 - 保留兼容（如果有模板则返回模板名）
     const currentPage = computed(() => {
-        // 特殊页面处理（如 Settings）
-        if (_currentNavId.value === 'settings') {
-            return 'Settings'
-        }
-        if (_currentNavId.value === 'billing') {
-            return 'Billing'
-        }
-        if (_currentNavId.value === 'profile') {
-            return 'profile'
-        }
+        if (_currentNavId.value === 'settings') return 'Settings'
+        if (_currentNavId.value === 'billing') return 'Billing'
+        if (_currentNavId.value === 'profile') return 'profile'
+
         if (currentTemplate.value) {
             return currentTemplate.value
         }
-        // 未配置则返回子导航标题（会触发 PlaceholderPage）
         return currentSubNav.value
     })
 
@@ -372,3 +492,9 @@ export function useNavigation() {
         setDetailTitle,
     }
 }
+
+// ============================================
+// 按导航 ID 索引的页面配置 (由 configStore 同步)
+// ============================================
+
+export const page1Configs: Record<string, Page1Config> = {}

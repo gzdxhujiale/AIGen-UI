@@ -121,8 +121,8 @@ const switchView = (view: 'login' | 'register' | 'forgot-password') => {
 
     <div class="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div class="mx-auto grid w-[350px] gap-6 bg-card p-6 border rounded-xl shadow-sm">
-        <div class="grid gap-2 text-center">
-          <div class="flex justify-center mb-4">
+        <div class="grid gap-0 text-center">
+          <div class="flex justify-center">
              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-7 h-7">
                  <path d="M8 16v-6a2 2 0 1 1 4 0v6m-4-3h4m4-5v8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>

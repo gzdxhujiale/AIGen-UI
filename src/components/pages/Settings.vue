@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 // Card components removed - using plain divs with border/bg-card
-import { Layers, Plus, Pencil, Trash2, Settings2, Save, FileCode, GripVertical, Info, ChevronRight, Eye, EyeOff, Download, Upload, FileDown, Search, MoreHorizontal, RefreshCw, FormInput } from 'lucide-vue-next'
+import { Layers, Plus, Pencil, Trash2, Settings2, FileCode, GripVertical, Info, ChevronRight, Eye, EyeOff, Download, Upload, FileDown, Search, MoreHorizontal, RefreshCw } from 'lucide-vue-next'
 
-import { Button as AButton, Card as ACard, Select as ASelect, Option as AOption, Scrollbar as AScrollbar } from '@arco-design/web-vue'
+import { Input as AInput, InputNumber as AInputNumber, Select as ASelect, Option as AOption, Scrollbar as AScrollbar, Modal as AModal, Message, Button as AButton, Dropdown as ADropdown, Doption as ADoption, Tabs as ATabs, TabPane as ATabPane } from '@arco-design/web-vue'
 import { 
   IconSettings, 
   IconApps, 
@@ -19,43 +18,17 @@ import {
   IconSafe,
   IconFire
 } from '@arco-design/web-vue/es/icon'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Message } from '@arco-design/web-vue'
+
 import draggable from 'vuedraggable'
+
 import { useConfigStore, type NavSubItem, type FilterConfig, type TableColumn } from '@/stores/configStore'
 import Page1 from '@/components/pages/Page1.vue'
+import ConfigFilterForm from '@/components/config/ConfigFilterForm.vue'
+import ConfigColumnForm from '@/components/config/ConfigColumnForm.vue'
+import ConfigActionForm from '@/components/config/ConfigActionForm.vue'
+import ConfigCardForm from '@/components/config/ConfigCardForm.vue'
+
+import { useConfigCrud } from '@/composables/useConfigCrud'
 
 // Store
 const configStore = useConfigStore()
@@ -110,20 +83,12 @@ const filteredNavGroups = computed(() => {
 
 // Dialog State
 const editNavDialogOpen = ref(false)
-const filterDialogOpen = ref(false)
-const columnDialogOpen = ref(false)
 const editMainNavDialogOpen = ref(false)
 const editingMainNavId = ref<string | null>(null)
 const editingGroupIndex = ref<number | null>(null)
 const editingMainNav = ref<any>(null)
-const editingFilterIndex = ref<number | null>(null)  // null = 添加模式, number = 编辑模式
-const editingColumnIndex = ref<number | null>(null)  // null = 添加模式, number = 编辑模式
 
-// AlertDialog State (替代 confirm())
-const confirmDialogOpen = ref(false)
-const confirmDialogTitle = ref('')
-const confirmDialogDescription = ref('')
-const pendingConfirmAction = ref<(() => void) | null>(null)
+
 
 // Form State
 const navForm = ref({
@@ -151,44 +116,6 @@ const availableIcons = [
   { label: 'Fire', value: 'IconFire', component: IconFire },
 ]
 
-const filterForm = ref({
-  key: '',
-  type: 'input' as 'input' | 'select' | 'date-range' | 'tree-select',
-  label: '',
-  placeholder: '',
-  options: '', // 逗号分隔的选项列表
-  treeOptions: '' // JSON 字符串用于 tree-select
-})
-
-const columnForm = ref({
-  key: '',
-  label: '',
-  width: '100px',
-  type: 'text' as 'text' | 'badge' | 'status-badge' | 'text-button',
-  mockFormat: 'none' as 'none' | 'text' | 'datetime' | 'number' | 'list',
-  mockList: '', // 逗号分隔的列表项
-  buttons: '', // 按钮列表，逗号分隔
-  fixed: 'none' as 'none' | 'left' | 'right',
-  align: 'left' as 'left' | 'center' | 'right',
-  ellipsis: false,
-  tooltip: false
-})
-
-// Action Button Dialog State
-const actionDialogOpen = ref(false)
-const editingActionIndex = ref<number | null>(null)
-
-const actionForm = ref({
-  key: '',
-  label: '',
-  variant: 'shadcn-outline' as 'primary' | 'outline' | 'text' | 'shadcn-outline',
-  className: '',
-  effectType: 'none' as 'none' | 'modal',
-  effectTitle: '',
-  effectContent: '',
-  effectFormItems: [] as any[]
-})
-
 // Active Tab State for Preview Control
 const activeTab = ref('filter')
 
@@ -204,16 +131,6 @@ const previewVisibleSections = computed(() => {
     default:
       return undefined // Show all
   }
-})
-
-// Card Dialog State
-const cardDialogOpen = ref(false)
-const editingCardIndex = ref<number | null>(null)
-
-const cardForm = ref({
-  key: '',
-  title: '',
-  data: ''
 })
 
 // 获取所有子导航项（扁平化）
@@ -247,6 +164,313 @@ onMounted(() => {
   if (allSubNavItems.value.length > 0 && !selectedNavId.value) {
     selectedNavId.value = allSubNavItems.value[0].subItem.id
   }
+})
+
+// ============================================
+// 确认对话框辅助函数 (Issue 7: 替代 confirm())
+// ============================================
+const confirmDialogOpen = ref(false)
+const confirmDialogTitle = ref('')
+const confirmDialogDescription = ref('')
+const pendingConfirmAction = ref<(() => void) | null>(null)
+
+const showConfirm = (title: string, description: string, action: () => void) => {
+  confirmDialogTitle.value = title
+  confirmDialogDescription.value = description
+  pendingConfirmAction.value = action
+  confirmDialogOpen.value = true
+}
+
+const handleConfirmAction = () => {
+  if (pendingConfirmAction.value) {
+    pendingConfirmAction.value()
+  }
+  confirmDialogOpen.value = false
+  pendingConfirmAction.value = null
+}
+
+const handleCancelConfirm = () => {
+  confirmDialogOpen.value = false
+  pendingConfirmAction.value = null
+}
+
+// ============================================
+// Data Driven Headers
+// ============================================
+
+const filterHeaders = [
+    { key: 'empty', label: '', width: 'w-8', align: 'center' },
+    { key: 'type', label: '类型', width: 'w-24', align: 'left' },
+    { key: 'label', label: '标签', width: 'w-32', align: 'left' },
+    { key: 'key', label: '字段名', width: 'w-32', align: 'left' },
+    { key: 'options', label: '选项/配置', width: 'w-auto', align: 'left' },
+    { key: 'action', label: '操作', width: 'w-20', align: 'right' }
+]
+
+const actionHeaders = [
+    { key: 'empty', label: '', width: 'w-8', align: 'center' },
+    { key: 'label', label: '标签', width: 'w-32', align: 'left' },
+    { key: 'key', label: 'Key', width: 'w-32', align: 'left' },
+    { key: 'variant', label: '样式', width: 'w-24', align: 'left' },
+    { key: 'effect', label: '效果', width: 'w-24', align: 'left' },
+    { key: 'className', label: '自定义类名', width: 'w-32', align: 'left' },
+    { key: 'action', label: '操作', width: 'w-16', align: 'right' }
+]
+
+const cardHeaders = [
+    { key: 'empty', label: '', width: 'w-8', align: 'center' },
+    { key: 'key', label: 'Key', width: 'w-32', align: 'left' },
+    { key: 'title', label: '标题', width: 'w-32', align: 'left' },
+    { key: 'data', label: '数据', width: 'w-auto', align: 'left' },
+    { key: 'action', label: '操作', width: 'w-16', align: 'right' }
+]
+
+const columnHeaders = [
+    { key: 'empty', label: '', width: 'w-8', align: 'center' },
+    { key: 'type', label: '类型', width: 'w-24', align: 'left' },
+    { key: 'label', label: '标签', width: 'w-32', align: 'left' },
+    { key: 'key', label: '字段名', width: 'w-32', align: 'left' },
+    { key: 'width', label: '宽度', width: 'w-24', align: 'left' },
+    { key: 'format', label: '数据格式 / 按钮配置', width: 'w-auto', align: 'left' },
+    { key: 'action', label: '操作', width: 'w-16', align: 'right' }
+]
+
+// ============================================
+// CRUD Composables
+// ============================================
+
+// Filter CRUD
+const filterCrud = useConfigCrud({
+    name: '筛选项',
+    defaultForm: () => ({
+        key: '',
+        type: 'input' as 'input' | 'select' | 'date-range' | 'tree-select',
+        label: '',
+        placeholder: '',
+        options: '', 
+        treeOptions: '',
+        visible: true
+    }),
+    doSave: (modifying, index, form) => {
+        if (!selectedNavId.value) return
+        const config = configStore.page1Configs[selectedNavId.value]
+        if (!config) return
+
+        const newFilter: FilterConfig = {
+            key: form.key,
+            type: form.type,
+            label: form.label,
+            placeholder: form.placeholder || undefined,
+            visible: form.visible
+        }
+
+        if (form.type === 'select') {
+            newFilter.defaultValue = '全部'
+            newFilter.options = form.options ? form.options.split(/[，,]/).map(s => s.trim()).filter(s => s) : []
+        } else if (form.type === 'tree-select') {
+            newFilter.defaultValue = ''
+            try {
+                newFilter.treeOptions = JSON.parse(form.treeOptions || '[]')
+            } catch (e) {
+                alert('Tree Options JSON 格式错误')
+                return
+            }
+        } else if (form.type === 'date-range') {
+            newFilter.defaultValue = undefined
+        } else {
+            newFilter.defaultValue = ''
+        }
+        
+        if (modifying && index !== null) {
+             config.filterArea.filters[index] = newFilter
+        } else {
+             config.filterArea.filters.push(newFilter)
+        }
+    },
+    doDelete: (index) => {
+        if (!selectedNavId.value) return
+        const config = configStore.page1Configs[selectedNavId.value]
+        if (config) config.filterArea.filters.splice(index, 1)
+    }
+})
+
+// Column CRUD
+const columnCrud = useConfigCrud({
+    name: '表格列',
+    defaultForm: () => ({
+        key: '',
+        label: '',
+        width: '100px',
+        type: 'text' as 'text' | 'badge' | 'status-badge' | 'text-button', 
+        mockFormat: 'none' as 'none' | 'text' | 'datetime' | 'number' | 'list',
+        mockList: '',
+        buttons: '',
+        fixed: 'none' as 'none' | 'left' | 'right',
+        align: 'left' as 'left' | 'center' | 'right',
+        ellipsis: false,
+        tooltip: false,
+        visible: true
+    }),
+    doSave: (modifying, index, form) => {
+        if (!selectedNavId.value) return
+        const config = configStore.page1Configs[selectedNavId.value]
+        if (!config) return
+
+        const newColumn: TableColumn = {
+            key: form.key,
+            label: form.label,
+            width: form.width || undefined,
+            type: form.type === 'text' ? undefined : form.type,
+            mockFormat: form.mockFormat === 'none' ? undefined : form.mockFormat,
+            mockList: form.mockFormat === 'list' ? form.mockList.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+            buttons: form.type === 'text-button' && form.buttons ? form.buttons.split(/[，,]/).map(s => s.trim()).filter(s => s) : undefined,
+            fixed: form.fixed === 'none' ? undefined : form.fixed,
+            align: form.align === 'left' ? undefined : form.align,
+            ellipsis: form.ellipsis || undefined,
+            tooltip: form.tooltip || undefined,
+            visible: form.visible
+        }
+        
+        if (modifying && index !== null) {
+            config.tableArea.columns[index] = newColumn
+        } else {
+            config.tableArea.columns.push(newColumn)
+        }
+    },
+    doDelete: (index) => {
+        if (!selectedNavId.value) return
+        const config = configStore.page1Configs[selectedNavId.value]
+        if (config) config.tableArea.columns.splice(index, 1)
+    }
+})
+
+// Action CRUD
+const actionCrud = useConfigCrud({
+    name: '操作按钮',
+    defaultForm: () => ({
+        key: '',
+        label: '',
+        variant: 'shadcn-outline' as 'primary' | 'outline' | 'text' | 'shadcn-outline',
+        className: '',
+        effectType: 'none' as 'none' | 'modal',
+        effectTitle: '',
+        effectContent: '',
+        effectFormItems: [] as any[],
+        visible: true
+    }),
+    doSave: (modifying, index, form) => {
+        if (!selectedNavId.value) return
+        const config = configStore.page1Configs[selectedNavId.value]
+        if (!config) return
+
+        if (!config.actionsArea) config.actionsArea = { buttons: [] }
+       if (!config.actionsArea.buttons) config.actionsArea.buttons = []
+        
+        const newAction: any = {
+            key: form.key,
+            label: form.label,
+            variant: form.variant,
+            className: form.className || undefined,
+            effectType: form.effectType === 'none' ? undefined : form.effectType,
+            visible: form.visible
+        }
+        
+        if (form.effectType === 'modal') {
+            newAction.effectConfig = {
+                title: form.effectTitle,
+                content: form.effectContent,
+                formItems: form.effectFormItems.length > 0 ? form.effectFormItems : undefined
+            }
+        }
+        
+        if (modifying && index !== null) {
+            config.actionsArea.buttons[index] = newAction
+        } else {
+            config.actionsArea.buttons.push(newAction)
+        }
+    },
+    doDelete: (index) => {
+        if (!selectedNavId.value) return
+        const config = configStore.page1Configs[selectedNavId.value]
+        if (config?.actionsArea?.buttons) config.actionsArea.buttons.splice(index, 1)
+    }
+})
+
+// Card CRUD
+const cardCrud = useConfigCrud({
+    name: '卡片',
+    defaultForm: () => ({
+        key: '',
+        title: '',
+        data: ''
+    }),
+    doSave: (modifying, index, form) => {
+        if (!selectedNavId.value) return
+        const config = configStore.page1Configs[selectedNavId.value]
+        if (!config) return
+
+        if (!config.cardArea) config.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
+        if (!config.cardArea.cards) config.cardArea.cards = []
+        
+        const newCard = {
+            key: form.key,
+            title: form.title,
+            data: form.data
+        }
+        
+        if (modifying && index !== null) {
+           config.cardArea.cards[index] = newCard
+        } else {
+           config.cardArea.cards.push(newCard)
+        }
+    },
+    doDelete: (index) => {
+        if (!selectedNavId.value) return
+        const config = configStore.page1Configs[selectedNavId.value]
+        if (config?.cardArea?.cards) config.cardArea.cards.splice(index, 1)
+    }
+})
+
+// ============================================
+// Data Transformation Code (Helpers for openEdit)
+// ============================================
+
+const transformFilter = (item: any) => ({
+    ...item,
+    placeholder: item.placeholder || '',
+    options: item.options?.join(',') || '',
+    treeOptions: item.treeOptions ? JSON.stringify(item.treeOptions) : '',
+    visible: item.visible ?? true
+})
+
+const transformColumn = (item: any) => ({
+    ...item,
+    type: item.type || 'text',
+    width: item.width || '120px',
+    mockFormat: item.mockFormat || 'text',
+    mockList: item.mockList ? item.mockList.join(',') : '',
+    buttons: item.buttons ? item.buttons.join(',') : '',
+    visible: item.visible ?? true,
+    fixed: item.fixed || 'none',
+    align: item.align || 'left',
+    ellipsis: item.ellipsis || false,
+    tooltip: item.tooltip || false
+})
+
+const transformAction = (item: any) => ({
+    ...item,
+    className: item.className || '',
+    variant: item.variant || 'outline',
+    effectType: item.effectType || 'none',
+    effectTitle: item.effectConfig?.title || '',
+    effectContent: item.effectConfig?.content || '',
+    effectFormItems: item.effectConfig?.formItems || [],
+    visible: item.visible ?? true
+})
+
+const transformCard = (item: any) => ({
+    ...item,
+    data: String(item.data)
 })
 
 // ============================================
@@ -437,400 +661,11 @@ const handleDeletePageConfig = () => {
   )
 }
 
-// ============================================
-// Filter Config Actions
-// ============================================
-
-const openAddFilterDialog = () => {
-  editingFilterIndex.value = null
-  filterForm.value = { 
-    key: '', 
-    type: 'input', 
-    label: '', 
-    placeholder: '', 
-    options: '',
-    treeOptions: ''
-  }
-  filterDialogOpen.value = true
-}
-
-const openEditFilterDialog = (index: number) => {
-  const config = configStore.page1Configs[selectedNavId.value!]
-  if (config) {
-    const filter = config.filterArea.filters[index]
-    editingFilterIndex.value = index
-    filterForm.value = {
-      key: filter.key,
-      type: filter.type,
-      label: filter.label,
-      placeholder: filter.placeholder || '',
-      options: filter.options?.join(', ') || '',
-      treeOptions: filter.treeOptions ? JSON.stringify(filter.treeOptions, null, 2) : ''
-    }
-    filterDialogOpen.value = true
-  }
-}
-
-const closeFilterDialog = () => {
-  filterDialogOpen.value = false
-  editingFilterIndex.value = null
-}
-
-const handleSaveFilter = () => {
-  if (selectedNavId.value && filterForm.value.key && filterForm.value.label) {
-    const config = configStore.page1Configs[selectedNavId.value]
-    if (config) {
-      // 准备新的过滤器配置
-      const newFilter: FilterConfig = {
-        key: filterForm.value.key,
-        type: filterForm.value.type,
-        label: filterForm.value.label,
-        placeholder: filterForm.value.placeholder || undefined
-      }
-
-      // 根据类型设置特定属性
-      if (filterForm.value.type === 'select') {
-        newFilter.defaultValue = '全部'
-        newFilter.options = filterForm.value.options
-          ? filterForm.value.options.split(/[，,]/).map(s => s.trim()).filter(s => s)
-          : []
-      } else if (filterForm.value.type === 'tree-select') {
-        newFilter.defaultValue = ''
-        try {
-          newFilter.treeOptions = JSON.parse(filterForm.value.treeOptions || '[]')
-        } catch (e) {
-          alert('Tree Options JSON 格式错误')
-          return
-        }
-      } else if (filterForm.value.type === 'date-range') {
-        newFilter.defaultValue = undefined
-      } else {
-        newFilter.defaultValue = ''
-      }
-      
-      if (editingFilterIndex.value !== null) {
-        // 编辑模式
-        config.filterArea.filters[editingFilterIndex.value] = newFilter
-      } else {
-        // 添加模式
-        config.filterArea.filters.push(newFilter)
-      }
-    }
-    closeFilterDialog()
-  }
-}
-
-const handleDeleteFilter = (index: number) => {
-  if (!selectedNavId.value) return
-  showConfirm(
-    '确定删除？',
-    '确定要删除这个筛选项吗？',
-    () => {
-      const config = configStore.page1Configs[selectedNavId.value!]
-      if (config) {
-        config.filterArea.filters.splice(index, 1)
-      }
-    }
-  )
-}
-
-// 切换筛选项可见性
-const toggleFilterVisibility = (index: number) => {
-  if (!selectedNavId.value) return
-  const config = configStore.page1Configs[selectedNavId.value]
-  if (config) {
-    const filter = config.filterArea.filters[index]
-    filter.visible = filter.visible === false ? true : false
-  }
-}
-
-// 切换列可见性
-const toggleColumnVisibility = (index: number) => {
-  if (!selectedNavId.value) return
-  const config = configStore.page1Configs[selectedNavId.value]
-  if (config) {
-    const col = config.tableArea.columns[index]
-    col.visible = col.visible === false ? true : false
-  }
-}
-
-// 切换操作按钮可见性
-const toggleActionVisibility = (index: number) => {
-  if (!selectedNavId.value) return
-  const config = configStore.page1Configs[selectedNavId.value]
-  if (config?.actionsArea?.buttons) {
-    const action = config.actionsArea.buttons[index]
-    action.visible = action.visible === false ? true : false
-  }
-}
-
-// ============================================
-// Column Config Actions
-// ============================================
-
-const openAddColumnDialog = () => {
-  editingColumnIndex.value = null
-  columnForm.value = { 
-    key: '', 
-    label: '', 
-    width: '100px', 
-    type: 'text', 
-    mockFormat: 'none', 
-    mockList: '',
-    buttons: '',
-    fixed: 'none',
-    align: 'left',
-    ellipsis: false,
-    tooltip: false
-  }
-  columnDialogOpen.value = true
-}
-
-const openEditColumnDialog = (index: number) => {
-  const config = configStore.page1Configs[selectedNavId.value!]
-  if (config) {
-    const col = config.tableArea.columns[index]
-    editingColumnIndex.value = index
-    columnForm.value = {
-      key: col.key,
-      label: col.label,
-      width: col.width || '100px',
-      type: col.type || 'text',
-      mockFormat: col.mockFormat || 'none',
-      mockList: col.mockList ? col.mockList.join(',') : '',
-      buttons: col.buttons ? col.buttons.join(', ') : '',
-      fixed: col.fixed || 'none',
-      align: col.align || 'left',
-      ellipsis: col.ellipsis || false,
-      tooltip: col.tooltip || false
-    }
-    columnDialogOpen.value = true
-  }
-}
-
-const closeColumnDialog = () => {
-  columnDialogOpen.value = false
-  editingColumnIndex.value = null
-}
-
-const handleSaveColumn = () => {
-  if (selectedNavId.value && columnForm.value.key && columnForm.value.label) {
-    const config = configStore.page1Configs[selectedNavId.value]
-    if (config) {
-      const newColumn: TableColumn = {
-        key: columnForm.value.key,
-        label: columnForm.value.label,
-        width: columnForm.value.width || undefined,
-        type: columnForm.value.type === 'text' ? undefined : columnForm.value.type,
-        mockFormat: columnForm.value.mockFormat === 'none' ? undefined : columnForm.value.mockFormat,
-        mockList: columnForm.value.mockFormat === 'list' ? columnForm.value.mockList.split(',').map(s => s.trim()).filter(Boolean) : undefined,
-        buttons: columnForm.value.type === 'text-button' && columnForm.value.buttons 
-          ? columnForm.value.buttons.split(/[，,]/).map(s => s.trim()).filter(s => s) 
-          : undefined,
-        fixed: columnForm.value.fixed === 'none' ? undefined : columnForm.value.fixed,
-        align: columnForm.value.align === 'left' ? undefined : columnForm.value.align,
-        ellipsis: columnForm.value.ellipsis || undefined,
-        tooltip: columnForm.value.tooltip || undefined
-      }
-      
-      if (editingColumnIndex.value !== null) {
-        // 编辑模式
-        config.tableArea.columns[editingColumnIndex.value] = newColumn
-      } else {
-        // 添加模式
-        config.tableArea.columns.push(newColumn)
-      }
-    }
-    closeColumnDialog()
-  }
-}
-
-const handleDeleteColumn = (index: number) => {
-  if (!selectedNavId.value) return
-  showConfirm(
-    '确定删除？',
-    '确定要删除这个列吗？',
-    () => {
-      const config = configStore.page1Configs[selectedNavId.value!]
-      if (config) {
-        config.tableArea.columns.splice(index, 1)
-      }
-    }
-  )
-}
-
-// 配置编辑
-const handleUpdateFilterArea = (key: 'columns' | 'gap', value: number | string) => {
-  if (selectedNavId.value) {
-    configStore.updateFilterAreaConfig(selectedNavId.value, { [key]: value })
-  }
-}
-
-const handleUpdateTableArea = (key: string, value: any) => {
-  if (selectedNavId.value) {
-    configStore.updateTableAreaConfig(selectedNavId.value, { [key]: value })
-  }
-}
-
-// ============================================
-// Action Button CRUD
-// ============================================
-
-const openAddActionDialog = () => {
-  editingActionIndex.value = null
-  actionForm.value = { 
-    key: '', 
-    label: '', 
-    variant: 'shadcn-outline', 
-    className: '',
-    effectType: 'none',
-    effectTitle: '',
-    effectContent: '',
-    effectFormItems: []
-  }
-  actionDialogOpen.value = true
-}
-
-const openEditActionDialog = (index: number) => {
-  const config = configStore.page1Configs[selectedNavId.value!]
-  if (config?.actionsArea?.buttons) {
-    const action = config.actionsArea.buttons[index]
-    editingActionIndex.value = index
-    actionForm.value = {
-      key: action.key,
-      label: action.label,
-      variant: action.variant || 'shadcn-outline',
-      className: action.className || '',
-      effectType: action.effectType || 'none',
-      effectTitle: action.effectConfig?.title || '',
-      effectContent: action.effectConfig?.content || '',
-      effectFormItems: action.effectConfig?.formItems ? JSON.parse(JSON.stringify(action.effectConfig.formItems)) : []
-    }
-    actionDialogOpen.value = true
-  }
-}
 
 
 
-const addEffectFormItem = () => {
-  actionForm.value.effectFormItems.push({
-    key: 'field_' + (actionForm.value.effectFormItems.length + 1),
-    label: '新字段',
-    type: 'input',
-    placeholder: ''
-  })
-}
-
-const removeEffectFormItem = (index: number) => {
-  actionForm.value.effectFormItems.splice(index, 1)
-}
 
 
-const closeActionDialog = () => {
-  actionDialogOpen.value = false
-  editingActionIndex.value = null
-}
-
-const handleSaveAction = () => {
-  if (selectedNavId.value && actionForm.value.key && actionForm.value.label) {
-    const config = configStore.page1Configs[selectedNavId.value]
-    if (config) {
-      if (!config.actionsArea) config.actionsArea = { buttons: [] }
-      if (!config.actionsArea.buttons) config.actionsArea.buttons = []
-      
-      const newAction: any = {
-        key: actionForm.value.key,
-        label: actionForm.value.label,
-        variant: actionForm.value.variant,
-        className: actionForm.value.className || undefined,
-        effectType: actionForm.value.effectType === 'none' ? undefined : actionForm.value.effectType
-      }
-      
-      if (actionForm.value.effectType === 'modal') {
-        newAction.effectConfig = {
-          title: actionForm.value.effectTitle,
-          content: actionForm.value.effectContent,
-          formItems: actionForm.value.effectFormItems.length > 0 ? actionForm.value.effectFormItems : undefined
-        }
-      }
-      
-      if (editingActionIndex.value !== null) {
-        config.actionsArea.buttons[editingActionIndex.value] = newAction
-      } else {
-        config.actionsArea.buttons.push(newAction)
-      }
-    }
-    closeActionDialog()
-  }
-}
-
-const handleDeleteAction = (index: number) => {
-  if (!selectedNavId.value) return
-  showConfirm(
-    '确定删除？',
-    '确定要删除这个操作按钮吗？',
-    () => {
-      const config = configStore.page1Configs[selectedNavId.value!]
-      if (config?.actionsArea?.buttons) {
-        config.actionsArea.buttons.splice(index, 1)
-      }
-    }
-  )
-}
-
-// ============================================
-// Card Config Actions
-// ============================================
-
-const openAddCardDialog = () => {
-  editingCardIndex.value = null
-  cardForm.value = { key: '', title: '', data: '' }
-  cardDialogOpen.value = true
-}
-
-
-
-const closeCardDialog = () => {
-  cardDialogOpen.value = false
-  editingCardIndex.value = null
-}
-
-const handleSaveCard = () => {
-  if (selectedNavId.value && cardForm.value.key && cardForm.value.title) {
-    const config = configStore.page1Configs[selectedNavId.value]
-    if (config) {
-      if (!config.cardArea) config.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
-      if (!config.cardArea.cards) config.cardArea.cards = []
-      
-      const newCard = {
-        key: cardForm.value.key,
-        title: cardForm.value.title,
-        data: cardForm.value.data
-      }
-      
-      if (editingCardIndex.value !== null) {
-        config.cardArea.cards[editingCardIndex.value] = newCard
-      } else {
-        config.cardArea.cards.push(newCard)
-      }
-    }
-    closeCardDialog()
-  }
-}
-
-const handleDeleteCard = (index: number) => {
-  if (!selectedNavId.value) return
-  showConfirm(
-    '确定删除？',
-    '确定要删除这个卡片吗？',
-    () => {
-      const config = configStore.page1Configs[selectedNavId.value!]
-      if (config?.cardArea?.cards) {
-        config.cardArea.cards.splice(index, 1)
-      }
-    }
-  )
-}
 
 // 切换区域显示状态
 const toggleAreaShow = (area: 'filterArea' | 'actionsArea' | 'cardArea' | 'tableArea') => {
@@ -844,36 +679,35 @@ const toggleAreaShow = (area: 'filterArea' | 'actionsArea' | 'cardArea' | 'table
       config.actionsArea.show = config.actionsArea.show === false ? true : false
     } else if (area === 'cardArea') {
       if (!config.cardArea) config.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
-      config.cardArea.show = !config.cardArea.show
+      config.cardArea.show = config.cardArea.show === false ? true : false
     } else if (area === 'tableArea') {
       config.tableArea.show = config.tableArea.show === false ? true : false
     }
+    }
+  }
+
+
+// 更新筛选区域配置
+const handleUpdateFilterArea = (key: string, value: any) => {
+  if (!selectedNavId.value) return
+  const config = configStore.page1Configs[selectedNavId.value]
+  if (config) {
+    // @ts-ignore dynamic key access
+    config.filterArea[key] = value
   }
 }
 
-// ============================================
-// 确认对话框辅助函数 (Issue 7: 替代 confirm())
-// ============================================
-
-const showConfirm = (title: string, description: string, action: () => void) => {
-  confirmDialogTitle.value = title
-  confirmDialogDescription.value = description
-  pendingConfirmAction.value = action
-  confirmDialogOpen.value = true
-}
-
-const handleConfirmAction = () => {
-  if (pendingConfirmAction.value) {
-    pendingConfirmAction.value()
+// 更新表格区域配置
+const handleUpdateTableArea = (key: string, value: any) => {
+  if (!selectedNavId.value) return
+  const config = configStore.page1Configs[selectedNavId.value]
+  if (config) {
+    // @ts-ignore dynamic key access
+    config.tableArea[key] = value
   }
-  confirmDialogOpen.value = false
-  pendingConfirmAction.value = null
 }
 
-const handleCancelConfirm = () => {
-  confirmDialogOpen.value = false
-  pendingConfirmAction.value = null
-}
+
 
 // ============================================
 // 拖拽排序功能 (Issue 9)
@@ -1024,20 +858,6 @@ const handleConfirmImport = async () => {
   }
 }
 
-// 保存配置到云端
-const handleSaveToCloud = async () => {
-  isSaving.value = true
-  try {
-    const result = await configStore.saveToSupabase()
-    if (result.success) {
-      Message.success(result.message || '保存成功')
-    } else {
-      Message.error(result.message || '保存失败')
-    }
-  } finally {
-    isSaving.value = false
-  }
-}
 </script>
 
 <template>
@@ -1183,44 +1003,32 @@ const handleSaveToCloud = async () => {
                   <Upload class="w-3.5 h-3.5" />
                </Button>
                <!-- 导出配置 -->
-               <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" title="导出配置" @click="handleExportConfig">
-                  <Download class="w-3.5 h-3.5" />
-               </Button>
+                <AButton type="text" size="small" class="!h-7 !px-2 !text-xs text-muted-foreground hover:text-foreground" title="导出配置" @click="handleExportConfig">
+                   <Download class="w-3.5 h-3.5" />
+                </AButton>
 
                <!-- 分隔线 -->
                <div class="w-px h-4 bg-border mx-0.5"></div>
                
                <!-- 重命名 -->
-               <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" title="重命名" @click="openEditNavDialog">
-                  <Pencil class="w-3.5 h-3.5" />
-               </Button>
+                <AButton type="text" size="small" class="!h-7 !px-2 !text-xs text-muted-foreground hover:text-foreground" title="重命名" @click="openEditNavDialog">
+                   <Pencil class="w-3.5 h-3.5" />
+                </AButton>
 
                <!-- 更多操作 (危险操作) -->
-               <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                  <Button variant="ghost" size="sm" class="h-7 px-2 text-muted-foreground hover:text-foreground">
+               <ADropdown trigger="click" position="br">
+                  <AButton type="text" size="small" class="!h-7 !px-2 text-muted-foreground hover:text-foreground">
                     <MoreHorizontal class="w-3.5 h-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" class="w-40">
-                  <DropdownMenuItem class="text-destructive focus:text-destructive text-xs" @click="handleDeleteCurrentNav">
-                    <Trash2 class="w-3.5 h-3.5 mr-2" />删除导航项
-                  </DropdownMenuItem>
-                  <DropdownMenuItem class="text-destructive focus:text-destructive text-xs" @click="handleDeletePageConfig">
-                    <RefreshCw class="w-3.5 h-3.5 mr-2" />重置页面
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-               <!-- 分隔线 -->
-               <div class="w-px h-4 bg-border mx-0.5"></div>
-               
-               <!-- 保存按钮 -->
-               <Button size="sm" class="h-7 px-3 text-xs" @click="handleSaveToCloud" :disabled="isSaving">
-                  <Save class="w-3.5 h-3.5 mr-1" />
-                  <span v-if="isSaving">保存中...</span>
-                  <span v-else>保存</span>
-                </Button>
+                  </AButton>
+                <template #content>
+                  <ADoption class="!text-destructive !text-xs" @click="handleDeleteCurrentNav">
+                    <Trash2 class="w-3.5 h-3.5 mr-2 inline-block" />删除导航项
+                  </ADoption>
+                  <ADoption class="!text-destructive !text-xs" @click="handleDeletePageConfig">
+                    <RefreshCw class="w-3.5 h-3.5 mr-2 inline-block" />重置页面
+                  </ADoption>
+                </template>
+              </ADropdown>
             </div>
           </div>
 
@@ -1230,28 +1038,19 @@ const handleSaveToCloud = async () => {
             <div v-if="!currentPageConfig" class="text-center py-8 border-2 border-dashed rounded-lg">
               <FileCode class="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
               <p class="text-muted-foreground text-sm mb-3">该导航项还没有页面配置</p>
-              <Button size="sm" @click="handleCreatePageConfig">
+              <AButton type="primary" size="small" @click="handleCreatePageConfig">
                 <Plus class="w-3.5 h-3.5 mr-1" />
                 创建 Page1 配置
-              </Button>
+              </AButton>
             </div>
 
             <!-- 有配置时 -->
             <template v-else>
-            <Tabs v-model="activeTab" class="w-full">
-                <TabsList class="grid w-full grid-cols-4 h-9">
-                  <TabsTrigger value="filter" class="text-xs">筛选区</TabsTrigger>
-                  <TabsTrigger value="actions" class="text-xs">操作区</TabsTrigger>
-                  <TabsTrigger value="card" class="text-xs">卡片区</TabsTrigger>
-                  <TabsTrigger value="table" class="text-xs">表格区</TabsTrigger>
-                </TabsList>
-
-
-
-                <div class="mt-3">
-                  <!-- 筛选区配置 -->
-                  <TabsContent value="filter" class="m-0 focus-visible:ring-0">
-                    <div class="rounded-lg border bg-card">
+            <ATabs v-model:active-key="activeTab" type="card-gutter" class="w-full h-full">
+                <!-- 筛选区配置 -->
+                <ATabPane key="filter" title="筛选区">
+                    <div class="h-full">
+                    <div class="rounded-lg border bg-card mb-3">
                       <div class="p-3">
                         <!-- 布局配置与添加按钮 -->
                         <div class="flex items-center justify-between gap-4 p-2.5 bg-muted/40 rounded-md text-xs">
@@ -1259,29 +1058,30 @@ const handleSaveToCloud = async () => {
                             <div class="flex items-center gap-2">
                               <label class="text-xs text-muted-foreground">每行:</label>
                               <div class="flex items-center">
-                                <Input 
+                                <AInputNumber 
                                   :model-value="currentPageConfig.filterArea.columns"
-                                  @update:model-value="handleUpdateFilterArea('columns', Number($event))"
-                                  type="number"
-                                  class="w-12 h-6 text-xs rounded-r-none border-r-0 focus-visible:ring-0"
+                                  @update:model-value="(v: any) => handleUpdateFilterArea('columns', v)"
+                                  size="small"
+                                  class="w-12 text-xs rounded-r-none border-r-0 focus-visible:ring-0"
                                 />
                                 <div class="h-6 px-1.5 flex items-center bg-muted border rounded-r-md text-[10px] text-muted-foreground">列</div>
                               </div>
                             </div>
                             <div class="flex items-center gap-2">
                               <label class="text-xs text-muted-foreground">间距:</label>
-                              <Input 
+                              <AInput 
                                 :model-value="currentPageConfig.filterArea.gap"
-                                @update:model-value="handleUpdateFilterArea('gap', $event)"
-                                class="w-16 h-6 text-xs"
+                                @update:model-value="(v: any) => handleUpdateFilterArea('gap', v)"
+                                size="small"
+                                class="w-16 text-xs"
                                 placeholder="16px"
                               />
                             </div>
                           </div>
-                          <Button variant="outline" size="sm" class="h-6 text-[10px] px-2" @click="openAddFilterDialog">
+                          <AButton type="outline" size="mini" class="px-2" @click="filterCrud.openAdd">
                             <Plus class="w-3 h-3 mr-1" />
                             添加筛选项
-                          </Button>
+                          </AButton>
                         </div>
                       </div>
                         <!-- 筛选项列表 -->
@@ -1290,12 +1090,14 @@ const handleSaveToCloud = async () => {
                         <table class="w-full border-collapse">
                           <thead>
                             <tr class="border-b bg-muted/50">
-                              <th class="w-8 p-2 border-r border-border/50"></th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">类型</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">标签</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">字段名</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">选项/配置</th>
-                              <th class="text-right p-2 text-xs font-medium w-20">操作</th>
+                              <th 
+                                v-for="header in filterHeaders" 
+                                :key="header.key"
+                                class="p-2 text-xs font-medium border-r border-border/50 last:border-r-0"
+                                :class="[header.align === 'right' ? 'text-right' : 'text-left', header.width]"
+                              >
+                                {{ header.label }}
+                              </th>
                             </tr>
                           </thead>
                           <draggable 
@@ -1312,34 +1114,33 @@ const handleSaveToCloud = async () => {
                                 </td>
                                 <!-- 类型 - 下拉框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Select 
+                                  <ASelect 
                                     :model-value="filter.type" 
-                                    @update:model-value="(v) => filter.type = String(v) as 'input' | 'select' | 'date-range' | 'tree-select'"
+                                    @change="(v: any) => filter.type = String(v) as 'input' | 'select' | 'date-range' | 'tree-select'"
+                                    size="small"
+                                    class="w-full"
                                   >
-                                    <SelectTrigger class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus:bg-background focus:border-input focus:shadow-sm">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="input">输入框</SelectItem>
-                                      <SelectItem value="select">下拉框</SelectItem>
-                                      <SelectItem value="date-range">日期范围</SelectItem>
-                                      <SelectItem value="tree-select">树形选择</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                      <AOption value="input">输入框</AOption>
+                                      <AOption value="select">下拉框</AOption>
+                                      <AOption value="date-range">日期范围</AOption>
+                                      <AOption value="tree-select">树形选择</AOption>
+                                  </ASelect>
                                 </td>
                                 <!-- 标签 - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="filter.label" 
-                                    class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full"
                                     placeholder="标签"
                                   />
                                 </td>
                                 <!-- 字段名 - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="filter.key" 
-                                    class="h-7 text-xs font-mono w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full font-mono"
                                     placeholder="key"
                                   />
                                 </td>
@@ -1356,34 +1157,35 @@ const handleSaveToCloud = async () => {
                                 <!-- 操作按钮 -->
                                 <td class="p-1">
                                   <div class="flex gap-0.5 justify-end">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      class="h-6 w-6 p-0"
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center"
                                       :class="filter.visible === false ? 'text-muted-foreground' : 'text-foreground'"
-                                      @click="toggleFilterVisibility(index)"
+                                      @click="filter.visible = filter.visible === false ? true : false"
                                       :title="filter.visible === false ? '点击显示' : '点击隐藏'"
                                     >
                                       <EyeOff v-if="filter.visible === false" class="w-3 h-3" />
                                       <Eye v-else class="w-3 h-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      class="h-6 w-6 p-0"
-                                      @click="openEditFilterDialog(index)"
+                                    </AButton>
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center"
+                                      @click="filterCrud.openEdit(index, filter, transformFilter)"
                                       title="高级配置"
                                     >
                                       <Settings2 class="w-3 h-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      class="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                      @click="handleDeleteFilter(index)"
+                                    </AButton>
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      status="danger"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center"
+                                      @click="filterCrud.handleDelete(index, '确定删除该筛选项吗？')"
                                     >
                                       <Trash2 class="w-3 h-3" />
-                                    </Button>
+                                    </AButton>
                                   </div>
                                 </td>
                               </tr>
@@ -1397,11 +1199,12 @@ const handleSaveToCloud = async () => {
                         </div>
                         </div>
                     </div>
-                  </TabsContent>
+                    </div>
+                  </ATabPane>
 
                   <!-- 操作区配置 -->
-                  <TabsContent value="actions" class="m-0 focus-visible:ring-0">
-                    <div class="rounded-lg border bg-card">
+                  <ATabPane key="actions" title="操作区">
+                    <div class="rounded-lg border bg-card mb-3">
                       <div class="p-3">
                         <!-- 布局配置与添加按钮 -->
                         <div class="flex items-center justify-between gap-4 p-2.5 bg-muted/40 rounded-md text-xs">
@@ -1416,10 +1219,10 @@ const handleSaveToCloud = async () => {
                               <label class="text-xs text-muted-foreground">显示操作区</label>
                             </div>
                           </div>
-                          <Button variant="outline" size="sm" class="h-6 text-[10px] px-2" @click="openAddActionDialog">
+                          <AButton type="outline" size="mini" class="px-2" @click="actionCrud.openAdd">
                             <Plus class="w-3 h-3 mr-1" />
                             添加按钮
-                          </Button>
+                          </AButton>
                         </div>
                       </div>
                         <!-- Action List -->
@@ -1428,13 +1231,14 @@ const handleSaveToCloud = async () => {
                         <table class="w-full border-collapse">
                           <thead>
                             <tr class="border-b bg-muted/50">
-                              <th class="w-8 p-2 border-r border-border/50"></th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">标签</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">Key</th>
-                               <th class="text-left p-2 text-xs font-medium border-r border-border/50">样式</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">效果</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">自定义类名</th>
-                              <th class="text-right p-2 text-xs font-medium w-16">操作</th>
+                              <th 
+                                v-for="header in actionHeaders" 
+                                :key="header.key"
+                                class="p-2 text-xs font-medium border-r border-border/50 last:border-r-0"
+                                :class="[header.align === 'right' ? 'text-right' : 'text-left', header.width]"
+                              >
+                                {{ header.label }}
+                              </th>
                             </tr>
                           </thead>
                           <draggable 
@@ -1451,36 +1255,35 @@ const handleSaveToCloud = async () => {
                                 </td>
                                 <!-- 标签 - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="action.label" 
-                                    class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full"
                                     placeholder="按钮名称"
                                   />
                                 </td>
                                 <!-- Key - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="action.key" 
-                                    class="h-7 text-xs font-mono w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full font-mono"
                                     placeholder="key"
                                   />
                                 </td>
                                 <!-- 样式 - 下拉框 -->
                                  <td class="p-1 border-r border-border/50">
-                                  <Select 
+                                  <ASelect 
                                     :model-value="action.variant || 'shadcn-outline'"
-                                    @update:model-value="(v) => action.variant = String(v) as 'primary' | 'outline' | 'text' | 'shadcn-outline'"
+                                    @change="(v: any) => action.variant = String(v) as 'primary' | 'outline' | 'text' | 'shadcn-outline'"
+                                    size="small"
+                                    class="w-full"
                                   >
-                                    <SelectTrigger class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus:bg-background focus:border-input focus:shadow-sm">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="primary">Primary</SelectItem>
-                                      <SelectItem value="outline">Outline</SelectItem>
-                                      <SelectItem value="text">Text</SelectItem>
-                                      <SelectItem value="shadcn-outline">Shadcn Outline</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                      <AOption value="primary">Primary</AOption>
+                                      <AOption value="outline">Outline</AOption>
+                                      <AOption value="text">Text</AOption>
+                                      <AOption value="shadcn-outline">Shadcn Outline</AOption>
+                                  </ASelect>
                                 </td>
                                 <!-- 效果 - 显示文本 -->
                                 <td class="p-1 border-r border-border/50">
@@ -1491,43 +1294,45 @@ const handleSaveToCloud = async () => {
                                 </td>
                                 <!-- 自定义类名 - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="action.className" 
-                                    class="h-7 text-xs font-mono w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full font-mono"
                                     placeholder="class..."
                                   />
                                 </td>
                                 <!-- 操作按钮 -->
                                 <td class="p-1">
                                   <div class="flex gap-0.5 justify-end">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      class="h-6 w-6 p-0"
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center"
                                       :class="action.visible === false ? 'text-muted-foreground' : 'text-foreground'"
-                                      @click="toggleActionVisibility(index)"
+                                      @click="action.visible = action.visible === false ? true : false"
                                       :title="action.visible === false ? '点击显示' : '点击隐藏'"
                                     >
                                        <EyeOff v-if="action.visible === false" class="w-3 h-3" />
                                       <Eye v-else class="w-3 h-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      class="h-6 w-6 p-0 text-primary hover:text-primary"
-                                      @click="openEditActionDialog(index)"
+                                    </AButton>
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center text-primary hover:text-primary"
+                                      @click="actionCrud.openEdit(index, action, transformAction)"
                                       title="编辑详情"
                                     >
                                       <Pencil class="w-3 h-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      class="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                      @click="handleDeleteAction(index)"
+                                    </AButton>
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      status="danger"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center"
+                                      @click="actionCrud.handleDelete(index)"
                                     >
                                       <Trash2 class="w-3 h-3" />
-                                    </Button>
+                                    </AButton>
                                   </div>
                                 </td>
                               </tr>
@@ -1541,11 +1346,11 @@ const handleSaveToCloud = async () => {
                         </div>
                         </div>
                     </div>
-                  </TabsContent>
+                  </ATabPane>
 
                   <!-- 卡片区配置 -->
-                  <TabsContent value="card" class="m-0 focus-visible:ring-0">
-                    <div class="rounded-lg border bg-card">
+                  <ATabPane key="card" title="卡片区">
+                    <div class="rounded-lg border bg-card mb-3">
                       <div class="p-3">
                         <!-- 布局配置与添加按钮 -->
                         <div class="flex items-center justify-between gap-4 p-2.5 bg-muted/40 rounded-md text-xs">
@@ -1563,29 +1368,30 @@ const handleSaveToCloud = async () => {
                             <div class="flex items-center gap-2">
                               <label class="text-xs text-muted-foreground">每行:</label>
                               <div class="flex items-center">
-                                <Input 
+                                <AInputNumber 
                                   :model-value="currentPageConfig.cardArea?.columns || 4"
-                                  @update:model-value="(v: string | number) => { if (currentPageConfig && currentPageConfig.cardArea) currentPageConfig.cardArea.columns = Number(v) }"
-                                  type="number"
-                                  class="w-12 h-6 text-xs rounded-r-none border-r-0 focus-visible:ring-0"
+                                  @update:model-value="(v: any) => { if (currentPageConfig && currentPageConfig.cardArea) currentPageConfig.cardArea.columns = v }"
+                                  size="small"
+                                  class="w-12 text-xs rounded-r-none border-r-0 focus-visible:ring-0"
                                 />
                                  <div class="h-6 px-1.5 flex items-center bg-muted border rounded-r-md text-[10px] text-muted-foreground">列</div>
                               </div>
                             </div>
                             <div class="flex items-center gap-2">
                               <label class="text-xs text-muted-foreground">间距:</label>
-                               <Input 
+                               <AInput 
                                 :model-value="currentPageConfig.cardArea?.gap || '16px'"
-                                @update:model-value="(v: string | number) => { if (currentPageConfig && currentPageConfig.cardArea) currentPageConfig.cardArea.gap = String(v) }"
-                                class="w-16 h-6 text-xs"
+                                @update:model-value="(v: any) => { if (currentPageConfig && currentPageConfig.cardArea) currentPageConfig.cardArea.gap = String(v) }"
+                                size="small"
+                                class="w-16 text-xs"
                                 placeholder="16px"
                               />
                             </div>
                           </div>
-                          <Button variant="outline" size="sm" class="h-6 text-[10px] px-2" @click="openAddCardDialog">
+                          <AButton type="outline" size="mini" class="px-2" @click="cardCrud.openAdd">
                             <Plus class="w-3 h-3 mr-1" />
                             添加卡片
-                          </Button>
+                          </AButton>
                         </div>
                       </div>
                         <!-- 卡片列表 -->
@@ -1594,11 +1400,14 @@ const handleSaveToCloud = async () => {
                         <table class="w-full border-collapse">
                           <thead>
                             <tr class="border-b bg-muted/50">
-                              <th class="w-8 p-2 border-r border-border/50"></th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">Key</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">标题</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">数据</th>
-                              <th class="text-right p-2 text-xs font-medium w-16">操作</th>
+                              <th 
+                                v-for="header in cardHeaders" 
+                                :key="header.key"
+                                class="p-2 text-xs font-medium border-r border-border/50 last:border-r-0"
+                                :class="[header.align === 'right' ? 'text-right' : 'text-left', header.width]"
+                              >
+                                {{ header.label }}
+                              </th>
                             </tr>
                           </thead>
                           <draggable 
@@ -1615,39 +1424,52 @@ const handleSaveToCloud = async () => {
                                 </td>
                                 <!-- Key - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="card.key" 
-                                    class="h-7 text-xs font-mono w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full font-mono"
                                     placeholder="key"
                                   />
                                 </td>
                                 <!-- 标题 - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="card.title" 
-                                    class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full"
                                     placeholder="标题"
                                   />
                                 </td>
                                 <!-- 数据 - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="card.data" 
-                                    class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full"
                                     placeholder="数据值"
                                   />
                                 </td>
                                 <!-- 操作按钮 -->
                                 <td class="p-1">
                                   <div class="flex gap-0.5 justify-end">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      class="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                      @click="handleDeleteCard(index)"
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center text-primary hover:text-primary"
+                                      @click="cardCrud.openEdit(index, card, transformCard)"
+                                      title="编辑详情"
+                                    >
+                                      <Pencil class="w-3 h-3" />
+                                    </AButton>
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      status="danger"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center"
+                                      @click="cardCrud.handleDelete(index, '确定删除这个卡片吗？')"
                                     >
                                       <Trash2 class="w-3 h-3" />
-                                    </Button>
+                                    </AButton>
                                   </div>
                                 </td>
                               </tr>
@@ -1661,30 +1483,31 @@ const handleSaveToCloud = async () => {
                         </div>
                         </div>
                     </div>
-                  </TabsContent>
+                  </ATabPane>
 
                   <!-- 表格区配置 -->
-                  <TabsContent value="table" class="m-0 focus-visible:ring-0">
-                    <div class="rounded-lg border bg-card">
+                  <ATabPane key="table" title="表格区">
+                    <div class="rounded-lg border bg-card mb-3">
                       <div class="p-3">
                         <!-- 布局配置与添加按钮 -->
                         <div class="flex items-center justify-between gap-4 p-2.5 bg-muted/40 rounded-md text-xs">
                           <div class="flex items-center gap-3 flex-wrap">
                             <div class="flex items-center gap-2">
                               <label class="text-xs text-muted-foreground">高度:</label>
-                               <Input 
+                               <AInput 
                                 :model-value="currentPageConfig.tableArea.height"
-                                @update:model-value="handleUpdateTableArea('height', $event)"
-                                class="w-16 h-7 text-xs"
+                                @update:model-value="(v: any) => handleUpdateTableArea('height', v)"
+                                size="small"
+                                class="w-16 text-xs"
                               />
                             </div>
                             <div class="flex items-center gap-2">
                               <label class="text-xs text-muted-foreground">每页:</label>
-                               <Input 
+                               <AInputNumber 
                                 :model-value="currentPageConfig.tableArea.pageSize || 15"
-                                @update:model-value="handleUpdateTableArea('pageSize', Number($event))"
-                                type="number"
-                                class="w-14 h-7 text-xs"
+                                @update:model-value="(v: any) => handleUpdateTableArea('pageSize', v)"
+                                size="small"
+                                class="w-14 text-xs"
                               />
                               <span class="text-xs text-muted-foreground">行</span>
                             </div>
@@ -1726,10 +1549,10 @@ const handleSaveToCloud = async () => {
                               <label class="text-xs text-muted-foreground">吸顶表头</label>
                             </div>
                           </div>
-                          <Button variant="outline" size="sm" class="h-7 text-xs px-2" @click="openAddColumnDialog">
+                          <AButton type="outline" size="mini" class="px-2" @click="columnCrud.openAdd">
                             <Plus class="w-3 h-3 mr-1" />
                             添加列
-                          </Button>
+                          </AButton>
                         </div>
                       </div>
                         <!-- 列配置列表 -->
@@ -1738,13 +1561,14 @@ const handleSaveToCloud = async () => {
                         <table class="w-full border-collapse">
                           <thead>
                             <tr class="border-b bg-muted/50">
-                              <th class="w-8 p-2 border-r border-border/50"></th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">类型</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">标签</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">字段名</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">宽度</th>
-                              <th class="text-left p-2 text-xs font-medium border-r border-border/50">数据格式 / 按钮配置</th>
-                              <th class="text-right p-2 text-xs font-medium w-16">操作</th>
+                              <th 
+                                v-for="header in columnHeaders" 
+                                :key="header.key"
+                                class="p-2 text-xs font-medium border-r border-border/50 last:border-r-0"
+                                :class="[header.align === 'right' ? 'text-right' : 'text-left', header.width]"
+                              >
+                                {{ header.label }}
+                              </th>
                             </tr>
                           </thead>
                           <draggable 
@@ -1761,104 +1585,103 @@ const handleSaveToCloud = async () => {
                                 </td>
                                 <!-- 类型 - 下拉框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Select 
+                                  <ASelect 
                                     :model-value="col.type || 'text'"
-                                    @update:model-value="(v) => col.type = String(v) as 'text' | 'badge' | 'status-badge' | 'text-button'"
+                                    @change="(v: any) => col.type = String(v) as 'text' | 'badge' | 'status-badge' | 'text-button'"
+                                    size="small"
+                                    class="w-full"
                                   >
-                                    <SelectTrigger class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus:bg-background focus:border-input focus:shadow-sm">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="text">文本</SelectItem>
-                                      <SelectItem value="badge">Badge</SelectItem>
-                                      <SelectItem value="status-badge">状态</SelectItem>
-                                      <SelectItem value="text-button">按钮</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                    <AOption value="text">文本</AOption>
+                                    <AOption value="badge">Badge</AOption>
+                                    <AOption value="status-badge">状态</AOption>
+                                    <AOption value="text-button">按钮</AOption>
+                                  </ASelect>
                                 </td>
                                 <!-- 标签 - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="col.label" 
-                                    class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full"
                                     placeholder="标签"
                                   />
                                 </td>
                                 <!-- 字段名 - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="col.key" 
-                                    class="h-7 text-xs font-mono w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full font-mono"
                                     placeholder="key"
                                   />
                                 </td>
                                 <!-- 宽度 - 输入框 -->
                                 <td class="p-1 border-r border-border/50">
-                                  <Input 
+                                  <AInput 
                                     v-model="col.width" 
-                                    class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                    size="small"
+                                    class="w-full font-mono"
                                     placeholder="100px"
                                   />
                                 </td>
                                  <!-- 格式 / 按钮配置 -->
                                  <td class="p-1 border-r border-border/50">
                                    <!-- 按钮列表: 当类型为按钮时显示 -->
-                                   <Input 
+                                   <AInput 
                                      v-if="col.type === 'text-button'"
                                      :model-value="col.buttons?.join(', ') || ''" 
-                                     @update:model-value="(v) => col.buttons = String(v).split(/[，,]/).map(s => s.trim()).filter(s => s)"
-                                     class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus-visible:bg-background focus-visible:border-input focus-visible:shadow-sm"
+                                     @update:model-value="(v: any) => col.buttons = String(v).split(/[，,]/).map(s => s.trim()).filter(s => s)"
+                                     size="small"
+                                     class="w-full"
                                      placeholder="按钮列表: 增加, 删除"
                                    />
                                    <!-- 数据格式: 其他类型显示 -->
-                                   <Select 
+                                   <ASelect 
                                      v-else
                                      :model-value="col.mockFormat || 'none'"
-                                     @update:model-value="(v) => col.mockFormat = String(v) === 'none' ? undefined : String(v) as 'text' | 'datetime' | 'number'"
+                                     @change="(v: any) => col.mockFormat = String(v) as 'none' | 'text' | 'datetime' | 'number' | 'list'"
+                                     size="small"
+                                     class="w-full"
                                    >
-                                     <SelectTrigger class="h-7 text-xs w-full border-transparent bg-transparent shadow-none hover:bg-muted/50 focus:bg-background focus:border-input focus:shadow-sm">
-                                       <SelectValue placeholder="格式" />
-                                     </SelectTrigger>
-                                     <SelectContent>
-                                       <SelectItem value="none">无</SelectItem>
-                                       <SelectItem value="text">文本</SelectItem>
-                                       <SelectItem value="datetime">时间</SelectItem>
-                                       <SelectItem value="number">数字</SelectItem>
-                                       <SelectItem value="list">列表项目随机选择</SelectItem>
-                                     </SelectContent>
-                                   </Select>
+                                       <AOption value="none">无</AOption>
+                                       <AOption value="text">文本</AOption>
+                                       <AOption value="datetime">时间</AOption>
+                                       <AOption value="number">数字</AOption>
+                                       <AOption value="list">列表项目随机选择</AOption>
+                                   </ASelect>
                                  </td>
                                 <!-- 操作按钮 -->
                                 <td class="p-1">
                                   <div class="flex gap-0.5 justify-end">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      class="h-6 w-6 p-0"
-                                      @click="openEditColumnDialog(index)"
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center"
+                                      @click="columnCrud.openEdit(index, col, transformColumn)"
                                       title="高级配置"
                                     >
                                       <Settings2 class="w-3 h-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      class="h-6 w-6 p-0"
+                                    </AButton>
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center"
                                       :class="col.visible === false ? 'text-muted-foreground' : 'text-foreground'"
-                                      @click="toggleColumnVisibility(index)"
+                                      @click="col.visible = col.visible === false ? true : false"
                                       :title="col.visible === false ? '点击显示' : '点击隐藏'"
                                     >
                                       <EyeOff v-if="col.visible === false" class="w-3 h-3" />
                                       <Eye v-else class="w-3 h-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      class="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                      @click="handleDeleteColumn(index)"
+                                    </AButton>
+                                    <AButton
+                                      type="text"
+                                      size="mini"
+                                      status="danger"
+                                      class="!h-6 !w-6 !p-0 flex items-center justify-center"
+                                      @click="columnCrud.handleDelete(index, '确定删除该列吗？')"
                                     >
                                       <Trash2 class="w-3 h-3" />
-                                    </Button>
+                                    </AButton>
                                   </div>
                                 </td>
                               </tr>
@@ -1872,8 +1695,8 @@ const handleSaveToCloud = async () => {
                         </div>
                         </div>
                     </div>
-                  </TabsContent>
-                </div>
+                  </ATabPane>
+              </ATabs>
 
                 <!-- Page Preview Area (Moved) -->
                 <div class="mt-6 mb-4 border rounded-lg bg-background shadow-sm overflow-hidden">
@@ -1897,7 +1720,6 @@ const handleSaveToCloud = async () => {
                       />
                    </div>
                 </div>
-              </Tabs>
             </template>
           </div>
       </div>
@@ -1905,16 +1727,11 @@ const handleSaveToCloud = async () => {
     </div>
 
     <!-- 编辑导航对话框 -->
-  <Dialog v-model:open="editNavDialogOpen">
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>编辑导航</DialogTitle>
-        <DialogDescription>修改导航项信息</DialogDescription>
-      </DialogHeader>
+  <AModal v-model:visible="editNavDialogOpen" title="编辑导航" @ok="handleEditNav" @cancel="closeEditNavDialog">
       <div class="space-y-4 py-4">
         <div class="space-y-2">
           <label class="text-sm font-medium">标题</label>
-          <Input v-model="navForm.title" placeholder="输入导航标题" />
+          <AInput v-model="navForm.title" placeholder="输入导航标题" />
         </div>
         <!-- Issue 4 & 5: 提示信息 -->
         <div class="flex items-start gap-2 p-3 rounded-md bg-muted/50 text-sm text-muted-foreground">
@@ -1922,444 +1739,79 @@ const handleSaveToCloud = async () => {
           <p>修改将在点击顶部“写入源码”时同步保存到 sidebar.ts 文件。</p>
         </div>
       </div>
-      <DialogFooter>
-        <Button variant="outline" @click="closeEditNavDialog">取消</Button>
-        <Button @click="handleEditNav">保存</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  </AModal>
 
   <!-- 添加/编辑筛选项对话框 -->
-  <Dialog v-model:open="filterDialogOpen">
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>{{ editingFilterIndex !== null ? '编辑筛选项' : '添加筛选项' }}</DialogTitle>
-        <DialogDescription>配置筛选项信息</DialogDescription>
-      </DialogHeader>
-      <div class="space-y-4 py-4">
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-2">
-            <label class="text-sm font-medium">字段名 (key)</label>
-            <Input v-model="filterForm.key" placeholder="如 userId" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium">标签</label>
-            <Input v-model="filterForm.label" placeholder="如 用户ID" />
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-2">
-            <label class="text-sm font-medium">类型</label>
-            <Select v-model="filterForm.type">
-              <SelectTrigger class="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="input">输入框</SelectItem>
-                <SelectItem value="select">下拉框</SelectItem>
-                <SelectItem value="tree-select">树形下拉框</SelectItem>
-                <SelectItem value="date-range">日期范围</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium">占位符</label>
-            <Input v-model="filterForm.placeholder" placeholder="如 请输入用户ID" />
-          </div>
-        </div>
-        <!-- 下拉框选项 -->
-        <div v-if="filterForm.type === 'select'" class="space-y-2">
-          <label class="text-sm font-medium">下拉选项 (逗号分隔)</label>
-          <Input v-model="filterForm.options" placeholder="全部, 选项1, 选项2, 选项3" />
-          <p class="text-xs text-muted-foreground">多个选项之间用逗号分隔</p>
-        </div>
-        <!-- 树形选项配置 -->
-        <div v-if="filterForm.type === 'tree-select'" class="space-y-2">
-          <label class="text-sm font-medium">树形选项配置 (JSON)</label>
-          <textarea 
-            v-model="filterForm.treeOptions"
-            class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            placeholder='[{"value":"1","label":"节点1","children":[]}]'
-          ></textarea>
-        </div>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" @click="closeFilterDialog">取消</Button>
-        <Button @click="handleSaveFilter">{{ editingFilterIndex !== null ? '保存' : '添加' }}</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  <AModal 
+    v-model:visible="filterCrud.dialogVisible.value" 
+    :title="filterCrud.mode.value === 'edit' ? '编辑筛选项' : '添加筛选项'"
+    @ok="filterCrud.handleSave" 
+    @cancel="filterCrud.closeDialog"
+    :width="500"
+  >
+    <ConfigFilterForm v-model="filterCrud.formData.value" />
+  </AModal>
 
   <!-- 添加列对话框 -->
-  <Dialog v-model:open="columnDialogOpen">
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>{{ editingColumnIndex !== null ? '编辑表格列' : '添加表格列' }}</DialogTitle>
-        <DialogDescription>{{ editingColumnIndex !== null ? '修改表格列配置' : '为表格区添加新的列' }}</DialogDescription>
-      </DialogHeader>
-      <div class="space-y-4 py-4">
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-2">
-            <label class="text-sm font-medium">字段名 (key)</label>
-            <Input v-model="columnForm.key" placeholder="如 orderNo" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium">表头标题</label>
-            <Input v-model="columnForm.label" placeholder="如 订单号" />
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-2">
-            <label class="text-sm font-medium">列宽</label>
-            <Input v-model="columnForm.width" placeholder="如 100px" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium">类型</label>
-            <Select v-model="columnForm.type">
-              <SelectTrigger class="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="text">文本</SelectItem>
-                <SelectItem value="badge">Badge</SelectItem>
-                <SelectItem value="status-badge">状态 Badge</SelectItem>
-                <SelectItem value="text-button">文字按钮</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <!-- 按钮列表配置 -->
-        <div v-if="columnForm.type === 'text-button'" class="space-y-2">
-          <label class="text-sm font-medium">按钮列表 (逗号分隔)</label>
-          <Input v-model="columnForm.buttons" placeholder="如 增加, 删除" />
-          <p class="text-xs text-muted-foreground">多个按钮之间用逗号分隔</p>
-        </div>
-        <!-- 虚拟数据格式 -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium">虚拟数据格式</label>
-          <Select v-model="columnForm.mockFormat">
-            <SelectTrigger class="w-full">
-              <SelectValue placeholder="选择虚拟数据格式 (可选)" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">无</SelectItem>
-              <SelectItem value="text">文本格式 (标签1, 标签2...)</SelectItem>
-              <SelectItem value="datetime">时间格式 (2026-1-15 xx:xx:xx)</SelectItem>
-              <SelectItem value="number">数字格式 (随机5位数)</SelectItem>
-              <SelectItem value="list">列表项目随机选择</SelectItem>
-            </SelectContent>
-          </Select>
-          <p class="text-xs text-muted-foreground">选择后将自动生成对应格式的模拟数据</p>
-        </div>
-        
-        <!-- 列表配置 (如果是 list) -->
-        <div v-if="columnForm.mockFormat === 'list'" class="space-y-2 animate-in fade-in slide-in-from-top-1">
-          <label class="text-sm font-medium">列表项 (逗号隔开)</label>
-          <Input v-model="columnForm.mockList" placeholder="如：a, b, c, d" />
-          <p class="text-[10px] text-muted-foreground">生成的虚拟数据将随机从这些项中选择其一</p>
-        </div>
-
-        <!-- 高级布局配置 -->
-        <div class="grid grid-cols-2 gap-4 pt-2 border-t">
-          <div class="space-y-2">
-            <label class="text-sm font-medium">固定方式</label>
-            <Select v-model="columnForm.fixed">
-              <SelectTrigger class="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">不固定</SelectItem>
-                <SelectItem value="left">固定在左侧</SelectItem>
-                <SelectItem value="right">固定在右侧</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium">对齐方式</label>
-             <Select v-model="columnForm.align">
-              <SelectTrigger class="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="left">左对齐</SelectItem>
-                <SelectItem value="center">居中</SelectItem>
-                <SelectItem value="right">右对齐</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-           <div class="flex items-center gap-2 pt-2">
-            <input 
-              type="checkbox" 
-              v-model="columnForm.ellipsis"
-              id="col-ellipsis"
-              class="rounded border-input text-primary focus:ring-primary w-4 h-4"
-            />
-            <label for="col-ellipsis" class="text-sm">内容过长省略 (Ellipsis)</label>
-          </div>
-          <div class="flex items-center gap-2 pt-2">
-            <input 
-              type="checkbox" 
-              v-model="columnForm.tooltip"
-              id="col-tooltip"
-              class="rounded border-input text-primary focus:ring-primary w-4 h-4"
-            />
-            <label for="col-tooltip" class="text-sm">显示提示 (Tooltip)</label>
-          </div>
-        </div>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" @click="closeColumnDialog">取消</Button>
-        <Button @click="handleSaveColumn">{{ editingColumnIndex !== null ? '保存' : '添加' }}</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  <AModal 
+    v-model:visible="columnCrud.dialogVisible.value" 
+    :title="columnCrud.mode.value === 'edit' ? '编辑列' : '添加列'"
+    @ok="columnCrud.handleSave"
+    @cancel="columnCrud.closeDialog"
+    :width="500"
+  >
+    <ConfigColumnForm v-model="columnCrud.formData.value" />
+  </AModal>
 
   <!-- 添加/编辑操作按钮对话框 -->
-  <Dialog v-model:open="actionDialogOpen">
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>{{ editingActionIndex !== null ? '编辑操作按钮' : '添加操作按钮' }}</DialogTitle>
-        <DialogDescription>{{ editingActionIndex !== null ? '修改操作按钮配置' : '添加新的操作按钮' }}</DialogDescription>
-      </DialogHeader>
-      <AScrollbar style="max-height: 500px; overflow: auto;" class="pr-2">
-        <div class="space-y-4 py-4">
-          <div class="grid grid-cols-2 gap-4">
-            <div class="space-y-2">
-              <label class="text-sm font-medium">Key</label>
-              <Input v-model="actionForm.key" placeholder="如 search" />
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium">按钮文本</label>
-              <Input v-model="actionForm.label" placeholder="如 查询" />
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div class="space-y-2">
-              <label class="text-sm font-medium">样式</label>
-              <Select v-model="actionForm.variant">
-                <SelectTrigger class="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="primary">Primary (主要)</SelectItem>
-                  <SelectItem value="outline">Outline (线形)</SelectItem>
-                  <SelectItem value="text">Text (文本)</SelectItem>
-                  <SelectItem value="shadcn-outline">Shadcn Outline (Shadcn 边框)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium">自定义样式类</label>
-              <Input v-model="actionForm.className" placeholder="可选，如 bg-emerald-50" />
-            </div>
-          </div>
-
-          <div class="space-y-4 pt-2 border-t">
-            <div class="space-y-2">
-              <label class="text-sm font-medium">交互效果</label>
-              <Select v-model="actionForm.effectType">
-                <SelectTrigger class="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">无反应 (默认)</SelectItem>
-                  <SelectItem value="modal">弹窗 (Modal)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <!-- 弹窗配置项 -->
-            <div v-if="actionForm.effectType === 'modal'" class="space-y-4 p-3 border rounded-md bg-muted/20 animate-in fade-in slide-in-from-top-1">
-              <div class="space-y-2">
-                <label class="text-xs font-medium">弹窗标题</label>
-                <Input v-model="actionForm.effectTitle" placeholder="请输入弹窗标题" />
-              </div>
-              <div class="space-y-2">
-                <label class="text-xs font-medium">弹窗内容</label>
-                <textarea 
-                  v-model="actionForm.effectContent"
-                  class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="请输入弹窗展示的详细信息"
-                ></textarea>
-              </div>
-
-              <!-- 弹窗表单项配置 -->
-              <div class="space-y-3 pt-2 border-t mt-2">
-                <div class="flex items-center justify-between">
-                  <label class="text-xs font-bold flex items-center gap-1">
-                    <FormInput class="w-3 h-3" />
-                    弹窗表单项 (可选)
-                  </label>
-                  <AButton size="mini" type="outline" @click="addEffectFormItem">
-                    <template #icon><Plus class="w-3 h-3" /></template>
-                    添加项
-                  </AButton>
-                </div>
-
-                <div v-if="actionForm.effectFormItems.length === 0" class="text-[10px] text-muted-foreground text-center py-4 border border-dashed rounded bg-muted/10">
-                  暂无表单项，点击上方按钮添加
-                </div>
-                
-                <div v-else class="space-y-3">
-                  <div 
-                    v-for="(item, index) in actionForm.effectFormItems" 
-                    :key="index"
-                    class="p-3 border rounded-lg bg-background/50 relative group"
-                  >
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      class="h-6 w-6 p-0 absolute top-2 right-2 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                      @click="removeEffectFormItem(index)"
-                    >
-                      <Trash2 class="w-3 h-3" />
-                    </Button>
-
-                    <div class="grid grid-cols-2 gap-3">
-                      <div class="space-y-1">
-                        <label class="text-[10px] text-muted-foreground">标签 (Label)</label>
-                        <Input v-model="item.label" class="h-7 text-xs" placeholder="如 用户名" />
-                      </div>
-                      <div class="space-y-1">
-                        <label class="text-[10px] text-muted-foreground">字段名 (Key)</label>
-                        <Input v-model="item.key" class="h-7 text-xs" placeholder="如 username" />
-                      </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3 mt-2">
-                      <div class="space-y-1">
-                        <label class="text-[10px] text-muted-foreground">类型 (Type)</label>
-                        <Select v-model="item.type">
-                          <SelectTrigger class="h-7 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="input">文本输入 (Input)</SelectItem>
-                            <SelectItem value="select">下拉选择 (Select)</SelectItem>
-                            <SelectItem value="date-range">时间范围 (DateRange)</SelectItem>
-                            <SelectItem value="tree-select">树形选择 (TreeSelect)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div class="space-y-1">
-                        <label class="text-[10px] text-muted-foreground">提示 (Placeholder)</label>
-                        <Input v-model="item.placeholder" class="h-7 text-xs" placeholder="请输入..." />
-                      </div>
-                    </div>
-
-                    <!-- 下拉项配置 (如果是 Select) -->
-                    <div v-if="item.type === 'select'" class="mt-2 space-y-1">
-                       <label class="text-[10px] text-muted-foreground">选项 (逗号隔开)</label>
-                       <Input 
-                          :model-value="item.options?.join(',')" 
-                          @update:model-value="(v) => item.options = String(v).split(',').filter(Boolean)"
-                          class="h-7 text-xs" 
-                          placeholder="选项1,选项2,选项3" 
-                        />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Preview Section -->
-          <div class="space-y-2 pt-2 border-t">
-            <label class="text-sm font-medium text-muted-foreground">预览</label>
-            <div class="flex items-center gap-3 p-3 rounded-md bg-muted/30">
-              <Button
-                v-if="actionForm.variant === 'shadcn-outline'"
-                variant="outline"
-                class="h-9 px-5"
-                :class="actionForm.className"
-              >
-                {{ actionForm.label || '按钮文本' }}
-              </Button>
-              <AButton 
-                v-else
-                :type="actionForm.variant as any"
-                :class="actionForm.className"
-              >
-                {{ actionForm.label || '按钮文本' }}
-              </AButton>
-              <span class="text-xs text-muted-foreground">← 按钮实际样式</span>
-            </div>
-          </div>
-        </div>
-      </AScrollbar>
-      <DialogFooter>
-        <Button variant="outline" @click="closeActionDialog">取消</Button>
-        <Button @click="handleSaveAction">{{ editingActionIndex !== null ? '保存' : '添加' }}</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  <AModal 
+    v-model:visible="actionCrud.dialogVisible.value" 
+    :title="actionCrud.mode.value === 'edit' ? '编辑操作按钮' : '添加操作按钮'"
+    @ok="actionCrud.handleSave" 
+    @cancel="actionCrud.closeDialog"
+    :width="600"
+  >
+    <AScrollbar style="max-height: 500px; overflow: auto;" class="pr-2">
+      <ConfigActionForm v-model="actionCrud.formData.value" />
+    </AScrollbar>
+  </AModal>
 
   <!-- Card Dialog -->
-  <Dialog v-model:open="cardDialogOpen">
-    <DialogContent class="sm:max-w-[400px]">
-      <DialogHeader>
-        <DialogTitle>{{ editingCardIndex !== null ? '编辑卡片' : '添加卡片' }}</DialogTitle>
-        <DialogDescription>{{ editingCardIndex !== null ? '修改卡片配置' : '添加新的卡片' }}</DialogDescription>
-      </DialogHeader>
-      <div class="space-y-4 py-4">
-        <div class="space-y-2">
-          <label class="text-sm font-medium">Key</label>
-          <Input v-model="cardForm.key" placeholder="如 total_orders" />
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium">标题</label>
-          <Input v-model="cardForm.title" placeholder="如 订单总数" />
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium">数据</label>
-          <Input v-model="cardForm.data" placeholder="如 1,234 或动态值" />
-        </div>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" @click="closeCardDialog">取消</Button>
-        <Button @click="handleSaveCard">{{ editingCardIndex !== null ? '保存' : '添加' }}</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  <AModal
+    v-model:visible="cardCrud.dialogVisible.value"
+    :title="cardCrud.mode.value === 'edit' ? '编辑卡片' : '添加卡片'"
+    @ok="cardCrud.handleSave"
+    @cancel="cardCrud.closeDialog"
+  >
+    <ConfigCardForm v-model="cardCrud.formData.value" />
+  </AModal>
 
   <!-- Add Sub Nav Dialog -->
-  <Dialog v-model:open="addSubNavDialogOpen">
-    <DialogContent class="sm:max-w-[400px]">
-      <DialogHeader>
-        <DialogTitle>添加子导航</DialogTitle>
-        <DialogDescription>
-          添加一个新的子导航项
-        </DialogDescription>
-      </DialogHeader>
+  <AModal
+    v-model:visible="addSubNavDialogOpen"
+    title="添加子导航"
+    @ok="handleAddSubNav"
+    @cancel="closeAddSubNavDialog"
+  >
       <div class="space-y-4 py-4">
         <div class="space-y-2">
           <label class="text-sm font-medium">标题</label>
-          <Input v-model="addSubNavForm.title" placeholder="请输入导航标题" />
+          <AInput v-model="addSubNavForm.title" placeholder="请输入导航标题" />
         </div>
       </div>
-      <DialogFooter>
-        <Button variant="outline" @click="closeAddSubNavDialog">取消</Button>
-        <Button @click="handleAddSubNav">添加</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  </AModal>
 
   <!-- Add Main Nav Dialog -->
-  <Dialog v-model:open="addMainNavDialogOpen">
-    <DialogContent class="sm:max-w-[400px]">
-      <DialogHeader>
-        <DialogTitle>添加一级导航</DialogTitle>
-        <DialogDescription>
-          添加一个新的主导航项
-        </DialogDescription>
-      </DialogHeader>
+  <AModal
+    v-model:visible="addMainNavDialogOpen"
+    title="添加一级导航"
+    @ok="handleAddMainNav"
+    @cancel="closeAddMainNavDialog"
+  >
       <div class="space-y-4 py-4">
         <div class="space-y-2">
           <label class="text-sm font-medium">标题</label>
-          <Input v-model="addMainNavForm.title" placeholder="请输入导航标题" />
+          <AInput v-model="addMainNavForm.title" placeholder="请输入导航标题" />
         </div>
         <div class="space-y-2">
           <label class="text-sm font-medium">图标</label>
@@ -2371,26 +1823,19 @@ const handleSaveToCloud = async () => {
           </ASelect>
         </div>
       </div>
-      <DialogFooter>
-        <Button variant="outline" @click="closeAddMainNavDialog">取消</Button>
-        <Button @click="handleAddMainNav">添加</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  </AModal>
 
   <!-- Edit Main Nav Dialog (Arco Card Based as requested) -->
-  <Dialog v-model:open="editMainNavDialogOpen">
-    <DialogContent class="sm:max-w-[450px] p-0 overflow-hidden border-none bg-transparent shadow-none">
-      <ACard :style="{ width: '100%', borderRadius: '12px' }" :title="'编辑主导航'" :bordered="false">
-        <template #extra>
-          <Button variant="ghost" size="sm" class="h-6 w-6 p-0" @click="editMainNavDialogOpen = false">
-            <Trash2 class="w-4 h-4" />
-          </Button>
-        </template>
+  <AModal
+    v-model:visible="editMainNavDialogOpen"
+    title="编辑主导航"
+    @ok="handleEditMainNav"
+    @cancel="editMainNavDialogOpen = false"
+  >
         <div class="space-y-5 py-2">
           <div class="space-y-2">
             <label class="text-sm font-medium text-[var(--color-text-2)]">导航标题</label>
-            <Input v-model="mainNavForm.title" placeholder="请输入导航标题" class="h-10" />
+            <AInput v-model="mainNavForm.title" placeholder="请输入导航标题" class="h-10" />
           </div>
           
           <div class="space-y-2">
@@ -2414,48 +1859,27 @@ const handleSaveToCloud = async () => {
             <p>修改主导航的图标和标题会立即反映在预览中。点击“写入源码”可持久化到本地文件。</p>
           </div>
         </div>
-        
-        <template #actions>
-          <div class="flex justify-end gap-2 px-4 pb-4">
-            <AButton @click="editMainNavDialogOpen = false">取消</AButton>
-            <AButton type="primary" @click="handleEditMainNav">保存更改</AButton>
-          </div>
-        </template>
-      </ACard>
-    </DialogContent>
-  </Dialog>
+  </AModal>
 
   <!-- Issue 7: 确认对话框 (替代 confirm()) -->
-  <AlertDialog v-model:open="confirmDialogOpen">
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>{{ confirmDialogTitle }}</AlertDialogTitle>
-        <AlertDialogDescription class="whitespace-pre-line">
-          {{ confirmDialogDescription }}
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel @click="handleCancelConfirm">取消</AlertDialogCancel>
-        <AlertDialogAction @click="handleConfirmAction">确定</AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
+  <AModal
+    v-model:visible="confirmDialogOpen"
+    :title="confirmDialogTitle"
+    @ok="handleConfirmAction"
+    @cancel="handleCancelConfirm"
+  >
+        <p class="whitespace-pre-line">{{ confirmDialogDescription }}</p>
+  </AModal>
 
   <!-- 导入确认对话框 -->
-  <AlertDialog v-model:open="importConfirmDialogOpen">
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>确认导入配置</AlertDialogTitle>
-        <AlertDialogDescription>
-          导入配置将覆盖当前设置并同步到云端。确定要继续吗？
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel @click="importConfirmDialogOpen = false">取消</AlertDialogCancel>
-        <AlertDialogAction @click="handleConfirmImport">确认导入</AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
+  <AModal
+    v-model:visible="importConfirmDialogOpen"
+    title="确认导入配置"
+    @ok="handleConfirmImport"
+    @cancel="importConfirmDialogOpen = false"
+  >
+        <p>导入配置将覆盖当前设置并同步到云端。确定要继续吗？</p>
+  </AModal>
 
   </div>
 </template>
@@ -2495,5 +1919,28 @@ const handleSaveToCloud = async () => {
   outline: none;
   box-shadow: none;
   border-color: hsl(var(--primary));
+}
+
+/* Arco 输入/文本域/选择框 样式覆盖 - 白色背景 */
+:deep(.arco-input-wrapper),
+:deep(.arco-textarea-wrapper),
+:deep(.arco-select-view-single) {
+  background-color: var(--color-bg-2);
+  border: 1px solid var(--color-neutral-3);
+  border-radius: 4px;
+}
+
+:deep(.arco-input-wrapper:hover),
+:deep(.arco-textarea-wrapper:hover),
+:deep(.arco-select-view-single:hover) {
+  background-color: var(--color-bg-2);
+  border-color: rgb(var(--primary-6));
+}
+
+:deep(.arco-input-wrapper-focus),
+:deep(.arco-textarea-wrapper-focus),
+:deep(.arco-select-view-focus) {
+  background-color: var(--color-bg-2);
+  border-color: rgb(var(--primary-6));
 }
 </style>

@@ -44,12 +44,14 @@ import {
     Plus,
     GalleryVerticalEnd,
     AudioWaveform,
-    Command
+    Command,
+    Pencil,
+    Eye
 } from 'lucide-vue-next'
 import { useConfigStore } from '@/stores/configStore'
 import { useAuthStore } from '@/stores/authStore'
-import { useNavigation } from '@/config/sidebar'
-import type { TeamItem, TeamPermissions } from '@/config/sidebar'
+import { useNavigation } from '@/config/schema'
+import type { TeamItem, TeamPermissions } from '@/config/schema'
 import { AIChatButton, AIChatWindow } from '@/components/ai'
 
 const configStore = useConfigStore()
@@ -199,6 +201,7 @@ const handleUserAction = async (value: any) => {
         case 'upgrade':
         case 'settings': setNavigation('系统', '配置设置', 'settings'); setDetailTitle(null); break
         case 'billing': setNavigation('Account', 'Billing', 'billing'); setDetailTitle(null); break
+        case 'toggle-edit': configStore.setEditMode(!configStore.isEditMode); break
     }
 }
 
@@ -373,6 +376,14 @@ const handleSubNavClick = () => {
                     </div>
                     <template #content>
                         <div class="py-1 min-w-[150px]">
+                            <a-doption value="toggle-edit" class="py-2.5">
+                                <template #icon>
+                                    <Pencil v-if="!configStore.isEditMode" class="size-4 opacity-70"/>
+                                    <Eye v-else class="size-4 opacity-70"/>
+                                </template>
+                                <span class="ml-1">{{ configStore.isEditMode ? '预览模式' : '编辑模式' }}</span>
+                            </a-doption>
+                            <a-divider class="my-1" />
                             <a-doption value="profile" class="py-2.5" id="nav-profile">
                                 <template #icon><IconUser class="size-4 opacity-70"/></template>
                                 <span class="ml-1">用户中心</span>
