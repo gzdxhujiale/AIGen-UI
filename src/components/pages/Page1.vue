@@ -3,6 +3,7 @@ import { ref, computed, reactive, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message } from '@arco-design/web-vue'
 import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
+import { safeJsonParseWithError } from '@/utils/error'
 import {
   Select,
   SelectContent,
@@ -265,7 +266,15 @@ function handleDragEnd() {
   dragOverIndex.value = -1
 }
 
-// 打开编辑弹窗
+/**
+ * 打开编辑弹窗
+ * 
+ * 支持新增和编辑两种模式，根据 type 参数决定编辑哪种配置项
+ * 
+ * @param type - 配置项类型：filter(筛选项)、column(表格列)、action(操作按钮)、card(卡片)
+ * @param mode - 操作模式：add(新增) 或 edit(编辑)
+ * @param index - 编辑模式下的项索引（可选）
+ */
 function openEditDialog(type: 'filter' | 'column' | 'action' | 'card', mode: 'add' | 'edit', index?: number) {
   editDialogType.value = type
   editDialogMode.value = mode
@@ -347,7 +356,16 @@ function openEditDialog(type: 'filter' | 'column' | 'action' | 'card', mode: 'ad
   editDialogOpen.value = true
 }
 
-// 保存编辑
+/**
+ * 保存编辑内容
+ * 
+ * 根据当前 editDialogType 和 editDialogMode 决定操作：
+ * - 新增模式：自动生成 key，追加到列表
+ * - 编辑模式：更新指定索引的项
+ * 
+ * @remarks
+ * 使用 Arco Message 组件显示操作结果
+ */
 function saveEdit() {
   if (!pageConfig.value) return
   
@@ -363,7 +381,7 @@ function saveEdit() {
       placeholder: filterEditForm.value.placeholder,
       visible: filterEditForm.value.visible,
       options: filterEditForm.value.options ? filterEditForm.value.options.split(/[，,]/).map(s => s.trim()).filter(s => s) : [],
-      treeOptions: filterEditForm.value.treeOptions ? JSON.parse(filterEditForm.value.treeOptions || '[]') : undefined
+      treeOptions: filterEditForm.value.treeOptions ? safeJsonParseWithError(filterEditForm.value.treeOptions, '树形数据') ?? undefined : undefined
     }
 
     if (editDialogMode.value === 'add') {
@@ -453,7 +471,15 @@ function saveEdit() {
   Message.success(editDialogMode.value === 'add' ? '添加成功' : '保存成功')
 }
 
-// 删除项
+/**
+ * 删除指定配置项
+ * 
+ * @param type - 配置项类型
+ * @param index - 要删除的项索引
+ * 
+ * @remarks
+ * 删除后会立即更新 configStore，无需手动保存
+ */
 function deleteItem(type: 'filter' | 'column' | 'action' | 'card', index: number) {
   if (!pageConfig.value) return
   

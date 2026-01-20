@@ -80,27 +80,4 @@ watch(formState, (newVal) => {
   </div>
 </template>
 
-<style scoped>
-/* Arco 输入/文本域/选择框 样式覆盖 - 白色背景 */
-:deep(.arco-input-wrapper),
-:deep(.arco-textarea-wrapper),
-:deep(.arco-select-view-single) {
-  background-color: var(--color-bg-2);
-  border: 1px solid var(--color-neutral-3);
-  border-radius: 4px;
-}
-
-:deep(.arco-input-wrapper:hover),
-:deep(.arco-textarea-wrapper:hover),
-:deep(.arco-select-view-single:hover) {
-  background-color: var(--color-bg-2);
-  border-color: rgb(var(--primary-6));
-}
-
-:deep(.arco-input-wrapper-focus),
-:deep(.arco-textarea-wrapper-focus),
-:deep(.arco-select-view-focus) {
-  background-color: var(--color-bg-2);
-  border-color: rgb(var(--primary-6));
-}
-</style>
+<!-- 样式已抽取至全局 src/styles/arco-form-override.css -->

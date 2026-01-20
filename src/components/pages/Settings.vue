@@ -29,6 +29,7 @@ import ConfigActionForm from '@/components/config/ConfigActionForm.vue'
 import ConfigCardForm from '@/components/config/ConfigCardForm.vue'
 
 import { useConfigCrud } from '@/composables/useConfigCrud'
+import { safeJsonParseWithError } from '@/utils/error'
 
 // Store
 const configStore = useConfigStore()
@@ -269,12 +270,11 @@ const filterCrud = useConfigCrud({
             newFilter.options = form.options ? form.options.split(/[，,]/).map(s => s.trim()).filter(s => s) : []
         } else if (form.type === 'tree-select') {
             newFilter.defaultValue = ''
-            try {
-                newFilter.treeOptions = JSON.parse(form.treeOptions || '[]')
-            } catch (e) {
-                alert('Tree Options JSON 格式错误')
-                return
+            const parsed = safeJsonParseWithError(form.treeOptions || '[]', '树形数据 (Tree Options)')
+            if (parsed === null) {
+                return // 解析失败，用户已收到错误提示
             }
+            newFilter.treeOptions = parsed as any[]
         } else if (form.type === 'date-range') {
             newFilter.defaultValue = undefined
         } else {

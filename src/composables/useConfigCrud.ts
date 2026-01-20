@@ -1,4 +1,4 @@
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 
 interface ConfigCrudOptions<T> {
@@ -75,7 +75,7 @@ export function useConfigCrud<T extends Record<string, any>>(options: ConfigCrud
      * @param index Index of the item to delete
      * @param confirmMessage Custom confirmation message
      */
-    const handleDelete = (index: number, confirmMessage?: string) => {
+    const handleDelete = (index: number, _confirmMessage?: string) => {
         if (options.doDelete) {
             options.doDelete(index)
             Message.success('删除成功')
