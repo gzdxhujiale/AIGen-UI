@@ -1,0 +1,142 @@
+// ============================================
+// 页面配置相关类型定义
+// ============================================
+
+/**
+ * 树形选择节点类型
+ */
+export interface TreeNode {
+    value: string
+    label: string
+    children?: TreeNode[]
+}
+
+/**
+ * 筛选项配置
+ */
+export interface FilterConfig {
+    key: string
+    type: 'input' | 'select' | 'date-range' | 'tree-select'
+    label: string
+    placeholder?: string
+    options?: string[]
+    treeOptions?: TreeNode[]
+    defaultValue?: string | any | undefined
+    visible?: boolean
+}
+
+/**
+ * 筛选区布局配置
+ */
+export interface FilterAreaConfig {
+    show?: boolean     // 是否显示筛选区
+    columns: number    // 每行显示的筛选项数量
+    gap: string        // 筛选项之间的间距
+    filters: FilterConfig[]
+}
+
+/**
+ * 卡片项配置
+ */
+export interface CardItemConfig {
+    key: string
+    title: string      // 卡片标题
+    data: string | number  // 卡片数据
+}
+
+/**
+ * 卡片区配置
+ */
+export interface CardAreaConfig {
+    show: boolean           // 是否显示卡片区
+    columns: number         // 每行显示的卡片数量
+    gap: string             // 卡片之间的间距
+    cardHeight?: string     // 卡片高度
+    cardWidth?: string      // 卡片宽度
+    cards: CardItemConfig[] // 卡片列表
+}
+
+/**
+ * 表格列配置
+ */
+export interface TableColumn {
+    key: string
+    label: string
+    width?: string                    // 列宽，如 '100px'
+    minWidth?: string                 // 最小宽度
+    type?: 'text' | 'badge' | 'status-badge' | 'text-button'
+    fixed?: 'left' | 'right'          // 列固定位置
+    align?: 'left' | 'center' | 'right' // 对齐方式
+    ellipsis?: boolean                // 是否显示省略号
+    tooltip?: boolean                 // 是否显示提示
+    visible?: boolean
+    mockFormat?: 'text' | 'datetime' | 'number' | 'list' // 虚拟数据格式
+    mockList?: string[] // 当格式为 'list' 时的候选数据
+    buttons?: string[] // 文字按钮列表
+}
+
+/**
+ * 表格区配置
+ */
+export interface TableAreaConfig {
+    show?: boolean          // 是否显示表格区
+    height?: string         // 表格容器高度
+    scrollX?: boolean       // 是否启用横向滚动
+    scrollY?: boolean       // 是否启用纵向滚动
+    stickyHeader?: boolean  // 是否表头吸顶 (默认 true)
+    showCheckbox?: boolean  // 是否显示复选框列
+    fixedLayout?: boolean   // 是否使用固定布局
+    pageSize?: number       // 每页显示行数
+    columns: TableColumn[]
+}
+
+/**
+ * 操作按钮配置
+ */
+export interface ActionButtonConfig {
+    key: string
+    label: string
+    variant?: 'primary' | 'outline' | 'text' | 'shadcn-outline'
+    className?: string       // 自定义样式类
+    visible?: boolean
+    effectType?: 'none' | 'modal'
+    effectConfig?: {
+        title?: string
+        content?: string
+        formItems?: FilterConfig[]
+    }
+}
+
+/**
+ * 操作区配置
+ */
+export interface ActionsAreaConfig {
+    show?: boolean                  // 是否显示操作区
+    buttons: ActionButtonConfig[]   // 操作按钮列表
+}
+
+/**
+ * Page1 模板完整配置
+ */
+export interface Page1Config {
+    // 顶部栏选项（可选）
+    topBar?: {
+        appOptions?: string[]
+        langOptions?: string[]
+    }
+    // 筛选区配置
+    filterArea: FilterAreaConfig
+    // 操作区配置（可选）
+    actionsArea?: ActionsAreaConfig
+    // 卡片区配置（可选）
+    cardArea?: CardAreaConfig
+    // 表格区配置
+    tableArea: TableAreaConfig
+    // 模拟数据生成函数
+    mockData: () => any[]
+}
+
+/**
+ * 不含 mockData 的配置类型（用于序列化）
+ */
+export type Page1ConfigData = Omit<Page1Config, 'mockData'>

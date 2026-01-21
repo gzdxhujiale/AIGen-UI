@@ -9,7 +9,7 @@ import {
 
 defineProps<{
   label: string
-  modelValue: string
+  modelValue: string | undefined
   options: string[]
 }>()
 

@@ -16,7 +16,7 @@ import ConfigFilterForm from '@/components/config/ConfigFilterForm.vue'
 import ConfigColumnForm from '@/components/config/ConfigColumnForm.vue'
 import ConfigActionForm from '@/components/config/ConfigActionForm.vue'
 import ConfigCardForm from '@/components/config/ConfigCardForm.vue'
-import { useNavigation } from '@/config/schema'
+import { useNavigation } from '@/composables/useNavigation'
 import { useConfigStore, type Page1Config, type FilterConfig, type TableColumn, type ActionButtonConfig , type CardItemConfig } from '@/stores/configStore'
 import { useConfigCrud } from '@/composables/useConfigCrud'
 

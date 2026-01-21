@@ -3,7 +3,7 @@ import type { CalendarGridRowProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { CalendarGridRow, useForwardProps } from "reka-ui"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 const props = defineProps<CalendarGridRowProps & { class?: HTMLAttributes["class"] }>()
 
@@ -20,3 +20,4 @@ const forwardedProps = useForwardProps(delegatedProps)
     <slot />
   </CalendarGridRow>
 </template>
+

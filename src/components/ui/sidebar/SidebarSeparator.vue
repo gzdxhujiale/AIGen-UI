@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Separator } from '@/components/ui/separator'
 
 const props = defineProps<{
@@ -17,3 +17,4 @@ const props = defineProps<{
     <slot />
   </Separator>
 </template>
+

@@ -3,7 +3,7 @@ import type { TooltipContentEmits, TooltipContentProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { TooltipArrow, TooltipContent, TooltipPortal, useForwardPropsEmits } from "reka-ui"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 defineOptions({
   inheritAttrs: false,
@@ -32,3 +32,4 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
     </TooltipContent>
   </TooltipPortal>
 </template>
+

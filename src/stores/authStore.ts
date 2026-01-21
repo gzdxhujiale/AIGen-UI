@@ -1,7 +1,8 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/api/supabase'
+import { supabaseConfigService } from './services/supabase-config.service'
 
 export const useAuthStore = defineStore('auth', () => {
     // State
@@ -11,9 +12,12 @@ export const useAuthStore = defineStore('auth', () => {
     const error = ref<string | null>(null)
 
     // Custom user config state
+    // 注意: user_name 和 style 字段已从 user_configs 表移除
+    // user_name 改用 Users 表的 display_name
+    // style 默认使用 'arco'
     const customUserName = ref('')
     const teamsConfig = ref<any>(null)
-    const stylePreference = ref<'shadcn' | 'arco'>('shadcn')
+    const stylePreference = ref<'shadcn' | 'arco'>('arco') // 默认 Arco Design
     const menuConfig = ref<any[]>([])
 
     let authSubscription: { unsubscribe: () => void } | null = null
@@ -45,43 +49,48 @@ export const useAuthStore = defineStore('auth', () => {
     ]
 
     // Helper to fetch user configs
-    const fetchUserConfigs = async (userId: string) => {
+    // 注意: user_name, style, menu_config 字段已从 user_configs 表移除
+    // 配置现在由 configStore 的分类存储管理
+    const fetchUserConfigs = async () => {
         try {
-            const { data, error } = await supabase
-                .from('user_configs')
-                .select('user_name, teams_config, style, menu_config')
-                .eq('user_id', userId)
-                .single()
+            // 1. 并行获取团队配置和菜单配置
+            const [teamsResult, appSettingsResult] = await Promise.all([
+                supabaseConfigService.loadTeams(),
+                supabaseConfigService.loadAppSettings()
+            ])
 
-            if (error) {
-                if (error.code === 'PGRST116') { // code for no rows found
-                    console.log('No user_config found, using defaults')
-                    // Not persisting creates, just using defaults in memory for now until save
-                    menuConfig.value = JSON.parse(JSON.stringify(DEFAULT_MENU_CONFIG))
-                } else {
-                    console.error('Error fetching user_configs:', error)
-                }
-                return
+            const { data: teamsData, error: teamsError } = teamsResult
+            const { data: appSettingsData, error: appSettingsError } = appSettingsResult
+
+            if (teamsError) {
+                console.error('Error fetching teams config:', teamsError)
             }
 
-            if (data) {
-                customUserName.value = data.user_name || ''
-                // 如果 teams_config 为空，使用默认配置
-                teamsConfig.value = data.teams_config && data.teams_config.length > 0
-                    ? data.teams_config
-                    : [{
-                        id: 'team-default',
-                        name: 'AIGen-UI',
-                        logo: 'IconMosaic',
-                        role: 'online',
-                        permissions: ['read']
-                    }]
-                stylePreference.value = data.style || 'shadcn'
-
-                menuConfig.value = data.menu_config && data.menu_config.length > 0
-                    ? data.menu_config
-                    : JSON.parse(JSON.stringify(DEFAULT_MENU_CONFIG))
+            if (teamsData) {
+                teamsConfig.value = teamsData
+            } else {
+                // 使用默认团队配置
+                teamsConfig.value = [{
+                    id: 'team-default',
+                    name: 'AIGen-UI',
+                    logo: 'IconMosaic',
+                    role: 'online',
+                    permissions: ['read']
+                }]
             }
+
+            if (appSettingsError) {
+                console.error('Error fetching app settings:', appSettingsError)
+            }
+
+            if (appSettingsData && appSettingsData.items) {
+                menuConfig.value = appSettingsData.items
+            } else {
+                // 使用默认菜单配置
+                menuConfig.value = JSON.parse(JSON.stringify(DEFAULT_MENU_CONFIG))
+            }
+
+            // 注意: display_name 通过 userDisplayName computed 从 user_metadata 获取
         } catch (e) {
             console.error('Failed to fetch user configs:', e)
         }
@@ -92,36 +101,27 @@ export const useAuthStore = defineStore('auth', () => {
 
     /**
      * Update user profile configuration
+     * 注意: user_name, style 已从 user_configs 移除
+     * 使用 supabaseConfigService 的分类存储
      */
     const updateUserProfile = async (name: string, teams: any, style?: 'shadcn' | 'arco', menu?: any[]) => {
         if (!user.value) return { success: false, error: 'Not authenticated' }
 
         try {
-            const updates: any = {
-                user_id: user.value.id,
-                user_name: name,
-                teams_config: teams,
-                updated_at: new Date().toISOString()
-            }
+            // 更新团队配置
+            const { error: teamsError } = await supabaseConfigService.saveTeams(teams)
+            if (teamsError) throw new Error(teamsError)
 
-            if (style) {
-                updates.style = style
-            }
+            // 更新菜单配置 (app_settings)
+            // 如果传入了 menu，则保存；否则保存当前的 menuConfig
+            const menuToSave = menu || menuConfig.value
+            // 包装在 items 属性中以匹配预期结构
+            const { error: menuError } = await supabaseConfigService.saveAppSettings({ items: menuToSave })
+            if (menuError) throw new Error(menuError)
 
-            if (menu) {
-                updates.menu_config = menu
-            } else {
-                // If not provided, keep current? or pass current? 
-                // Better to pass current value ensuring we don't erase it if called from somewhere else
-                updates.menu_config = menuConfig.value
-            }
 
-            const { error: upsertError } = await supabase
-                .from('user_configs')
-                .upsert(updates, { onConflict: 'user_id' })
 
-            if (upsertError) throw upsertError
-
+            // 更新本地状态
             customUserName.value = name
             teamsConfig.value = teams
             if (style) stylePreference.value = style
@@ -168,7 +168,9 @@ export const useAuthStore = defineStore('auth', () => {
 
                 // Fetch user configs if logged in
                 if (user.value) {
-                    await fetchUserConfigs(user.value.id)
+                    await supabaseConfigService.init()
+                    // Refactor: We moved fetchUserConfigs to App.vue for parallel executio
+                    // await fetchUserConfigs()
                 }
             }
 
@@ -184,7 +186,8 @@ export const useAuthStore = defineStore('auth', () => {
                     user.value = newSession?.user ?? null
 
                     if (event === 'SIGNED_IN' && user.value) {
-                        await fetchUserConfigs(user.value.id)
+                        await supabaseConfigService.init()
+                        await fetchUserConfigs()
                     } else if (event === 'SIGNED_OUT') {
                         error.value = null
                         customUserName.value = ''
@@ -352,6 +355,8 @@ export const useAuthStore = defineStore('auth', () => {
         resetPassword,
         updateUserProfile,
         updateMenuConfig,
+        fetchUserConfigs, // Expose for parallel loading
         cleanup
     }
 })
+

@@ -5,7 +5,7 @@ import { reactiveOmit } from "@vueuse/core"
 import {
   AlertDialogDescription,
 } from "reka-ui"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 const props = defineProps<AlertDialogDescriptionProps & { class?: HTMLAttributes["class"] }>()
 
@@ -21,3 +21,4 @@ const delegatedProps = reactiveOmit(props, "class")
     <slot />
   </AlertDialogDescription>
 </template>
+

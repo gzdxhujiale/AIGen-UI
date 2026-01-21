@@ -7,7 +7,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { cn } from '@/lib/utils'
+import { cn } from '@/utils/cn'
 
 // 树节点类型
 export interface TreeNode {
@@ -18,7 +18,7 @@ export interface TreeNode {
 
 const props = defineProps<{
   label: string
-  modelValue: string
+  modelValue: string | undefined
   options: TreeNode[]
   placeholder?: string
 }>()
@@ -205,3 +205,4 @@ const isSelected = (nodeValue: string) => {
     </Popover>
   </div>
 </template>
+

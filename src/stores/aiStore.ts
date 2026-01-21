@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import { streamChat, isCozeConfigured, type ChatMessage } from '@/lib/coze'
+import { streamChat, isCozeConfigured, type ChatMessage } from '@/api/coze'
 import { useConfigStore } from './configStore'
 import { toast } from 'vue-sonner'
 
@@ -554,3 +554,4 @@ export const useAIStore = defineStore('ai', () => {
         setButtonPosition
     }
 })
+

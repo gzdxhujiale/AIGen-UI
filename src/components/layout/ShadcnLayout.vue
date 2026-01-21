@@ -92,8 +92,9 @@ import {
 // --- Logic & Config ---
 import { useConfigStore } from '@/stores/configStore'
 import { useAuthStore } from '@/stores/authStore'
-import { useNavigation, defaultSidebarConfig } from '@/config/schema'
-import type { TeamItem, TeamPermissions } from '@/config/schema'
+import { useNavigation } from '@/composables/useNavigation'
+import { defaultSidebarConfig } from '@/config/schema'
+import type { TeamItem, TeamPermissions } from '@/types'
 
 const configStore = useConfigStore()
 const authStore = useAuthStore()
@@ -283,8 +284,7 @@ const handleEditSubmit = () => {
     } else if (editDialogMode.value === 'add-sub') {
         const newId = configStore.addSubNavItem(editForm.groupIdx, editForm.mainItemId, {
             title: editForm.title,
-            url: editForm.url,
-            template: ''
+            url: editForm.url
         })
         
         if (newId) {

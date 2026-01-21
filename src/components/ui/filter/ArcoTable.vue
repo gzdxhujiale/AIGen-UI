@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { Table as ATable, type TableColumnData } from '@arco-design/web-vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { TableColumn } from '@/config/schema'
+import type { TableColumn } from '@/types'
 
 // Props
 interface Props {

@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input'
 
 defineProps<{
   label: string
-  modelValue: string | number
+  modelValue: string | number | undefined
   placeholder?: string
 }>()
 

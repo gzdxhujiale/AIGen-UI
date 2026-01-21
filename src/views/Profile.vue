@@ -131,11 +131,18 @@ const onMenuReorder = () => {
     autoSave()
 }
 
+// Helper to safely extract array
+const getArray = (data: any) => {
+    if (Array.isArray(data)) return data
+    if (data && Array.isArray(data.teams)) return data.teams
+    return []
+}
+
 // Initialize form data from store
 // 从 store 初始化表单数据
 const initForm = () => {
   form.userName = authStore.customUserName || authStore.userDisplayName
-  form.teams = JSON.parse(JSON.stringify(authStore.teamsConfig || []))
+  form.teams = JSON.parse(JSON.stringify(getArray(authStore.teamsConfig)))
   form.menuConfig = JSON.parse(JSON.stringify(authStore.menuConfig || []))
 }
 
@@ -196,8 +203,11 @@ watch(() => authStore.customUserName, (newVal) => {
 })
 
 watch(() => authStore.teamsConfig, (newVal) => {
-    if (newVal && form.teams.length === 0) {
-        form.teams = JSON.parse(JSON.stringify(newVal))
+    // Only update if local form is empty or needs sync (be careful not to overwrite user edits)
+    // But for initial load sync it is important
+    const newTeams = getArray(newVal)
+    if (newTeams.length > 0 && form.teams.length === 0) {
+        form.teams = JSON.parse(JSON.stringify(newTeams))
     }
 })
 

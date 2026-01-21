@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
 import { computed } from "vue"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Skeleton } from '@/components/ui/skeleton'
 
 const props = defineProps<{
@@ -33,3 +33,4 @@ const width = computed(() => {
     />
   </div>
 </template>
+

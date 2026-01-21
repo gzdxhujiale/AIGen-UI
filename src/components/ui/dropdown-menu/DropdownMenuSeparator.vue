@@ -5,7 +5,7 @@ import { reactiveOmit } from "@vueuse/core"
 import {
   DropdownMenuSeparator,
 } from "reka-ui"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 const props = defineProps<DropdownMenuSeparatorProps & {
   class?: HTMLAttributes["class"]
@@ -21,3 +21,4 @@ const delegatedProps = reactiveOmit(props, "class")
     :class="cn('bg-border -mx-1 my-1 h-px', props.class)"
   />
 </template>
+

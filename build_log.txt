@@ -1,0 +1,8 @@
+npm warn Unknown user config "electron_mirror". This will stop working in the next major version of npm.
+npm warn Unknown user config "electron_builder_binaries_mirror". This will stop working in the next major version of npm.
+
+> aigen-ui@0.0.0 build
+> vue-tsc -b && vite build
+
+src/composables/useNavigation.ts(80,34): error TS2339: Property 'template' does not exist on type '{ id: string; title: string; url: string; badge?: string | undefined; component?: { topBar?: { appOptions?: string[] | undefined; langOptions?: string[] | undefined; } | undefined; filterArea: { ...; }; actionsArea?: { ...; } | undefined; cardArea?: { ...; } | undefined; tableArea: { ...; }; mockData: () => any[]; }...'.
+src/composables/useNavigation.ts(81,40): error TS2339: Property 'template' does not exist on type '{ id: string; title: string; url: string; badge?: string | undefined; component?: { topBar?: { appOptions?: string[] | undefined; langOptions?: string[] | undefined; } | undefined; filterArea: { ...; }; actionsArea?: { ...; } | undefined; cardArea?: { ...; } | undefined; tableArea: { ...; }; mockData: () => any[]; }...'.

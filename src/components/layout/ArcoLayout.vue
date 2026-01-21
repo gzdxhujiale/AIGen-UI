@@ -55,8 +55,8 @@ import {
 } from 'lucide-vue-next'
 import { useConfigStore, type NavMainItem, type NavSubItem } from '@/stores/configStore'
 import { useAuthStore } from '@/stores/authStore'
-import { useNavigation } from '@/config/schema'
-import type { TeamItem, TeamPermissions } from '@/config/schema'
+import { useNavigation } from '@/composables/useNavigation'
+import type { TeamItem, TeamPermissions } from '@/types'
 import { AIChatButton, AIChatWindow } from '@/components/ai'
 import draggable from 'vuedraggable'
 import { Modal as AModal, Input as AInput, Form as AForm, FormItem as AFormItem, Message, Popconfirm as APopconfirm } from '@arco-design/web-vue'
@@ -230,39 +230,57 @@ const editForm = reactive({
     icon: ''
 })
 
-const openAddMainDialog = (groupIdx: number) => {
+const getGroupIndex = (label: string) => {
+    return configStore.navGroups.findIndex(g => g.label === label)
+}
+
+const openAddMainDialog = (groupLabel: string) => {
+    const idx = getGroupIndex(groupLabel)
+    if (idx === -1) {
+        Message.error('无法找到对应的导航组')
+        return
+    }
     editDialogMode.value = 'add-main'
     editDialogTitle.value = '添加一级导航'
-    editForm.groupIdx = groupIdx
+    editForm.groupIdx = idx
     editForm.title = ''
     editForm.icon = 'IconSettings'
     editDialogVisible.value = true
 }
 
-const openEditMainDialog = (groupIdx: number, item: NavMainItem) => {
+const openEditMainDialog = (groupLabel: string, item: NavMainItem) => {
+    const idx = getGroupIndex(groupLabel)
+    if (idx === -1) return
+
     editDialogMode.value = 'edit-main'
     editDialogTitle.value = '编辑一级导航'
-    editForm.groupIdx = groupIdx
+    editForm.groupIdx = idx
     editForm.mainItemId = item.id
     editForm.title = item.title
     editForm.icon = typeof item.icon === 'string' ? item.icon : (item.icon?.name || 'IconSettings')
     editDialogVisible.value = true
 }
 
-const openAddSubDialog = (groupIdx: number, mainItemId: string) => {
+const openAddSubDialog = (groupLabel: string, mainItemId: string) => {
+    const idx = getGroupIndex(groupLabel)
+    if (idx === -1) return
+
     editDialogMode.value = 'add-sub'
     editDialogTitle.value = '添加二级导航'
-    editForm.groupIdx = groupIdx
+    editForm.groupIdx = idx
     editForm.mainItemId = mainItemId
     editForm.title = ''
     editForm.url = '#'
     editDialogVisible.value = true
 }
 
-const openEditSubDialog = (groupIdx: number, mainItemId: string, subItem: NavSubItem) => {
+const openEditSubDialog = (groupLabel: string, mainItemId: string, subItem: NavSubItem) => {
+    const idx = getGroupIndex(groupLabel)
+    if (idx === -1) return
+
     editDialogMode.value = 'edit-sub'
     editDialogTitle.value = '编辑二级导航'
-    editForm.groupIdx = groupIdx
+    editForm.groupIdx = idx
     editForm.mainItemId = mainItemId
     editForm.subItemId = subItem.id
     editForm.title = subItem.title
@@ -293,8 +311,7 @@ const handleEditSubmit = () => {
     } else if (editDialogMode.value === 'add-sub') {
         const newId = configStore.addSubNavItem(editForm.groupIdx, editForm.mainItemId, {
             title: editForm.title,
-            url: editForm.url,
-            template: ''
+            url: editForm.url
         })
         
         if (newId) {
@@ -314,14 +331,20 @@ const handleEditSubmit = () => {
     editDialogVisible.value = false
 }
 
-const handleDeleteMain = (groupIdx: number, itemId: string) => {
-    configStore.deleteNavMainItem(groupIdx, itemId)
-    Message.success('删除成功')
+const handleDeleteMain = (groupLabel: string, itemId: string) => {
+    const idx = getGroupIndex(groupLabel)
+    if (idx > -1) {
+        configStore.deleteNavMainItem(idx, itemId)
+        Message.success('删除成功')
+    }
 }
 
-const handleDeleteSub = (groupIdx: number, mainItemId: string, subItemId: string) => {
-    configStore.deleteSubNavItem(groupIdx, mainItemId, subItemId)
-    Message.success('删除成功')
+const handleDeleteSub = (groupLabel: string, mainItemId: string, subItemId: string) => {
+    const idx = getGroupIndex(groupLabel)
+    if (idx > -1) {
+        configStore.deleteSubNavItem(idx, mainItemId, subItemId)
+        Message.success('删除成功')
+    }
 }
 
 const iconOptions = [
@@ -523,12 +546,12 @@ const headerMenuList = computed({
             <div v-else class="flex flex-col gap-2 px-2">
                  <div class="flex items-center justify-between px-2 mb-1">
                      <span class="text-xs font-bold text-muted-foreground">{{ group.label }}</span>
-                     <a-button size="mini" type="text" @click="openAddMainDialog(0)">
+                     <a-button size="mini" type="text" @click="openAddMainDialog(group.label)">
                          <Plus class="w-3 h-3" />
                      </a-button>
                  </div>
                  
-                 <div v-for="(item) in configStore.navGroups[0]?.items ?? []" :key="item.id" class="border border-dashed border-[var(--color-border-3)] rounded-md p-2 bg-[var(--color-fill-1)]">
+                 <div v-for="(item) in group.items" :key="item.id" class="border border-dashed border-[var(--color-border-3)] rounded-md p-2 bg-[var(--color-fill-1)]">
                      <!-- 一级菜单行 -->
                      <div class="flex items-center justify-between mb-2 group/main-edit">
                          <div class="flex items-center gap-2">
@@ -536,13 +559,13 @@ const headerMenuList = computed({
                              <span class="text-sm font-medium">{{ item.title }}</span>
                          </div>
                          <div class="flex items-center gap-1 opacity-0 group-hover/main-edit:opacity-100 transition-opacity">
-                             <a-button size="mini" type="text" @click="openEditMainDialog(0, item)">
+                             <a-button size="mini" type="text" @click="openEditMainDialog(group.label, item)">
                                  <Pencil class="w-3 h-3" />
                              </a-button>
-                             <a-button size="mini" type="text" @click="openAddSubDialog(0, item.id)">
+                             <a-button size="mini" type="text" @click="openAddSubDialog(group.label, item.id)">
                                  <Plus class="w-3 h-3" />
                              </a-button>
-                              <a-popconfirm content="确定删除此一级导航及所有子项吗?" @ok="handleDeleteMain(0, item.id)">
+                              <a-popconfirm content="确定删除此一级导航及所有子项吗?" @ok="handleDeleteMain(group.label, item.id)">
                                  <a-button size="mini" type="text" status="danger">
                                      <Trash2 class="w-3 h-3" />
                                  </a-button>
@@ -569,10 +592,10 @@ const headerMenuList = computed({
                                     <span class="truncate">{{ sub.title }}</span>
                                 </div>
                                 <div class="flex items-center gap-0.5 opacity-0 group-hover/sub-edit:opacity-100 transition-opacity shrink-0" @click.stop>
-                                     <a-button size="mini" type="text" class="!px-1" @click="openEditSubDialog(0, item.id, sub)">
+                                     <a-button size="mini" type="text" class="!px-1" @click="openEditSubDialog(group.label, item.id, sub)">
                                          <Pencil class="w-3 h-3" />
                                      </a-button>
-                                     <a-popconfirm content="确定删除此子项吗?" @ok="handleDeleteSub(0, item.id, sub.id)">
+                                     <a-popconfirm content="确定删除此子项吗?" @ok="handleDeleteSub(group.label, item.id, sub.id)">
                                          <a-button size="mini" type="text" status="danger" class="!px-1">
                                              <Trash2 class="w-3 h-3" />
                                          </a-button>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
 // Card components removed - using plain divs with border/bg-card
-import { Layers, Plus, Pencil, Trash2, Settings2, FileCode, GripVertical, Info, ChevronRight, Eye, EyeOff, Download, Upload, FileDown, Search, MoreHorizontal, RefreshCw } from 'lucide-vue-next'
+import { Layers, Plus, Pencil, Trash2, Settings2, FileCode, GripVertical, Info, ChevronRight, Eye, EyeOff, Download, Upload, Search, MoreHorizontal, RefreshCw } from 'lucide-vue-next'
 
 import { Input as AInput, InputNumber as AInputNumber, Select as ASelect, Option as AOption, Scrollbar as AScrollbar, Modal as AModal, Message, Button as AButton, Dropdown as ADropdown, Doption as ADoption, Tabs as ATabs, TabPane as ATabPane } from '@arco-design/web-vue'
+import { Button } from '@/components/ui/button'
 import { 
   IconSettings, 
   IconApps, 
@@ -22,7 +23,7 @@ import {
 import draggable from 'vuedraggable'
 
 import { useConfigStore, type NavSubItem, type FilterConfig, type TableColumn } from '@/stores/configStore'
-import Page1 from '@/components/pages/Page1.vue'
+import Page1 from '@/views/Page1.vue'
 import ConfigFilterForm from '@/components/config/ConfigFilterForm.vue'
 import ConfigColumnForm from '@/components/config/ConfigColumnForm.vue'
 import ConfigActionForm from '@/components/config/ConfigActionForm.vue'
@@ -561,8 +562,7 @@ const handleAddSubNav = () => {
       addSubNavTargetMainId.value,
       {
         title: addSubNavForm.value.title,
-        url: addSubNavForm.value.url,
-        template: ''
+        url: addSubNavForm.value.url
       }
     )
     
@@ -789,12 +789,6 @@ const downloadJson = (data: object, filename: string) => {
   URL.revokeObjectURL(url)
 }
 
-// 模板下载
-const handleDownloadTemplate = () => {
-  const template = configStore.getTemplateConfig()
-  downloadJson(template, 'config-template.json')
-  Message.success('模板下载成功')
-}
 
 // 导出配置
 const handleExportConfig = () => {
@@ -1001,10 +995,6 @@ const handleConfirmImport = async () => {
 
              <!-- Right: All Actions in Breadcrumb -->
             <div class="flex items-center gap-1 shrink-0">
-               <!-- 下载模板 -->
-               <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" title="下载模板" @click="handleDownloadTemplate">
-                  <FileDown class="w-3.5 h-3.5" />
-               </Button>
                <!-- 导入配置 -->
                <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" title="导入配置" @click="handleImportConfig">
                   <Upload class="w-3.5 h-3.5" />

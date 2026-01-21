@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
 // 导入页面模板
-import Page1 from '@/components/pages/Page1.vue'
-import Settings from '@/components/pages/Settings.vue'
-import AuthPage from '@/components/pages/AuthPage.vue'
-import Profile from '@/components/pages/Profile.vue'
-import SkeletonLoading from '@/components/pages/SkeletonLoading.vue'
+import Page1 from '@/views/Page1.vue'
+import Settings from '@/views/Settings.vue'
+import AuthPage from '@/views/AuthPage.vue'
+import Profile from '@/views/Profile.vue'
+import SkeletonLoading from '@/views/SkeletonLoading.vue'
 import UpdateAnnouncement from '@/components/common/UpdateAnnouncement.vue'
 
 // AI Components - Only types or global listeners if needed? 
@@ -27,10 +27,10 @@ import { useAuthStore } from '@/stores/authStore'
 import { useConfigStore } from '@/stores/configStore'
 
 // Import layouts
-import ArcoLayout from '@/components/ArcoLayout.vue'
-import ShadcnLayout from '@/components/ShadcnLayout.vue'
+import ArcoLayout from '@/components/layout/ArcoLayout.vue'
+import ShadcnLayout from '@/components/layout/ShadcnLayout.vue'
 
-import { useNavigation } from '@/config/schema'
+import { useNavigation } from '@/composables/useNavigation'
 
 const { currentPage } = useNavigation() 
 const authStore = useAuthStore()
@@ -53,9 +53,17 @@ const CurrentPageComponent = computed(() => pageComponents[currentPage.value])
 // Initialize auth on mount
 onMounted(async () => {
   await authStore.initialize()
-  // 登录成功后加载云端配置
+  // 登录成功后并行加载所有配置
   if (authStore.isAuthenticated) {
-    await configStore.loadFromSupabase()
+    console.log('App: Starting parallel bootstrap...')
+    const startTime = performance.now()
+    
+    await Promise.all([
+        authStore.fetchUserConfigs(),
+        configStore.loadFromSupabase()
+    ])
+    
+    console.log(`App: Parallel bootstrap finished in ${(performance.now() - startTime).toFixed(2)}ms`)
     
     // For test accounts, always force Arco style
     if (authStore.userEmail.toLowerCase().includes('test')) {
@@ -69,11 +77,12 @@ onMounted(async () => {
     startOnboarding(authStore.userEmail)
   }
 
-  // 页面关闭/刷新前确保同步完成
-  window.addEventListener('beforeunload', handleBeforeUnload)
+  // 页面关闭/刷新前确保同步完成 - 移除，避免干扰用户
+  // window.addEventListener('beforeunload', handleBeforeUnload)
 })
 
-// 页面关闭前处理
+// 页面关闭前处理 - 移除
+/*
 const handleBeforeUnload = (e: BeforeUnloadEvent) => {
   if (configStore.isSyncing) {
     // 提示用户有未保存的更改
@@ -83,9 +92,10 @@ const handleBeforeUnload = (e: BeforeUnloadEvent) => {
     configStore.ensureSynced()
   }
 }
+*/
 
 onUnmounted(() => {
-  window.removeEventListener('beforeunload', handleBeforeUnload)
+  // window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 
 // 监听认证状态变化，登录后加载配置

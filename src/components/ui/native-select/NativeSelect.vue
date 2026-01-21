@@ -3,7 +3,7 @@ import type { AcceptableValue } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit, useVModel } from "@vueuse/core"
 import { ChevronDownIcon } from "lucide-vue-next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 defineOptions({
   inheritAttrs: false,
@@ -48,3 +48,4 @@ const delegatedProps = reactiveOmit(props, "class")
     />
   </div>
 </template>
+
