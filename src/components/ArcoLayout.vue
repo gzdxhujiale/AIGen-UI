@@ -291,11 +291,18 @@ const handleEditSubmit = () => {
         })
         Message.success('更新成功')
     } else if (editDialogMode.value === 'add-sub') {
-        configStore.addSubNavItem(editForm.groupIdx, editForm.mainItemId, {
+        const newId = configStore.addSubNavItem(editForm.groupIdx, editForm.mainItemId, {
             title: editForm.title,
             url: editForm.url,
             template: ''
         })
+        
+        if (newId) {
+             configStore.addPage1Config(newId, {
+                filterArea: { columns: 4, gap: '16px', filters: [] },
+                tableArea: { height: '500px', scrollX: true, scrollY: true, showCheckbox: true, columns: [] }
+             })
+        }
          Message.success('添加成功')
     } else if (editDialogMode.value === 'edit-sub') {
         configStore.updateSubNavItem(editForm.groupIdx, editForm.mainItemId, editForm.subItemId, {
@@ -553,12 +560,15 @@ const headerMenuList = computed({
                         class="flex flex-col gap-1 pl-4"
                      >
                         <template #item="{ element: sub }">
-                            <div class="flex items-center justify-between p-1.5 bg-[var(--color-bg-2)] rounded border border-[var(--color-border-2)] group/sub-edit text-xs">
+                            <div 
+                                class="flex items-center justify-between p-1.5 bg-[var(--color-bg-2)] rounded border border-[var(--color-border-2)] group/sub-edit text-xs cursor-pointer hover:bg-[var(--color-fill-2)] transition-colors"
+                                @click="handleNavClick(item.title, sub.title, sub.id)"
+                            >
                                 <div class="flex items-center gap-2 overflow-hidden">
                                     <GripVertical class="w-3 h-3 text-[var(--color-text-4)] cursor-move drag-handle shrink-0" />
                                     <span class="truncate">{{ sub.title }}</span>
                                 </div>
-                                <div class="flex items-center gap-0.5 opacity-0 group-hover/sub-edit:opacity-100 transition-opacity shrink-0">
+                                <div class="flex items-center gap-0.5 opacity-0 group-hover/sub-edit:opacity-100 transition-opacity shrink-0" @click.stop>
                                      <a-button size="mini" type="text" class="!px-1" @click="openEditSubDialog(0, item.id, sub)">
                                          <Pencil class="w-3 h-3" />
                                      </a-button>

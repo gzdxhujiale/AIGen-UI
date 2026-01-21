@@ -556,7 +556,7 @@ const closeAddSubNavDialog = () => {
 
 const handleAddSubNav = () => {
   if (addSubNavForm.value.title) {
-    configStore.addSubNavItem(
+    const newId = configStore.addSubNavItem(
       addSubNavTargetGroup.value,
       addSubNavTargetMainId.value,
       {
@@ -565,6 +565,25 @@ const handleAddSubNav = () => {
         template: ''
       }
     )
+    
+    // Automatically create page configuration
+    if (newId) {
+      configStore.addPage1Config(newId, {
+        filterArea: {
+          columns: 4,
+          gap: '16px',
+          filters: []
+        },
+        tableArea: {
+          height: '500px',
+          scrollX: true,
+          scrollY: true,
+          showCheckbox: true,
+          columns: []
+        }
+      })
+      Message.success('导航项及页面配置创建成功')
+    }
     closeAddSubNavDialog()
   }
 }

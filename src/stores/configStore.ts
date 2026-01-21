@@ -326,7 +326,7 @@ export const useConfigStore = defineStore('config', () => {
     // ============================================
 
     // 添加主导航项
-    function addNavMainItem(groupIndex: number, item: Omit<NavMainItem, 'id'>) {
+    function addNavMainItem(groupIndex: number, item: Omit<NavMainItem, 'id'>): string | null {
         const group = navGroups.value[groupIndex]
         if (group) {
             const newId = `nav-${Date.now()}`
@@ -336,7 +336,9 @@ export const useConfigStore = defineStore('config', () => {
                 icon: item.icon || IconSettings,
                 items: []
             })
+            return newId
         }
+        return null
     }
 
     // 更新主导航项
@@ -362,7 +364,7 @@ export const useConfigStore = defineStore('config', () => {
     }
 
     // 添加子导航项
-    function addSubNavItem(groupIndex: number, mainItemId: string, item: Omit<NavSubItem, 'id'>) {
+    function addSubNavItem(groupIndex: number, mainItemId: string, item: Omit<NavSubItem, 'id'>): string | null {
         const group = navGroups.value[groupIndex]
         if (group) {
             const mainItem = group.items.find(i => i.id === mainItemId)
@@ -370,8 +372,10 @@ export const useConfigStore = defineStore('config', () => {
                 if (!mainItem.items) mainItem.items = []
                 const newId = `sub-${Date.now()}`
                 mainItem.items.push({ ...item, id: newId })
+                return newId
             }
         }
+        return null
     }
 
     // 更新子导航项
