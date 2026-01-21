@@ -27,9 +27,12 @@ if (!formState.value.effectFormItems) {
 }
 
 watch(() => props.modelValue, (newVal) => {
-  formState.value = { 
+  const newState = { 
     ...newVal,
     effectFormItems: newVal.effectFormItems || []
+  }
+  if (JSON.stringify(newState) !== JSON.stringify(formState.value)) {
+    formState.value = newState
   }
 }, { deep: true })
 

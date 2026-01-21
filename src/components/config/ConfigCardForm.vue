@@ -15,7 +15,9 @@ const emit = defineEmits(['update:modelValue'])
 const formState = ref({ ...props.modelValue })
 
 watch(() => props.modelValue, (newVal) => {
-  formState.value = { ...newVal }
+  if (JSON.stringify(newVal) !== JSON.stringify(formState.value)) {
+    formState.value = { ...newVal }
+  }
 }, { deep: true })
 
 watch(formState, (newVal) => {
