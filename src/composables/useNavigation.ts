@@ -10,12 +10,20 @@ const currentSubNav = ref('')
 const _currentNavId = ref('')
 const detailTitle = ref<string | null>(null)
 const _navGroupsRef = ref<NavGroup[] | null>(null)
+const _pageConfigsRef = ref<Record<string, any> | null>(null)
 
 /**
  * 设置 navGroups 引用（由 configStore 调用）
  */
 export function setNavGroupsRef(navGroups: NavGroup[]) {
     _navGroupsRef.value = navGroups
+}
+
+/**
+ * 设置 pageConfigs 引用（由 configStore 调用，V2 支持）
+ */
+export function setPageConfigsRef(pageConfigs: Record<string, any>) {
+    _pageConfigsRef.value = pageConfigs
 }
 
 /**
@@ -73,12 +81,23 @@ export function useNavigation() {
     const currentNavId = computed(() => _currentNavId.value)
 
     const currentTemplate = computed(() => {
+        const navId = _currentNavId.value
+        if (!navId) return undefined
+
+        // V2: 先查页面配置是否存在
+        if (_pageConfigsRef.value && _pageConfigsRef.value[navId]) {
+            return 'Page1'
+        }
+
+        // 回退到导航树中查找显式指定的 template
         if (_navGroupsRef.value) {
             for (const group of _navGroupsRef.value) {
                 for (const mainItem of group.items) {
-                    const subItem = mainItem.items?.find((item: NavSubItem) => item.id === _currentNavId.value)
-                    if (subItem?.component) {
-                        return 'Page1'
+                    const subItem = mainItem.items?.find((item: NavSubItem) => item.id === navId)
+                    if (subItem) {
+                        if (subItem.template) return subItem.template
+                        // 旧版本兼容：如果 navGroups 中仍然带有 component，则返回 Page1
+                        if (subItem.component) return 'Page1'
                     }
                 }
             }
@@ -87,9 +106,10 @@ export function useNavigation() {
     })
 
     const currentPage = computed(() => {
-        if (_currentNavId.value === 'settings') return 'Settings'
-        if (_currentNavId.value === 'billing') return 'Billing'
-        if (_currentNavId.value === 'profile') return 'profile'
+        const navId = _currentNavId.value
+        if (navId === 'settings') return 'Settings'
+        if (navId === 'billing') return 'Billing'
+        if (navId === 'profile') return 'profile'
 
         if (currentTemplate.value) {
             return currentTemplate.value

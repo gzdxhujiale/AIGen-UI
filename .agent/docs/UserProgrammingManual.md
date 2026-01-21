@@ -228,3 +228,19 @@ export interface FilterConfig {
 
 *   **ConfigStore**：现在全权管理页面配置，支持从 `localStorage` 恢复状态。
 *   **Page1.vue**：完全响应式地根据 `ConfigStore` 中的配置渲染 UI，包括动态加载 `FilterTreeSelect` 组件。
+### 5. 2026-01-22 更新：配置系统 V2 重构 (分布式存储)
+
+为了进一步提升性能和可维护性，我们对配置系统进行了 **V2 重构**。
+
+**主要变化：**
+
+*   **完全解耦**：导航结构 (`navigation`) 与页面具体配置 (`page`) 在存储和逻辑上完全分离。
+*   **分布式加载**：系统不再一次性加载包含所有页面细节的巨大 JSON，而是先加载轻量级的导航树，当进入特定页面时才按需（或并行地按 navId）加载对应的页面配置。
+*   **存储路径**：
+    *   导航：`category: 'navigation'`, `resource_id: 'nav-main'`
+    *   页面：`category: 'page'`, `resource_id: 'page-{navId}'`
+*   **开发建议**：
+    *   在编写代码引用配置时，使用 `useConfigStore().page1Configs[navId]` 获取特定页面配置。
+    *   导航节点中的 `component` 属性已标记为过时，建议通过 `template` 字段显式指定页面模板名（如 `'Page1'`, `'Settings'`）。
+
+通过这一改进，项目在页面规模扩大到数十个甚至上百个时，依然能保持流畅的首屏加载速度和稳健的数据同步。

@@ -2,20 +2,21 @@
 // 导航相关类型定义
 // ============================================
 import type { LucideIcon } from 'lucide-vue-next'
-import type { Page1Config } from './page-config'
+import type { Page1ConfigData } from './page-config'
 
 export interface NavSubItem {
     id: string
     title: string
-    url: string
+    url?: string
     badge?: string // 可选徽章
-    component?: Page1Config // 内嵌页面配置 (Phase 2)
+    template?: string // 显式指定的模板名称 (例如: 'Page1', 'Settings')
+    component?: Page1ConfigData // 内嵌页面配置 (运行时可能存在，但持久化时按 navId 分离)
 }
 
 export interface NavMainItem {
     id: string
     title: string
-    url: string
+    url?: string
     icon?: any
     /**
      * @deprecated 请使用 isOpen 代替

@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '@/api/supabase'
-import { supabaseConfigService } from './services/supabase-config.service'
+import { supabaseConfigService } from '@/api/supabase-config.service'
 
 export const useAuthStore = defineStore('auth', () => {
     // State

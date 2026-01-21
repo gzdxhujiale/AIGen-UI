@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import {
     setNavGroupsRef,
+    setPageConfigsRef,
     initNavigation,
 } from '@/composables/useNavigation'
 import type {
@@ -20,6 +21,7 @@ import type {
     CardItemConfig
 } from '@/types'
 import { supabase } from '@/api/supabase'
+import { supabaseConfigService } from '@/api/supabase-config.service'
 import { toast } from 'vue-sonner'
 import { IconSettings } from '@arco-design/web-vue/es/icon'
 
@@ -51,12 +53,14 @@ interface ExportData {
         items: Array<{
             id: string
             title: string
+            url: string // 保持与 NavMainItem 一致
             icon?: any
             isOpen?: boolean
             items?: Array<{
                 id: string
                 title: string
                 url?: string
+                template?: string // V2: 支持模板标识
                 component?: Omit<Page1Config, 'mockData'>
             }>
         }>
@@ -154,9 +158,10 @@ export const useConfigStore = defineStore('config', () => {
         }
     }, { deep: true })
 
-    // 同步 navGroups 到 sidebar 导航系统（用于模板查找）
-    watch(navGroups, (newNavGroups) => {
-        setNavGroupsRef(newNavGroups)
+    // 同步配置到导航系统（V2：分别同步结构和数据）
+    watch([navGroups, page1Configs], () => {
+        setNavGroupsRef(navGroups.value)
+        setPageConfigsRef(page1Configs.value)
     }, { deep: true, immediate: true })
 
     watch(
@@ -339,8 +344,8 @@ export const useConfigStore = defineStore('config', () => {
             if (mainItem) {
                 if (!mainItem.items) mainItem.items = []
                 const newId = `sub-${Date.now()}`
+                // V2: 创建子项时不带 component
                 mainItem.items.push({ ...item, id: newId })
-                // console.log('Action: addSubNavItem', { newId, parent: mainItemId })
                 return newId
             }
         }
@@ -389,14 +394,7 @@ export const useConfigStore = defineStore('config', () => {
         page1Configs.value[navId] = config as Page1Config
         mockDataFunctions.value[navId] = () => []
 
-        for (const group of navGroups.value) {
-            for (const mainItem of group.items) {
-                const subItem = mainItem.items?.find(s => s.id === navId)
-                if (subItem) {
-                    subItem.component = config as Page1Config
-                }
-            }
-        }
+        // V2: 不再将 component 同步到 navGroups 树中
     }
 
     function updatePage1Config(navId: string, updates: Partial<Page1Config>) {
@@ -409,14 +407,7 @@ export const useConfigStore = defineStore('config', () => {
         delete page1Configs.value[navId]
         delete mockDataFunctions.value[navId]
 
-        for (const group of navGroups.value) {
-            for (const mainItem of group.items) {
-                const subItem = mainItem.items?.find(s => s.id === navId)
-                if (subItem) {
-                    delete subItem.component
-                }
-            }
-        }
+        // V2: 只需从 page1Configs 中删除
     }
 
     function updateFilterAreaConfig(navId: string, updates: Partial<FilterAreaConfig>) {
@@ -486,6 +477,7 @@ export const useConfigStore = defineStore('config', () => {
                         {
                             id: 'example-main',
                             title: '示例主导航',
+                            url: '',
                             icon: 'IconSettings',
                             isOpen: true,
                             items: [
@@ -511,6 +503,7 @@ export const useConfigStore = defineStore('config', () => {
             items: group.items.map(mainItem => ({
                 id: mainItem.id,
                 title: mainItem.title,
+                url: mainItem.url || '#', // 修复 lint: 确保 url 存在
                 icon: mainItem.icon,
                 isOpen: mainItem.isOpen,
                 items: mainItem.items?.map(subItem => {
@@ -547,22 +540,39 @@ export const useConfigStore = defineStore('config', () => {
         }
     }
 
-    function importFullConfig(data: ExportData): { success: boolean; message: string } {
+    function importFullConfig(data: ExportData | NavGroup[]): { success: boolean; message: string } {
         try {
-            if (!data || typeof data !== 'object') {
-                return { success: false, message: '无效的配置格式' }
+            if (!data) return { success: false, message: '无效的配置数据' }
+
+            let navGroupsData: NavGroup[] = []
+
+            // 兼容性识别：是 ExportData 包装格式还是纯数组格式
+            if (Array.isArray(data)) {
+                navGroupsData = data
+            } else if (data.navGroups && Array.isArray(data.navGroups)) {
+                navGroupsData = data.navGroups
+
+                // 如果是包装格式，顺便处理一下里面嵌套的 pageConfigs (向下兼容)
+                if (data.pageConfigs) {
+                    Object.entries(data.pageConfigs).forEach(([navId, config]: [string, any]) => {
+                        page1Configs.value[navId] = {
+                            ...config,
+                            mockData: mockDataFunctions.value[navId] || (() => [])
+                        } as Page1Config
+                    })
+                }
             }
 
-            const navGroupsData = data.navGroups || []
-
-            if (navGroupsData && Array.isArray(navGroupsData)) {
+            if (navGroupsData.length > 0) {
+                console.log('importFullConfig: Found', navGroupsData.length, 'groups to import')
                 navGroups.value = []
-
                 navGroupsData.forEach((importGroup: any) => {
                     const items = importGroup.items || []
+                    console.log(' - Group:', importGroup.label, 'Items:', items.length)
 
                     navGroups.value.push({
                         label: importGroup.label,
+                        // ... (rest of the mapping code)
                         showLabel: importGroup.showLabel,
                         items: items.map((mainItem: any) => {
                             const subItems = mainItem.items || []
@@ -571,45 +581,34 @@ export const useConfigStore = defineStore('config', () => {
                                 id: mainItem.id,
                                 title: mainItem.title,
                                 icon: mainItem.icon || 'IconSettings',
-                                url: '#',
+                                url: mainItem.url || '#',
                                 isOpen: mainItem.isOpen,
                                 items: subItems.map((sub: any) => {
-                                    let componentConfig: Page1Config | undefined
-
+                                    // 检查是否带有内嵌组件配置
                                     if (sub.component) {
-                                        componentConfig = {
+                                        page1Configs.value[sub.id] = {
                                             ...sub.component,
-                                            mockData: () => []
+                                            mockData: mockDataFunctions.value[sub.id] || (() => [])
                                         } as Page1Config
-
-                                        page1Configs.value[sub.id] = componentConfig
                                     }
 
                                     return {
                                         id: sub.id,
                                         title: sub.title,
                                         url: sub.url || '#',
-                                        component: componentConfig
+                                        template: sub.template || (sub.component ? 'Page1' : undefined)
                                     }
                                 })
                             }
                         }) || []
                     })
                 })
+                console.log('importFullConfig: Import complete. navGroups length:', navGroups.value.length)
+            } else {
+                console.warn('importFullConfig: Data array is empty')
             }
 
-            if (data.pageConfigs) {
-                Object.entries(data.pageConfigs).forEach(([navId, config]: [string, any]) => {
-                    page1Configs.value[navId] = {
-                        ...(config.topBar && { topBar: config.topBar }),
-                        filterArea: config.filterArea,
-                        ...(config.actionsArea && { actionsArea: config.actionsArea }),
-                        ...(config.cardArea && { cardArea: config.cardArea }),
-                        tableArea: config.tableArea,
-                        mockData: mockDataFunctions.value[navId] || (() => [])
-                    } as Page1Config
-                })
-            }
+            return { success: true, message: '配置导入成功' }
 
             return { success: true, message: '配置导入成功' }
         } catch (e) {
@@ -629,37 +628,22 @@ export const useConfigStore = defineStore('config', () => {
             const navData = exportFullConfig()
             navData.pageConfigs = {}
 
-            const { error: navError } = await supabase
-                .from('user_configs')
-                .upsert({
-                    user_id: user.id,
-                    category: 'navigation',
-                    resource_id: 'nav-main',
-                    content: navData,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'user_id,category,resource_id' })
+            // 1. 保存导航配置
+            const { success: navSuccess, error: navError } = await supabaseConfigService.saveNavigation(navData.navGroups)
 
-            if (navError) {
+            if (!navSuccess) {
                 console.error('保存导航配置失败:', navError)
-                errors.push(`导航: ${navError.message}`)
+                errors.push(`导航: ${navError}`)
             }
 
-            // 2. 保存每个页面配置 (category: 'page', resource_id: 'page-{navId}')
+            // 2. 保存每个页面配置
             for (const [navId, config] of Object.entries(page1Configs.value)) {
                 const { mockData, ...configData } = config
-                const { error: pageError } = await supabase
-                    .from('user_configs')
-                    .upsert({
-                        user_id: user.id,
-                        category: 'page',
-                        resource_id: `page-${navId}`,
-                        content: configData,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'user_id,category,resource_id' })
+                const { success: pageSuccess, error: pageError } = await supabaseConfigService.savePageConfig(navId, configData)
 
-                if (pageError) {
+                if (!pageSuccess) {
                     console.error(`保存页面 ${navId} 失败:`, pageError)
-                    errors.push(`页面 ${navId}: ${pageError.message}`)
+                    errors.push(`页面 ${navId}: ${pageError}`)
                 }
             }
 
@@ -705,85 +689,90 @@ export const useConfigStore = defineStore('config', () => {
 
 
             // ==========================================
-            // 优化：一次性加载所有配置 (category = 'navigation' OR 'page')
+            // 优化：使用 supabaseConfigService 加载所有配置
             // ==========================================
-            const { data: allConfigs, error: loadError } = await supabase
-                .from('user_configs')
-                .select('category, resource_id, content')
-                .eq('user_id', user.id)
-                .in('category', ['navigation', 'page'])
+            await supabaseConfigService.init()
 
-            if (loadError) {
-                console.error('Failed to load configs:', loadError)
-                // 如果发生错误，记录并继续（可能导致部分空白，但比崩溃好）
+            const [navResult, pagesResult] = await Promise.all([
+                supabaseConfigService.loadNavigation(),
+                supabaseConfigService.loadAllPageConfigs()
+            ])
+
+            if (navResult.error) {
+                console.error('Failed to load navigation config:', navResult.error)
             }
 
-
-            // 内存中分离数据
-            const navRecord = allConfigs?.find(r => r.category === 'navigation' && r.resource_id === 'nav-main')
-            const pageRecords = allConfigs?.filter(r => r.category === 'page') || []
+            if (pagesResult.error) {
+                console.error('Failed to load page configs:', pagesResult.error)
+            }
 
             // 先清除 localStorage，确保使用云端数据
             localStorage.removeItem(STORAGE_KEY_PAGE1_CONFIGS)
 
             // 1. 处理导航配置
-            let hasNavConfig = false
-            if (navRecord?.content) {
-                // 严格检查：必须包含 navGroups 且不为空
-                if (navRecord.content.navGroups && Array.isArray(navRecord.content.navGroups) && navRecord.content.navGroups.length > 0) {
-                    hasNavConfig = true
-                    const result = importFullConfig(navRecord.content)
-                    if (!result.success) {
-                        console.error('导入导航配置失败:', result.message)
-                        hasNavConfig = false
-                    }
+            let hasValidConfig = false
+            let hasCloudData = !!navResult.data
+
+            if (hasCloudData) {
+                const result = importFullConfig(navResult.data as any)
+                if (result.success && navGroups.value.length > 0) {
+                    hasValidConfig = true
                 } else {
+                    console.error('云端存在配置但解析失败，跳过初始化以保护数据')
                 }
             }
 
             // 2. 处理页面配置
             let hasPageConfig = false
-            if (pageRecords.length > 0) {
+            if (pagesResult.data && Object.keys(pagesResult.data).length > 0) {
                 hasPageConfig = true
-                for (const row of pageRecords) {
-                    const navId = row.resource_id.replace(/^page-/, '')
-                    if (row.content) {
+                for (const [navId, content] of Object.entries(pagesResult.data)) {
+                    if (content) {
                         page1Configs.value[navId] = {
-                            ...row.content,
+                            ...content,
                             mockData: mockDataFunctions.value[navId] || (() => [])
                         } as Page1Config
                     }
                 }
             }
 
-            // 修复逻辑：只要没有有效的导航配置，就必须初始化
-            if (!hasNavConfig) {
-                console.log('用户没有有效的云端导航配置，尝试恢复')
+            // 逻辑优化：只有在真正没有任何配置的情况下，才进行初始化并保存
+            // 如果是有数据但解析失败，绝对不能覆盖！
+            if (!hasValidConfig) {
+                if (hasCloudData) {
+                    // 情况A：云端有数据，但解析失败。
+                    // 策略：加载默认模板到内存供展示，但不保存回云端，避免覆盖用户数据。
+                    console.error('云端配置格式异常，加载默认模板用于应急展示 (不会保存)')
+                    const template = getTemplateConfig()
+                    // 仅在内存中恢复，以此让用户至少能看到界面
+                    importFullConfig(template as any)
 
+                    isConfigLoaded.value = true
+                    isConfigLoading.value = false
+                    toast.error('云端配置格式异常，已加载临时默认界面', { description: '您的原始数据未被修改，请联系管理员修复。' })
+                    return { success: false, message: '云端配置解析失败，已加载临时模板' }
+                }
+
+                // 情况B：用户完全没有配置 (hasCloudData === false)
+                // 策略：初始化默认配置并保存
+                console.log('用户没有有效的云端导航配置，尝试初始化')
                 const template = getTemplateConfig()
-
-                // 策略：如果已有页面配置，仅恢复导航结构，不覆盖页面配置
-                // 如果没有页面配置，完全恢复默认模板
 
                 if (hasPageConfig) {
                     console.log('检测到现有页面配置，仅恢复导航结构')
-                    // 仅导入 template 的 navGroups
                     const recoveryConfig = {
                         ...template,
-                        pageConfigs: {} // 空对象，避免覆盖已加载的页面
+                        pageConfigs: {}
                     }
-                    importFullConfig(recoveryConfig)
+                    importFullConfig(recoveryConfig as any)
                 } else {
                     console.log('初始化完整默认模板')
-                    importFullConfig(template)
+                    importFullConfig(template as any)
                 }
 
-                // 保存恢复后的状态到云端
                 await saveToSupabase()
-
                 isConfigLoaded.value = true
                 isConfigLoading.value = false
-
                 const msg = hasPageConfig ? '已恢复导航结构 (保留页面配置)' : '已初始化默认配置'
                 toast.success(msg)
                 return { success: true, message: msg }
@@ -796,7 +785,6 @@ export const useConfigStore = defineStore('config', () => {
             if (navGroups.value.length > 0) {
                 initNavigation(navGroups.value)
             }
-
 
             isConfigLoaded.value = true
             isConfigLoading.value = false

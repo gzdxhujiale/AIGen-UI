@@ -64,6 +64,7 @@ onMounted(async () => {
     ])
     
     console.log(`App: Parallel bootstrap finished in ${(performance.now() - startTime).toFixed(2)}ms`)
+
     
     // For test accounts, always force Arco style
     if (authStore.userEmail.toLowerCase().includes('test')) {
