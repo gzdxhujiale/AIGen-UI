@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, reactive } from 'vue'
+import draggable from 'vuedraggable'
 import {
   ChevronRight,
   ChevronsUpDown,
@@ -17,6 +18,7 @@ import {
   Trash2,
   Pencil,
   Eye,
+  GripVertical,
 } from 'lucide-vue-next'
 
 // --- UI Components ---
@@ -77,6 +79,15 @@ import {
 } from '@/components/ui/collapsible'
 import { AIChatButton, AIChatWindow } from '@/components/ai'
 import { Message } from '@arco-design/web-vue'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 // --- Logic & Config ---
 import { useConfigStore } from '@/stores/configStore'
@@ -195,6 +206,204 @@ const userDisplayName = computed(() => authStore.userDisplayName || sidebarConfi
 const userEmail = computed(() => authStore.userEmail || sidebarConfig.user.email)
 const userAvatar = computed(() => authStore.userAvatar || sidebarConfig.user.avatar)
 const initials = computed(() => userDisplayName.value.slice(0, 2).toUpperCase())
+
+// --- 编辑模式逻辑 (从 ArcoLayout 移植) ---
+const editDialogVisible = ref(false)
+const editDialogTitle = ref('')
+const editDialogMode = ref<'add-main' | 'edit-main' | 'add-sub' | 'edit-sub'>('add-main')
+const editForm = reactive({
+    groupIdx: 0,
+    mainItemId: '',
+    subItemId: '',
+    title: '',
+    url: '',
+    icon: ''
+})
+
+const openAddMainDialog = (groupIdx: number) => {
+    editDialogMode.value = 'add-main'
+    editDialogTitle.value = '添加一级导航'
+    editForm.groupIdx = groupIdx
+    editForm.title = ''
+    editForm.icon = 'Settings'
+    editDialogVisible.value = true
+}
+
+const openEditMainDialog = (groupIdx: number, item: any) => {
+    editDialogMode.value = 'edit-main'
+    editDialogTitle.value = '编辑一级导航'
+    editForm.groupIdx = groupIdx
+    editForm.mainItemId = item.id
+    editForm.title = item.title
+    editForm.icon = typeof item.icon === 'string' ? item.icon : (item.icon?.name || 'Settings')
+    editDialogVisible.value = true
+}
+
+const openAddSubDialog = (groupIdx: number, mainItemId: string) => {
+    editDialogMode.value = 'add-sub'
+    editDialogTitle.value = '添加二级导航'
+    editForm.groupIdx = groupIdx
+    editForm.mainItemId = mainItemId
+    editForm.title = ''
+    editForm.url = '#'
+    editDialogVisible.value = true
+}
+
+const openEditSubDialog = (groupIdx: number, mainItemId: string, subItem: any) => {
+    editDialogMode.value = 'edit-sub'
+    editDialogTitle.value = '编辑二级导航'
+    editForm.groupIdx = groupIdx
+    editForm.mainItemId = mainItemId
+    editForm.subItemId = subItem.id
+    editForm.title = subItem.title
+    editForm.url = subItem.url || '#'
+    editDialogVisible.value = true
+}
+
+const handleEditSubmit = () => {
+    if (!editForm.title) {
+        Message.warning('请输入标题')
+        return
+    }
+
+    if (editDialogMode.value === 'add-main') {
+        configStore.addNavMainItem(editForm.groupIdx, {
+            title: editForm.title,
+            icon: editForm.icon,
+            items: [],
+            url: ''
+        })
+        Message.success('添加成功')
+    } else if (editDialogMode.value === 'edit-main') {
+        configStore.updateNavMainItem(editForm.groupIdx, editForm.mainItemId, {
+            title: editForm.title,
+            icon: editForm.icon
+        })
+        Message.success('更新成功')
+    } else if (editDialogMode.value === 'add-sub') {
+        configStore.addSubNavItem(editForm.groupIdx, editForm.mainItemId, {
+            title: editForm.title,
+            url: editForm.url,
+            template: ''
+        })
+         Message.success('添加成功')
+    } else if (editDialogMode.value === 'edit-sub') {
+        configStore.updateSubNavItem(editForm.groupIdx, editForm.mainItemId, editForm.subItemId, {
+            title: editForm.title,
+            url: editForm.url
+        })
+         Message.success('更新成功')
+    }
+    editDialogVisible.value = false
+}
+
+const handleDeleteMain = (groupIdx: number, itemId: string) => {
+    // 简单确认，因为 Popconfirm 不在 shadcn 默认组件中，或者需要额外引入
+    if(!confirm('确定删除此一级导航及所有子项吗?')) return
+    configStore.deleteNavMainItem(groupIdx, itemId)
+    Message.success('删除成功')
+}
+
+const handleDeleteSub = (groupIdx: number, mainItemId: string, subItemId: string) => {
+    if(!confirm('确定删除此子项吗?')) return
+    configStore.deleteSubNavItem(groupIdx, mainItemId, subItemId)
+    Message.success('删除成功')
+}
+
+const iconOptions = [
+    { label: 'Settings', value: 'Settings' },
+    { label: 'Gallery', value: 'GalleryVerticalEnd' },
+    { label: 'Audio', value: 'AudioWaveform' },
+    { label: 'Command', value: 'Command' },
+    { label: 'Folder', value: 'Folder' },
+    { label: 'Forward', value: 'Forward' },
+    { label: 'More', value: 'MoreHorizontal' },
+    { label: 'Trash', value: 'Trash2' },
+    { label: 'Pencil', value: 'Pencil' },
+    { label: 'Eye', value: 'Eye' },
+]
+
+const resolveIcon = (icon: any) => {
+    // 简单处理 string icon 到 component 的映射，如果需要
+    return icon
+}
+
+// --- Header Menu Editing ---
+const menuEditDialog = reactive({
+    visible: false,
+    isEdit: false,
+    editIndex: -1,
+    form: {
+        type: 'text-button',
+        label: '',
+        options: ''
+    }
+})
+
+const openAddHeaderMenuDialog = () => {
+    menuEditDialog.isEdit = false
+    menuEditDialog.editIndex = -1
+    menuEditDialog.form = { type: 'text-button', label: '', options: '' }
+    menuEditDialog.visible = true
+}
+
+const openEditHeaderMenuDialog = (index: number, item: any) => {
+    menuEditDialog.isEdit = true
+    menuEditDialog.editIndex = index
+    menuEditDialog.form = {
+        type: item.type,
+        label: item.label,
+        options: item.options ? item.options.join(',') : ''
+    }
+    menuEditDialog.visible = true
+}
+
+const handleHeaderMenuSave = async () => {
+    if (!menuEditDialog.form.label) {
+        Message.warning('请输入按钮文字')
+        return
+    }
+
+    const newItem: any = {
+        type: menuEditDialog.form.type,
+        label: menuEditDialog.form.label
+    }
+
+    if (menuEditDialog.form.type === 'dropdown') {
+        if (!menuEditDialog.form.options) {
+             Message.warning('请输入选项（以逗号分隔）')
+             return
+        }
+        newItem.options = menuEditDialog.form.options.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
+    }
+
+    const newConfig = [...(authStore.menuConfig || [])]
+
+    if (menuEditDialog.isEdit && menuEditDialog.editIndex > -1) {
+        newConfig[menuEditDialog.editIndex] = newItem
+    } else {
+        newConfig.push(newItem)
+    }
+
+    await authStore.updateMenuConfig(newConfig)
+    Message.success('菜单配置已更新')
+    menuEditDialog.visible = false
+}
+
+const handleHeaderMenuDelete = async (index: number) => {
+     if(!confirm('确定删除此菜单项吗?')) return
+     const newConfig = [...(authStore.menuConfig || [])]
+     newConfig.splice(index, 1)
+     await authStore.updateMenuConfig(newConfig)
+     Message.success('菜单项已删除')
+}
+
+const headerMenuList = computed({
+    get: () => authStore.menuConfig || [],
+    set: async (val) => {
+        await authStore.updateMenuConfig(val)
+    }
+})
 </script>
 
 <template>
@@ -243,32 +452,100 @@ const initials = computed(() => userDisplayName.value.slice(0, 2).toUpperCase())
 
       <!-- 1.2 导航内容 -->
       <SidebarContent>
-        <!-- 主导航分组 -->
-        <SidebarGroup v-for="group in filteredNavGroups" :key="group.label">
-          <SidebarGroupLabel v-if="group.showLabel ?? true">{{ group.label }}</SidebarGroupLabel>
-          <SidebarMenu>
-            <Collapsible v-for="item in group.items" :key="item.title" as-child :default-open="item.isOpen || item.items?.some(s => s.title === currentSubNav)" class="group/collapsible">
-              <SidebarMenuItem>
-                <CollapsibleTrigger as-child>
-                  <SidebarMenuButton :tooltip="item.title" :class="{ 'bg-sidebar-accent': item.items?.some(s => s.title === currentSubNav) }">
-                    <component :is="item.icon" v-if="item.icon" />
-                    <span>{{ item.title }}</span>
-                    <ChevronRight class="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                  </SidebarMenuButton>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <SidebarMenuSub>
-                    <SidebarMenuSubItem v-for="subItem in item.items" :key="subItem.title">
-                      <SidebarMenuSubButton as-child @click="handleNavClick(item.title, subItem.title, subItem.id)" :class="{ 'bg-sidebar-accent font-medium': currentSubNav === subItem.title }">
-                        <a :href="subItem.url"><span>{{ subItem.title }}</span></a>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-                  </SidebarMenuSub>
-                </CollapsibleContent>
-              </SidebarMenuItem>
-            </Collapsible>
-          </SidebarMenu>
-        </SidebarGroup>
+        <!-- Normal Mode -->
+        <template v-if="!configStore.isEditMode">
+            <SidebarGroup v-for="group in filteredNavGroups" :key="group.label">
+            <SidebarGroupLabel v-if="group.showLabel ?? true">{{ group.label }}</SidebarGroupLabel>
+            <SidebarMenu>
+                <Collapsible v-for="item in group.items" :key="item.title" as-child :default-open="item.isOpen || item.items?.some(s => s.title === currentSubNav)" class="group/collapsible">
+                <SidebarMenuItem>
+                    <CollapsibleTrigger as-child>
+                    <SidebarMenuButton :tooltip="item.title" :class="{ 'bg-sidebar-accent': item.items?.some(s => s.title === currentSubNav) }">
+                        <component :is="item.icon" v-if="item.icon" />
+                        <span>{{ item.title }}</span>
+                        <ChevronRight class="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                    </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                    <SidebarMenuSub>
+                        <SidebarMenuSubItem v-for="subItem in item.items" :key="subItem.title">
+                        <SidebarMenuSubButton as-child @click="handleNavClick(item.title, subItem.title, subItem.id)" :class="{ 'bg-sidebar-accent font-medium': currentSubNav === subItem.title }">
+                            <a :href="subItem.url"><span>{{ subItem.title }}</span></a>
+                        </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                    </SidebarMenuSub>
+                    </CollapsibleContent>
+                </SidebarMenuItem>
+                </Collapsible>
+            </SidebarMenu>
+            </SidebarGroup>
+        </template>
+
+        <!-- Edit Mode -->
+        <template v-else>
+            <SidebarGroup v-for="(group, groupIdx) in configStore.navGroups" :key="group.label || groupIdx">
+                 <div class="flex items-center justify-between px-2 mb-2">
+                    <SidebarGroupLabel>{{ group.label || 'Group' }}</SidebarGroupLabel>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        class="h-6 w-6 ml-auto" 
+                        @click="openAddMainDialog(groupIdx)"
+                    >
+                        <Plus class="h-4 w-4" />
+                    </Button>
+                </div>
+
+                <SidebarMenu>
+                    <div v-for="(item) in group.items" :key="item.id" class="mb-2 border border-dashed rounded-md p-2">
+                        <!-- Main Item Edit Row -->
+                        <div class="flex items-center justify-between group/main-edit mb-2">
+                            <div class="flex items-center gap-2">
+                                <component :is="resolveIcon(item.icon)" class="h-4 w-4 text-muted-foreground" />
+                                <span class="text-sm font-medium">{{ item.title }}</span>
+                            </div>
+                            <div class="flex items-center gap-1 opacity-50 group-hover/main-edit:opacity-100 transition-opacity">
+                                <Button variant="ghost" size="icon" class="h-6 w-6" @click="openEditMainDialog(groupIdx, item)">
+                                    <Pencil class="h-3 w-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" class="h-6 w-6" @click="openAddSubDialog(groupIdx, item.id)">
+                                    <Plus class="h-3 w-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" class="h-6 w-6 text-destructive" @click="handleDeleteMain(groupIdx, item.id)">
+                                    <Trash2 class="h-3 w-3" />
+                                </Button>
+                            </div>
+                        </div>
+
+                        <!-- Sub Items Draggable -->
+                        <draggable 
+                            v-model="item.items"
+                            item-key="id"
+                            group="sub-items"
+                            handle=".drag-handle"
+                            class="flex flex-col gap-1 pl-2"
+                        >
+                            <template #item="{ element: sub }">
+                                <div class="flex items-center justify-between p-1.5 rounded bg-muted/30 border border-transparent hover:border-border group/sub-edit text-xs">
+                                    <div class="flex items-center gap-2 overflow-hidden">
+                                        <GripVertical class="h-3 w-3 text-muted-foreground cursor-move drag-handle shrink-0" />
+                                        <span class="truncate">{{ sub.title }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-0.5 opacity-0 group-hover/sub-edit:opacity-100 transition-opacity shrink-0">
+                                            <Button variant="ghost" size="icon" class="h-5 w-5" @click="openEditSubDialog(groupIdx, item.id, sub)">
+                                                <Pencil class="h-3 w-3" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" class="h-5 w-5 text-destructive" @click="handleDeleteSub(groupIdx, item.id, sub.id)">
+                                                <Trash2 class="h-3 w-3" />
+                                            </Button>
+                                    </div>
+                                </div>
+                            </template>
+                        </draggable>
+                    </div>
+                </SidebarMenu>
+            </SidebarGroup>
+        </template>
 
         <!-- 项目分组 -->
         <SidebarGroup v-for="group in filteredProjectGroups" :key="group.label" class="group-data-[collapsible=icon]:hidden">
@@ -383,7 +660,70 @@ const initials = computed(() => userDisplayName.value.slice(0, 2).toUpperCase())
             </template>
           </BreadcrumbList>
         </Breadcrumb>
-        <div id="breadcrumb-actions" class="flex items-center gap-4"></div>
+        <div id="breadcrumb-actions" class="flex items-center gap-4 ml-auto">
+            <!-- Normal Mode: Render Menu Items -->
+            <template v-if="!configStore.isEditMode">
+                <template v-for="(item, index) in authStore.menuConfig" :key="index">
+                    <!-- Text Button -->
+                    <Button 
+                        v-if="item.type === 'text-button'" 
+                        variant="ghost" 
+                        size="sm" 
+                        class="text-muted-foreground hover:text-primary"
+                    >
+                        {{ item.label }}
+                    </Button>
+
+                    <!-- Dropdown -->
+                    <div v-else-if="item.type === 'dropdown'" class="flex items-center gap-2">
+                        <span class="text-xs text-muted-foreground">{{ item.label }}</span>
+                        <Select :default-value="item.options?.[0]">
+                          <SelectTrigger class="w-[100px] h-8 text-xs">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem v-for="opt in item.options" :key="opt" :value="opt">{{ opt }}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                    </div>
+                </template>
+            </template>
+
+            <!-- Edit Mode: Render Draggable Menu Editor -->
+            <div v-else class="flex items-center gap-2 p-1 border border-dashed border-primary/30 rounded bg-primary/5">
+                <draggable 
+                    v-model="headerMenuList" 
+                    item-key="label" 
+                    group="header-menu"
+                    class="flex items-center gap-2"
+                    handle=".drag-handle"
+                >
+                    <template #item="{ element, index }">
+                        <div class="relative group border rounded px-2 py-1 bg-background flex items-center gap-2 cursor-default border-border">
+                            <GripVertical class="h-3 w-3 text-muted-foreground cursor-move drag-handle" />
+                            
+                            <span v-if="element.type === 'text-button'" class="text-xs">{{ element.label }}</span>
+                            <div v-else-if="element.type === 'dropdown'" class="flex items-center gap-1">
+                                <span class="text-xs">{{ element.label }}</span>
+                                <span class="text-[10px] text-muted-foreground">[Dropdown]</span>
+                            </div>
+
+                            <div class="flex items-center gap-1 ml-1">
+                                <Button variant="ghost" size="icon" class="h-5 w-5" @click="openEditHeaderMenuDialog(index, element)">
+                                    <Pencil class="h-3 w-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" class="h-5 w-5 text-destructive" @click="handleHeaderMenuDelete(index)">
+                                    <Trash2 class="h-3 w-3" />
+                                </Button>
+                            </div>
+                        </div>
+                    </template>
+                </draggable>
+                <Button variant="outline" size="icon" class="h-6 w-6 border-dashed" @click="openAddHeaderMenuDialog">
+                    <Plus class="h-3 w-3" />
+                </Button>
+            </div>
+        </div>
       </header>
       
       <!-- 内容区域 -->
@@ -414,6 +754,86 @@ const initials = computed(() => userDisplayName.value.slice(0, 2).toUpperCase())
               <p class="text-sm text-muted-foreground">{{ userEmail }}</p>
             </div>
           </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Nav Item Edit Dialog -->
+    <Dialog v-model:open="editDialogVisible">
+      <DialogContent class="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>{{ editDialogTitle }}</DialogTitle>
+        </DialogHeader>
+        <div class="grid gap-4 py-4">
+          <div class="grid grid-cols-4 items-center gap-4">
+            <label for="nav-title" class="text-right text-sm font-medium">标题</label>
+            <Input id="nav-title" v-model="editForm.title" class="col-span-3" />
+          </div>
+          <div v-if="editDialogMode.includes('main')" class="grid grid-cols-4 items-center gap-4">
+            <label for="nav-icon" class="text-right text-sm font-medium">图标</label>
+             <Select v-model="editForm.icon">
+                <SelectTrigger class="col-span-3">
+                  <SelectValue placeholder="Select icon" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="icon in iconOptions" :key="icon.value" :value="icon.value">
+                    <div class="flex items-center gap-2">
+                         <!-- Since we don't have dynamic icon component ready for select item easily without complex setup, just showing text -->
+                        {{ icon.label }}
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+          </div>
+          <div v-if="editDialogMode.includes('sub')" class="grid grid-cols-4 items-center gap-4">
+            <label for="nav-url" class="text-right text-sm font-medium">URL</label>
+            <Input id="nav-url" v-model="editForm.url" class="col-span-3" />
+          </div>
+        </div>
+        <div class="flex justify-end">
+            <Button @click="handleEditSubmit">保存</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Menu Item Edit Dialog -->
+    <Dialog v-model:open="menuEditDialog.visible">
+      <DialogContent class="sm:max-w-[425px]">
+        <DialogHeader>
+            <DialogTitle>{{ menuEditDialog.isEdit ? '编辑菜单项' : '新增菜单项' }}</DialogTitle>
+        </DialogHeader>
+        <div class="grid gap-4 py-4">
+             <div class="grid grid-cols-4 items-center gap-4">
+                <label class="text-right text-sm font-medium">类型</label>
+                <div class="col-span-3 flex gap-4">
+                     <!-- Simple Radio Implementation -->
+                     <label class="flex items-center gap-2 text-sm">
+                        <input type="radio" v-model="menuEditDialog.form.type" value="text-button" />
+                        文字按钮
+                     </label>
+                     <label class="flex items-center gap-2 text-sm">
+                        <input type="radio" v-model="menuEditDialog.form.type" value="dropdown" />
+                        下拉菜单
+                     </label>
+                </div>
+            </div>
+            <div class="grid grid-cols-4 items-center gap-4">
+                <label for="menu-label" class="text-right text-sm font-medium">标题</label>
+                <Input id="menu-label" v-model="menuEditDialog.form.label" class="col-span-3" />
+            </div>
+            <div v-if="menuEditDialog.form.type === 'dropdown'" class="grid grid-cols-4 items-start gap-4">
+                <label for="menu-options" class="text-right text-sm font-medium pt-2">选项</label>
+                <!-- Using HTML textarea with shadcn-like styling -->
+                <textarea 
+                    id="menu-options" 
+                    v-model="menuEditDialog.form.options" 
+                    class="col-span-3 flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="选项1, 选项2 (逗号分隔)"
+                ></textarea>
+            </div>
+        </div>
+        <div class="flex justify-end">
+             <Button @click="handleHeaderMenuSave">保存</Button>
         </div>
       </DialogContent>
     </Dialog>

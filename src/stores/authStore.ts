@@ -134,6 +134,18 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
+    /**
+     * Update only menu configuration
+     */
+    const updateMenuConfig = async (menu: any[]) => {
+        return updateUserProfile(
+            customUserName.value,
+            teamsConfig.value,
+            stylePreference.value,
+            menu
+        )
+    }
+
     // Actions
 
     /**
@@ -339,6 +351,7 @@ export const useAuthStore = defineStore('auth', () => {
         signOut,
         resetPassword,
         updateUserProfile,
+        updateMenuConfig,
         cleanup
     }
 })

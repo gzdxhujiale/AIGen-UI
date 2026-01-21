@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { Button } from '@/components/ui/button'
-import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message } from '@arco-design/web-vue'
+import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm } from '@arco-design/web-vue'
 import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { safeJsonParseWithError } from '@/utils/error'
 import {
@@ -18,6 +18,7 @@ import ConfigActionForm from '@/components/config/ConfigActionForm.vue'
 import ConfigCardForm from '@/components/config/ConfigCardForm.vue'
 import { useNavigation } from '@/config/schema'
 import { useConfigStore, type Page1Config, type FilterConfig, type TableColumn, type ActionButtonConfig , type CardItemConfig } from '@/stores/configStore'
+import { useConfigCrud } from '@/composables/useConfigCrud'
 
 // --- Props ---
 const props = defineProps<{
@@ -73,59 +74,201 @@ const effectModalFormItems = ref<any[]>([])
 const effectModalFormData = reactive<Record<string, any>>({})
 
 // ============================================
-// 编辑模式 - 快速编辑弹窗
+// 编辑模式 - useConfigCrud 集成
 // ============================================
-const editDialogOpen = ref(false)
 const editDialogType = ref<'filter' | 'column' | 'action' | 'card'>('filter')
-const editDialogMode = ref<'add' | 'edit'>('add')
-const editDialogIndex = ref(-1)
 
-// 筛选项编辑表单
-const filterEditForm = ref({
-  key: '',
-  type: 'input' as 'input' | 'select' | 'date-range' | 'tree-select',
-  label: '',
-  placeholder: '',
-  options: '',
-  treeOptions: '',
-  visible: true
+// Transform 函数：将 Store 数据转换为表单格式
+const transformFilter = (item: any) => ({
+  ...item,
+  placeholder: item.placeholder || '',
+  options: item.options?.join(',') || '',
+  treeOptions: item.treeOptions ? JSON.stringify(item.treeOptions) : '',
+  visible: item.visible ?? true
 })
 
-// 列编辑表单
-const columnEditForm = ref({
-  key: '',
-  label: '',
-  width: '120px',
-  type: 'text' as 'text' | 'badge' | 'status-badge' | 'text-button',
-  mockFormat: 'none' as 'none' | 'text' | 'datetime' | 'number' | 'list',
-  mockList: '',
-  buttons: '',
-  fixed: 'none' as 'none' | 'left' | 'right',
-  align: 'left' as 'left' | 'center' | 'right',
-  ellipsis: false,
-  tooltip: false,
-  visible: true
+const transformColumn = (item: any) => ({
+  ...item,
+  type: item.type || 'text',
+  width: item.width || '120px',
+  mockFormat: item.mockFormat || 'text',
+  mockList: item.mockList ? item.mockList.join(',') : '',
+  buttons: item.buttons ? item.buttons.join(',') : '',
+  visible: item.visible ?? true,
+  fixed: item.fixed || 'none',
+  align: item.align || 'left',
+  ellipsis: item.ellipsis || false,
+  tooltip: item.tooltip || false
 })
 
-// 操作按钮编辑表单
-const actionEditForm = ref({
-  key: '',
-  label: '',
-  variant: 'outline' as 'primary' | 'outline' | 'text' | 'shadcn-outline',
-  className: '',
-  effectType: 'none' as 'none' | 'modal',
-  effectTitle: '',
-  effectContent: '',
-  effectFormItems: [] as any[],
-  visible: true
+const transformAction = (item: any) => ({
+  ...item,
+  className: item.className || '',
+  variant: item.variant || 'outline',
+  effectType: item.effectType || 'none',
+  effectTitle: item.effectConfig?.title || '',
+  effectContent: item.effectConfig?.content || '',
+  effectFormItems: item.effectConfig?.formItems || [],
+  visible: item.visible ?? true
 })
 
-// 卡片编辑表单
-const cardEditForm = ref({
-  key: '',
-  title: '',
-  data: ''
+const transformCard = (item: any) => ({
+  ...item,
+  data: String(item.data)
 })
+
+// Filter CRUD
+const filterCrud = useConfigCrud({
+  name: '筛选项',
+  defaultForm: () => ({
+    key: '', type: 'input' as const, label: '', placeholder: '',
+    options: '', treeOptions: '', visible: true
+  }),
+  doSave: (modifying, index, form) => {
+    const config = configStore.page1Configs[currentNavId.value]
+    if (!config) return
+    const newFilter: FilterConfig = {
+      key: form.key || `filter_${Date.now()}`,
+      type: form.type,
+      label: form.label,
+      placeholder: form.placeholder || undefined,
+      visible: form.visible,
+      options: form.options ? form.options.split(/[，,]/).map((s: string) => s.trim()).filter((s: string) => s) : [],
+      treeOptions: form.treeOptions ? safeJsonParseWithError(form.treeOptions, '树形数据') ?? undefined : undefined
+    }
+    if (modifying && index !== null) {
+      config.filterArea.filters[index] = newFilter
+    } else {
+      config.filterArea.filters.push(newFilter)
+    }
+  },
+  doDelete: (index) => {
+    const config = configStore.page1Configs[currentNavId.value]
+    config?.filterArea.filters.splice(index, 1)
+  }
+})
+
+// Column CRUD
+const columnCrud = useConfigCrud({
+  name: '表格列',
+  defaultForm: () => ({
+    key: '', label: '', width: '120px',
+    type: 'text' as const, mockFormat: 'none' as const, mockList: '', buttons: '',
+    fixed: 'none' as const, align: 'left' as const, ellipsis: false, tooltip: false, visible: true
+  }),
+  doSave: (modifying, index, form) => {
+    const config = configStore.page1Configs[currentNavId.value]
+    if (!config) return
+    const newColumn: TableColumn = {
+      key: form.key || `col_${Date.now()}`,
+      label: form.label,
+      width: form.width,
+      type: form.type === 'text' ? undefined : form.type,
+      visible: form.visible,
+      mockFormat: (form.mockFormat as string) === 'none' ? undefined : form.mockFormat as 'text' | 'datetime' | 'number' | 'list' | undefined,
+      mockList: (form.mockFormat as string) === 'list' ? form.mockList.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined,
+      buttons: (form.type as string) === 'text-button' && form.buttons ? form.buttons.split(/[，,]/).map((s: string) => s.trim()).filter((s: string) => s) : undefined,
+      fixed: form.fixed === 'none' ? undefined : form.fixed,
+      align: form.align === 'left' ? undefined : form.align,
+      ellipsis: form.ellipsis || undefined,
+      tooltip: form.tooltip || undefined
+    }
+    if (modifying && index !== null) {
+      config.tableArea.columns[index] = newColumn
+    } else {
+      config.tableArea.columns.push(newColumn)
+    }
+  },
+  doDelete: (index) => {
+    const config = configStore.page1Configs[currentNavId.value]
+    config?.tableArea.columns.splice(index, 1)
+  }
+})
+
+// Action CRUD
+const actionCrud = useConfigCrud({
+  name: '操作按钮',
+  defaultForm: () => ({
+    key: '', label: '', variant: 'outline' as const, className: '',
+    effectType: 'none' as const, effectTitle: '', effectContent: '', effectFormItems: [] as any[], visible: true
+  }),
+  doSave: (modifying, index, form) => {
+    const config = configStore.page1Configs[currentNavId.value]
+    if (!config) return
+    if (!config.actionsArea) config.actionsArea = { buttons: [] }
+    if (!config.actionsArea.buttons) config.actionsArea.buttons = []
+    const newAction: ActionButtonConfig = {
+      key: form.key || `action_${Date.now()}`,
+      label: form.label,
+      variant: form.variant,
+      className: form.className || undefined,
+      visible: form.visible,
+      effectType: (form.effectType as string) === 'none' ? undefined : form.effectType,
+      effectConfig: (form.effectType as string) === 'modal' ? {
+        title: form.effectTitle, content: form.effectContent, formItems: form.effectFormItems
+      } : undefined
+    }
+    if (modifying && index !== null) {
+      config.actionsArea.buttons[index] = newAction
+    } else {
+      config.actionsArea.buttons.push(newAction)
+    }
+    config.actionsArea.show = true
+  },
+  doDelete: (index) => {
+    const config = configStore.page1Configs[currentNavId.value]
+    config?.actionsArea?.buttons?.splice(index, 1)
+  }
+})
+
+// Card CRUD
+const cardCrud = useConfigCrud({
+  name: '卡片',
+  defaultForm: () => ({ key: '', title: '', data: '' }),
+  doSave: (modifying, index, form) => {
+    const config = configStore.page1Configs[currentNavId.value]
+    if (!config) return
+    if (!config.cardArea) config.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
+    if (!config.cardArea.cards) config.cardArea.cards = []
+    const newCard: CardItemConfig = {
+      key: form.key || `card_${Date.now()}`,
+      title: form.title,
+      data: form.data
+    }
+    if (modifying && index !== null) {
+      config.cardArea.cards[index] = newCard
+    } else {
+      config.cardArea.cards.push(newCard)
+    }
+  },
+  doDelete: (index) => {
+    const config = configStore.page1Configs[currentNavId.value]
+    config?.cardArea?.cards?.splice(index, 1)
+  }
+})
+
+// 当前激活的 CRUD 实例（用于弹窗绑定）
+const currentCrud = computed(() => {
+  switch (editDialogType.value) {
+    case 'filter': return filterCrud
+    case 'column': return columnCrud
+    case 'action': return actionCrud
+    case 'card': return cardCrud
+  }
+})
+
+// 兼容性：保留旧的表单引用（用于模板中的 v-model）
+const filterEditForm = filterCrud.formData
+const columnEditForm = columnCrud.formData
+const actionEditForm = actionCrud.formData
+const cardEditForm = cardCrud.formData
+
+// 兼容性：保留旧的弹窗状态引用
+const editDialogOpen = computed({
+  get: () => currentCrud.value.dialogVisible.value,
+  set: (val) => { currentCrud.value.dialogVisible.value = val }
+})
+const editDialogMode = computed(() => currentCrud.value.mode.value)
 
 // 区域配置编辑弹窗
 const areaConfigDialogOpen = ref(false)
@@ -187,35 +330,28 @@ function openAreaConfigDialog(type: 'filter' | 'card' | 'table') {
 
 // 保存区域配置
 function saveAreaConfig() {
-  if (!pageConfig.value) return
   const navId = currentNavId.value
+  const config = configStore.page1Configs[navId]
+  if (!config) return
   
   if (areaConfigType.value === 'filter') {
-    configStore.updateFilterAreaConfig(navId, {
-      columns: filterAreaConfig.value.columns,
-      gap: filterAreaConfig.value.gap
-    })
-    configStore.updatePage1Config(navId, {
-      actionsArea: { ...pageConfig.value.actionsArea, show: filterAreaConfig.value.showActions, buttons: pageConfig.value.actionsArea?.buttons ?? [] }
-    })
+    // 直接修改 Store 状态
+    config.filterArea.columns = filterAreaConfig.value.columns
+    config.filterArea.gap = filterAreaConfig.value.gap
+    if (!config.actionsArea) config.actionsArea = { buttons: [] }
+    config.actionsArea.show = filterAreaConfig.value.showActions
   } else if (areaConfigType.value === 'card') {
-    configStore.updatePage1Config(navId, {
-      cardArea: {
-        show: cardAreaConfig.value.show,
-        columns: cardAreaConfig.value.columns,
-        gap: cardAreaConfig.value.gap,
-        cards: pageConfig.value.cardArea?.cards ?? []
-      }
-    })
+    if (!config.cardArea) config.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
+    config.cardArea.show = cardAreaConfig.value.show
+    config.cardArea.columns = cardAreaConfig.value.columns
+    config.cardArea.gap = cardAreaConfig.value.gap
   } else if (areaConfigType.value === 'table') {
-    configStore.updateTableAreaConfig(navId, {
-      height: tableAreaConfig.value.height,
-      pageSize: tableAreaConfig.value.pageSize,
-      scrollX: tableAreaConfig.value.scrollX,
-      scrollY: tableAreaConfig.value.scrollY,
-      showCheckbox: tableAreaConfig.value.showCheckbox,
-      stickyHeader: tableAreaConfig.value.stickyHeader
-    })
+    config.tableArea.height = tableAreaConfig.value.height
+    config.tableArea.pageSize = tableAreaConfig.value.pageSize
+    config.tableArea.scrollX = tableAreaConfig.value.scrollX
+    config.tableArea.scrollY = tableAreaConfig.value.scrollY
+    config.tableArea.showCheckbox = tableAreaConfig.value.showCheckbox
+    config.tableArea.stickyHeader = tableAreaConfig.value.stickyHeader
   }
   
   areaConfigDialogOpen.value = false
@@ -236,25 +372,23 @@ function handleDragOver(e: DragEvent, index: number) {
 }
 
 function handleDrop(type: 'filter' | 'action' | 'column', targetIndex: number) {
-  if (dragIndex.value === -1 || dragIndex.value === targetIndex || !pageConfig.value) return
+  if (dragIndex.value === -1 || dragIndex.value === targetIndex) return
   
   const navId = currentNavId.value
+  const config = configStore.page1Configs[navId]
+  if (!config) return
   
+  // 直接在 Store 数组上操作
   if (type === 'filter') {
-    const filters = [...pageConfig.value.filterArea.filters]
-    const [removed] = filters.splice(dragIndex.value, 1)
-    filters.splice(targetIndex, 0, removed)
-    configStore.updateFilterAreaConfig(navId, { filters })
+    const [removed] = config.filterArea.filters.splice(dragIndex.value, 1)
+    config.filterArea.filters.splice(targetIndex, 0, removed)
   } else if (type === 'action') {
-    const buttons = [...(pageConfig.value.actionsArea?.buttons || [])]
-    const [removed] = buttons.splice(dragIndex.value, 1)
-    buttons.splice(targetIndex, 0, removed)
-    configStore.updatePage1Config(navId, { actionsArea: { ...pageConfig.value.actionsArea, buttons } })
+    if (!config.actionsArea?.buttons) return
+    const [removed] = config.actionsArea.buttons.splice(dragIndex.value, 1)
+    config.actionsArea.buttons.splice(targetIndex, 0, removed)
   } else if (type === 'column') {
-    const columns = [...pageConfig.value.tableArea.columns]
-    const [removed] = columns.splice(dragIndex.value, 1)
-    columns.splice(targetIndex, 0, removed)
-    configStore.updateTableAreaConfig(navId, { columns })
+    const [removed] = config.tableArea.columns.splice(dragIndex.value, 1)
+    config.tableArea.columns.splice(targetIndex, 0, removed)
   }
   
   dragIndex.value = -1
@@ -266,247 +400,44 @@ function handleDragEnd() {
   dragOverIndex.value = -1
 }
 
-/**
- * 打开编辑弹窗
- * 
- * 支持新增和编辑两种模式，根据 type 参数决定编辑哪种配置项
- * 
- * @param type - 配置项类型：filter(筛选项)、column(表格列)、action(操作按钮)、card(卡片)
- * @param mode - 操作模式：add(新增) 或 edit(编辑)
- * @param index - 编辑模式下的项索引（可选）
- */
+// 辅助函数：打开编辑弹窗
 function openEditDialog(type: 'filter' | 'column' | 'action' | 'card', mode: 'add' | 'edit', index?: number) {
   editDialogType.value = type
-  editDialogMode.value = mode
-  editDialogIndex.value = index ?? -1
-  
-  if (mode === 'edit' && index !== undefined && pageConfig.value) {
-    // 加载现有数据
+  if (mode === 'add') {
+    currentCrud.value.openAdd()
+  } else if (index !== undefined) {
+    const config = pageConfig.value
+    if (!config) return
+    let item: any
+    let transform: any
     if (type === 'filter') {
-      const item = pageConfig.value.filterArea.filters[index]
-      filterEditForm.value = { 
-        ...item,
-        placeholder: item.placeholder || '',
-        options: item.options?.join(',') || '',
-        treeOptions: item.treeOptions ? JSON.stringify(item.treeOptions) : '',
-        visible: item.visible ?? true
-      }
+      item = config.filterArea.filters[index]
+      transform = transformFilter
     } else if (type === 'column') {
-      const item = pageConfig.value.tableArea.columns[index]
-      columnEditForm.value = { 
-        ...item,
-        type: item.type || 'text',
-        width: item.width || '120px',
-        // @ts-ignore
-        mockFormat: item.mockFormat || 'text',
-        mockList: item.mockList ? item.mockList.join(',') : '',
-        buttons: item.buttons ? item.buttons.join(',') : '',
-        visible: item.visible ?? true,
-        fixed: item.fixed || 'none',
-        align: item.align || 'left',
-        ellipsis: item.ellipsis || false,
-        tooltip: item.tooltip || false
-      }
+      item = config.tableArea.columns[index]
+      transform = transformColumn
     } else if (type === 'action') {
-      const item = pageConfig.value.actionsArea?.buttons?.[index]
-      if (item) {
-        actionEditForm.value = { 
-          ...item,
-          className: item.className || '',
-          variant: (item.variant || 'outline') as any,
-          effectType: item.effectType || 'none',
-          effectTitle: item.effectConfig?.title || '',
-          effectContent: item.effectConfig?.content || '',
-          effectFormItems: item.effectConfig?.formItems || [],
-          visible: item.visible ?? true
-        }
-      }
+      item = config.actionsArea?.buttons?.[index]
+      transform = transformAction
     } else if (type === 'card') {
-      const item = pageConfig.value.cardArea?.cards?.[index]
-      if (item) cardEditForm.value = { 
-        ...item,
-        data: String(item.data)
-      }
+      item = config.cardArea?.cards?.[index]
+      transform = transformCard
     }
-  } else {
-    // 重置表单
-    if (type === 'filter') {
-      filterEditForm.value = { 
-        key: '', type: 'input', label: '', placeholder: '', 
-        options: '', treeOptions: '', visible: true 
-      }
-    } else if (type === 'column') {
-      columnEditForm.value = { 
-        key: '', label: '', width: '120px', type: 'text', 
-        mockFormat: 'none', mockList: '', buttons: '',
-        fixed: 'none', align: 'left', ellipsis: false, tooltip: false,
-        visible: true 
-      }
-    } else if (type === 'action') {
-      actionEditForm.value = { 
-        key: '', label: '', variant: 'outline', 
-        className: '', effectType: 'none', effectTitle: '', effectContent: '', effectFormItems: [],
-        visible: true 
-      }
-    } else if (type === 'card') {
-      cardEditForm.value = { key: '', title: '', data: '' }
-    }
+    if (item) currentCrud.value.openEdit(index, item, transform)
   }
-  
-  editDialogOpen.value = true
 }
 
-/**
- * 保存编辑内容
- * 
- * 根据当前 editDialogType 和 editDialogMode 决定操作：
- * - 新增模式：自动生成 key，追加到列表
- * - 编辑模式：更新指定索引的项
- * 
- * @remarks
- * 使用 Arco Message 组件显示操作结果
- */
+// 辅助函数：保存编辑
 function saveEdit() {
-  if (!pageConfig.value) return
-  
-  const navId = currentNavId.value
-  
-  if (editDialogType.value === 'filter') {
-    const filters = [...pageConfig.value.filterArea.filters]
-    
-    const newFilter: FilterConfig = {
-      key: filterEditForm.value.key,
-      type: filterEditForm.value.type,
-      label: filterEditForm.value.label,
-      placeholder: filterEditForm.value.placeholder,
-      visible: filterEditForm.value.visible,
-      options: filterEditForm.value.options ? filterEditForm.value.options.split(/[，,]/).map(s => s.trim()).filter(s => s) : [],
-      treeOptions: filterEditForm.value.treeOptions ? safeJsonParseWithError(filterEditForm.value.treeOptions, '树形数据') ?? undefined : undefined
-    }
-
-    if (editDialogMode.value === 'add') {
-      newFilter.key = newFilter.key || `filter_${Date.now()}`
-      filters.push(newFilter)
-    } else {
-      filters[editDialogIndex.value] = newFilter
-    }
-    configStore.updateFilterAreaConfig(navId, { filters })
-  } else if (editDialogType.value === 'column') {
-    const columns = [...pageConfig.value.tableArea.columns]
-    
-    const newColumn: TableColumn = {
-      key: columnEditForm.value.key,
-      label: columnEditForm.value.label,
-      width: columnEditForm.value.width,
-      type: columnEditForm.value.type,
-      visible: columnEditForm.value.visible,
-      // @ts-ignore
-      mockFormat: columnEditForm.value.mockFormat,
-      mockList: columnEditForm.value.mockList ? columnEditForm.value.mockList.split(/[，,]/).map(s => s.trim()) : undefined,
-      buttons: columnEditForm.value.buttons ? columnEditForm.value.buttons.split(/[，,]/).map(s => s.trim()) : undefined,
-      fixed: columnEditForm.value.fixed === 'none' ? undefined : columnEditForm.value.fixed,
-      align: columnEditForm.value.align,
-      ellipsis: columnEditForm.value.ellipsis,
-      tooltip: columnEditForm.value.tooltip
-    }
-
-    if (editDialogMode.value === 'add') {
-      newColumn.key = newColumn.key || `col_${Date.now()}`
-      columns.push(newColumn)
-    } else {
-      columns[editDialogIndex.value] = newColumn
-    }
-    configStore.updateTableAreaConfig(navId, { columns })
-  } else if (editDialogType.value === 'action') {
-    const buttons = [...(pageConfig.value.actionsArea?.buttons || [])]
-    
-    const newAction: ActionButtonConfig = {
-      key: actionEditForm.value.key,
-      label: actionEditForm.value.label,
-      variant: actionEditForm.value.variant,
-      className: actionEditForm.value.className,
-      visible: actionEditForm.value.visible,
-      effectType: actionEditForm.value.effectType === 'none' ? undefined : actionEditForm.value.effectType,
-      effectConfig: actionEditForm.value.effectType === 'modal' ? {
-        title: actionEditForm.value.effectTitle,
-        content: actionEditForm.value.effectContent,
-        formItems: actionEditForm.value.effectFormItems
-      } : undefined
-    }
-
-    if (editDialogMode.value === 'add') {
-      newAction.key = newAction.key || `action_${Date.now()}`
-      buttons.push(newAction)
-    } else {
-      buttons[editDialogIndex.value] = newAction
-    }
-    configStore.updatePage1Config(navId, { actionsArea: { ...pageConfig.value.actionsArea, show: true, buttons } })
-  } else if (editDialogType.value === 'card') {
-    const cards = [...(pageConfig.value.cardArea?.cards || [])]
-    
-    const newCard: CardItemConfig = {
-      key: cardEditForm.value.key,
-      title: cardEditForm.value.title,
-      data: cardEditForm.value.data
-    }
-
-    if (editDialogMode.value === 'add') {
-      newCard.key = newCard.key || `card_${Date.now()}`
-      cards.push(newCard)
-    } else {
-      cards[editDialogIndex.value] = newCard
-    }
-    configStore.updatePage1Config(navId, { 
-      cardArea: { 
-        ...pageConfig.value.cardArea,
-        show: pageConfig.value.cardArea?.show ?? true, 
-        columns: pageConfig.value.cardArea?.columns || 4, 
-        gap: pageConfig.value.cardArea?.gap || '16px', 
-        cards 
-      } 
-    })
-  }
-  
-  editDialogOpen.value = false
-  Message.success(editDialogMode.value === 'add' ? '添加成功' : '保存成功')
+  currentCrud.value.handleSave()
 }
 
-/**
- * 删除指定配置项
- * 
- * @param type - 配置项类型
- * @param index - 要删除的项索引
- * 
- * @remarks
- * 删除后会立即更新 configStore，无需手动保存
- */
+// 辅助函数：删除项目
 function deleteItem(type: 'filter' | 'column' | 'action' | 'card', index: number) {
-  if (!pageConfig.value) return
-  
-  const navId = currentNavId.value
-  
-  if (type === 'filter') {
-    const filters = pageConfig.value.filterArea.filters.filter((_, i) => i !== index)
-    configStore.updateFilterAreaConfig(navId, { filters })
-  } else if (type === 'column') {
-    const columns = pageConfig.value.tableArea.columns.filter((_, i) => i !== index)
-    configStore.updateTableAreaConfig(navId, { columns })
-  } else if (type === 'action') {
-    const buttons = (pageConfig.value.actionsArea?.buttons || []).filter((_, i) => i !== index)
-    configStore.updatePage1Config(navId, { actionsArea: { ...pageConfig.value.actionsArea, buttons } })
-  } else if (type === 'card') {
-    const cards = (pageConfig.value.cardArea?.cards || []).filter((_, i) => i !== index)
-    configStore.updatePage1Config(navId, { 
-      cardArea: { 
-        show: pageConfig.value.cardArea?.show ?? true, 
-        columns: pageConfig.value.cardArea?.columns || 4, 
-        gap: pageConfig.value.cardArea?.gap || '16px', 
-        cards 
-      } 
-    })
-  }
-  
-  Message.success('删除成功')
+  if (type === 'filter') filterCrud.handleDelete(index)
+  else if (type === 'column') columnCrud.handleDelete(index)
+  else if (type === 'action') actionCrud.handleDelete(index)
+  else if (type === 'card') cardCrud.handleDelete(index)
 }
 
 // 根据 mockFormat 生成虚拟数据
@@ -805,9 +736,11 @@ const handleEffectModalOk = () => {
                     <AButton size="mini" type="text" class="pointer-events-auto" @click.stop="openEditDialog('filter', 'edit', filterIndex)">
                       <Pencil class="w-3 h-3" />
                     </AButton>
-                    <AButton size="mini" type="text" status="danger" class="pointer-events-auto" @click.stop="deleteItem('filter', filterIndex)">
-                      <Trash2 class="w-3 h-3" />
-                    </AButton>
+                    <APopconfirm content="确定要删除该筛选项吗?" @ok="deleteItem('filter', filterIndex)">
+                      <AButton size="mini" type="text" status="danger" class="pointer-events-auto" @click.stop>
+                        <Trash2 class="w-3 h-3" />
+                      </AButton>
+                    </APopconfirm>
                   </div>
                 </div>
               </template>
@@ -851,9 +784,11 @@ const handleEffectModalOk = () => {
                           <AButton size="mini" type="primary" class="!p-1 !min-w-0" @click.stop="openEditDialog('action', 'edit', index)">
                             <Pencil class="w-2.5 h-2.5" />
                           </AButton>
-                          <AButton size="mini" status="danger" class="!p-1 !min-w-0" @click.stop="deleteItem('action', index)">
-                            <Trash2 class="w-2.5 h-2.5" />
-                          </AButton>
+                          <APopconfirm content="确定要删除该操作按钮吗?" @ok="deleteItem('action', index)">
+                            <AButton size="mini" status="danger" class="!p-1 !min-w-0" @click.stop>
+                              <Trash2 class="w-2.5 h-2.5" />
+                            </AButton>
+                          </APopconfirm>
                         </div>
                       </div>
                   </template>
@@ -899,9 +834,11 @@ const handleEffectModalOk = () => {
                       <AButton size="mini" type="primary" class="!p-1 !min-w-0" @click.stop="openEditDialog('action', 'edit', actionIndex)">
                         <Pencil class="w-2.5 h-2.5" />
                       </AButton>
-                      <AButton size="mini" status="danger" class="!p-1 !min-w-0" @click.stop="deleteItem('action', actionIndex)">
-                        <Trash2 class="w-2.5 h-2.5" />
-                      </AButton>
+                      <APopconfirm content="确定要删除该操作按钮吗?" @ok="deleteItem('action', actionIndex)">
+                        <AButton size="mini" status="danger" class="!p-1 !min-w-0" @click.stop>
+                          <Trash2 class="w-2.5 h-2.5" />
+                        </AButton>
+                      </APopconfirm>
                     </div>
                   </div>
                 </template>
@@ -955,9 +892,11 @@ const handleEffectModalOk = () => {
                   <AButton size="mini" type="text" @click="openEditDialog('card', 'edit', cardIndex)">
                     <Pencil class="w-3 h-3" />
                   </AButton>
-                  <AButton size="mini" type="text" status="danger" @click="deleteItem('card', cardIndex)">
-                    <Trash2 class="w-3 h-3" />
-                  </AButton>
+                  <APopconfirm content="确定要删除该卡片吗?" @ok="deleteItem('card', cardIndex)">
+                    <AButton size="mini" type="text" status="danger" @click.stop>
+                      <Trash2 class="w-3 h-3" />
+                    </AButton>
+                  </APopconfirm>
                 </div>
               </div>
             </template>
@@ -1048,9 +987,11 @@ const handleEffectModalOk = () => {
                     <Pencil class="w-2.5 h-2.5" />
                   </AButton>
                   <div class="w-px h-3 bg-border mx-0.5"></div>
-                  <AButton size="mini" type="text" status="danger" class="!px-1 !h-5" @click.stop="deleteItem('column', colIndex)">
-                    <Trash2 class="w-2.5 h-2.5" />
-                  </AButton>
+                  <APopconfirm content="确定要删除该列吗?" @ok="deleteItem('column', colIndex)">
+                    <AButton size="mini" type="text" status="danger" class="!px-1 !h-5" @click.stop>
+                      <Trash2 class="w-2.5 h-2.5" />
+                    </AButton>
+                  </APopconfirm>
                 </div>
 
                 <!-- 拖拽指示器 -->

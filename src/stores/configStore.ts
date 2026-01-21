@@ -402,6 +402,17 @@ export const useConfigStore = defineStore('config', () => {
         }
     }
 
+    // 重排子导航项
+    function reorderSubNavItems(groupIndex: number, mainItemId: string, newItems: NavSubItem[]) {
+        const group = navGroups.value[groupIndex]
+        if (group) {
+            const mainItem = group.items.find(i => i.id === mainItemId)
+            if (mainItem) {
+                mainItem.items = newItems
+            }
+        }
+    }
+
     // ============================================
     // Page1 Config CRUD Actions
     // ============================================
@@ -1261,6 +1272,7 @@ export const useConfigStore = defineStore('config', () => {
         addSubNavItem,
         updateSubNavItem,
         deleteSubNavItem,
+        reorderSubNavItems,
         // Page1 Actions
         addPage1Config,
         updatePage1Config,

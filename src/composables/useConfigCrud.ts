@@ -61,13 +61,14 @@ export function useConfigCrud<T extends Record<string, any>>(options: ConfigCrud
      * Handle the save action
      */
     const handleSave = () => {
-        // Validate required fields (assumes 'key' and 'label'/'title' are common, but let's leave generic validation to the callback or simple checks)
-        // Here we just call the doSave callback
+        // 先缓存当前模式，防止关闭弹窗后 mode 被重置
+        const isAddMode = mode.value === 'add'
 
+        // 调用保存回调
         options.doSave(mode.value === 'edit', editingIndex.value, formData.value)
 
         dialogVisible.value = false
-        Message.success(mode.value === 'add' ? `${options.name || '项'}添加成功` : `${options.name || '项'}更新成功`)
+        Message.success(isAddMode ? `${options.name || '项'}添加成功` : `${options.name || '项'}更新成功`)
     }
 
     /**

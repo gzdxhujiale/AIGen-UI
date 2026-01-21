@@ -120,19 +120,7 @@ const availableIcons = [
 // Active Tab State for Preview Control
 const activeTab = ref('filter')
 
-const previewVisibleSections = computed(() => {
-  switch (activeTab.value) {
-    case 'filter':
-    case 'actions':
-      return ['filter', 'actions'] as ('filter' | 'actions' | 'card' | 'table')[]
-    case 'card':
-      return ['card'] as ('filter' | 'actions' | 'card' | 'table')[]
-    case 'table':
-      return ['table'] as ('filter' | 'actions' | 'card' | 'table')[]
-    default:
-      return undefined // Show all
-  }
-})
+
 
 // 获取所有子导航项（扁平化）
 const allSubNavItems = computed(() => {
@@ -861,7 +849,7 @@ const handleConfirmImport = async () => {
 </script>
 
 <template>
-  <div class="settings-root h-full overflow-hidden">
+  <div class="settings-root">
       <!-- 隐藏的文件输入 -->
       <input 
         ref="fileInputRef"
@@ -871,7 +859,7 @@ const handleConfirmImport = async () => {
         @change="handleFileSelected"
       />
     
-    <div class="h-full flex overflow-hidden">
+    <div class="flex flex-1">
       <!-- Left Sidebar: Navigation List -->
     <div class="w-72 border-r bg-muted/30 flex flex-col">
       <!-- Sidebar Header -->
@@ -972,7 +960,7 @@ const handleConfirmImport = async () => {
     </div>
 
     <!-- Right Content: Page Config Editor -->
-    <div class="flex-1 flex flex-col overflow-hidden bg-background">
+    <div class="flex-1 flex flex-col bg-background min-w-0">
       <!-- 未选择导航时 -->
       <div v-if="!selectedNavId" class="h-full flex items-center justify-center">
         <div class="text-center text-muted-foreground">
@@ -982,7 +970,7 @@ const handleConfirmImport = async () => {
       </div>
 
       <!-- 选中导航后 -->
-      <div v-else class="flex flex-col h-full">
+      <div v-else class="flex flex-col flex-1">
           <!-- Header Content (Compact Breadcrumb Layout) -->
           <div class="px-4 py-2.5 border-b flex items-center justify-between shrink-0 bg-background/95 backdrop-blur z-10">
             <!-- Left: Breadcrumb Style Title -->
@@ -1033,7 +1021,7 @@ const handleConfirmImport = async () => {
           </div>
 
           <!-- 内容区 (Compact) -->
-          <div class="flex-1 overflow-auto p-4 space-y-4 scrollbar-thin">
+          <div class="p-4 space-y-4">
             <!-- 无配置时 -->
             <div v-if="!currentPageConfig" class="text-center py-8 border-2 border-dashed rounded-lg">
               <FileCode class="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
@@ -1046,10 +1034,10 @@ const handleConfirmImport = async () => {
 
             <!-- 有配置时 -->
             <template v-else>
-            <ATabs v-model:active-key="activeTab" type="card-gutter" class="w-full h-full">
+            <ATabs v-model:active-key="activeTab" type="card-gutter" class="w-full">
                 <!-- 筛选区配置 -->
                 <ATabPane key="filter" title="筛选区">
-                    <div class="h-full">
+                    <div>
                     <div class="rounded-lg border bg-card mb-3">
                       <div class="p-3">
                         <!-- 布局配置与添加按钮 -->
@@ -1200,6 +1188,25 @@ const handleConfirmImport = async () => {
                         </div>
                     </div>
                     </div>
+
+                    <!-- Page Preview Area (Filter Tab) -->
+                    <div class="mt-4 border rounded-lg bg-background shadow-sm overflow-hidden">
+                       <div class="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+                         <div class="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+                           <Eye class="w-3.5 h-3.5" />
+                           页面预览 (筛选与操作区)
+                         </div>
+                       </div>
+                       <div class="h-[400px] overflow-hidden relative">
+                          <component 
+                            :is="Page1" 
+                            :key="selectedNavId" 
+                            :nav-id="selectedNavId"
+                            :visible-sections="['filter', 'actions']"
+                            class="h-full"
+                          />
+                       </div>
+                    </div>
                   </ATabPane>
 
                   <!-- 操作区配置 -->
@@ -1346,6 +1353,25 @@ const handleConfirmImport = async () => {
                         </div>
                         </div>
                     </div>
+
+                    <!-- Page Preview Area (Actions Tab) -->
+                    <div class="mt-4 border rounded-lg bg-background shadow-sm overflow-hidden">
+                       <div class="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+                         <div class="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+                           <Eye class="w-3.5 h-3.5" />
+                           页面预览 (筛选与操作区)
+                         </div>
+                       </div>
+                       <div class="h-[400px] overflow-hidden relative">
+                          <component 
+                            :is="Page1" 
+                            :key="selectedNavId" 
+                            :nav-id="selectedNavId"
+                            :visible-sections="['filter', 'actions']"
+                            class="h-full"
+                          />
+                       </div>
+                    </div>
                   </ATabPane>
 
                   <!-- 卡片区配置 -->
@@ -1482,6 +1508,25 @@ const handleConfirmImport = async () => {
                           <p class="text-xs text-muted-foreground">暂无卡片配置</p>
                         </div>
                         </div>
+                    </div>
+
+                    <!-- Page Preview Area (Card Tab) -->
+                    <div class="mt-4 border rounded-lg bg-background shadow-sm overflow-hidden">
+                       <div class="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+                         <div class="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+                           <Eye class="w-3.5 h-3.5" />
+                           页面预览 (卡片区)
+                         </div>
+                       </div>
+                       <div class="h-[400px] overflow-hidden relative">
+                          <component 
+                            :is="Page1" 
+                            :key="selectedNavId" 
+                            :nav-id="selectedNavId"
+                            :visible-sections="['card']"
+                            class="h-full"
+                          />
+                       </div>
                     </div>
                   </ATabPane>
 
@@ -1693,33 +1738,29 @@ const handleConfirmImport = async () => {
                           <FileCode class="w-5 h-5 text-muted-foreground/40 mb-2" />
                           <p class="text-xs text-muted-foreground">暂无表格列</p>
                         </div>
-                        </div>
+                    </div>
+                    </div>
+                    
+                    <!-- Page Preview Area (Table Tab) -->
+                    <div class="mt-4 border rounded-lg bg-background shadow-sm overflow-hidden">
+                       <div class="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+                         <div class="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+                           <Eye class="w-3.5 h-3.5" />
+                           页面预览 (表格区)
+                         </div>
+                       </div>
+                       <div class="h-[400px] overflow-hidden relative">
+                          <component 
+                            :is="Page1" 
+                            :key="selectedNavId" 
+                            :nav-id="selectedNavId"
+                            :visible-sections="['table']"
+                            class="h-full"
+                          />
+                       </div>
                     </div>
                   </ATabPane>
               </ATabs>
-
-                <!-- Page Preview Area (Moved) -->
-                <div class="mt-6 mb-4 border rounded-lg bg-background shadow-sm overflow-hidden">
-                   <div class="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
-                     <div class="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
-                       <Eye class="w-3.5 h-3.5" />
-                       页面预览
-                     </div>
-                     <div class="text-[10px] text-muted-foreground">
-                       (实时预览当前配置效果)
-                     </div>
-                   </div>
-                   <div class="h-[400px] overflow-hidden relative">
-                      <!-- Use key to force re-render when switching nav items -->
-                      <component 
-                        :is="Page1" 
-                        :key="selectedNavId" 
-                        :nav-id="selectedNavId"
-                        :visible-sections="previewVisibleSections"
-                        class="h-full"
-                      />
-                   </div>
-                </div>
             </template>
           </div>
       </div>
@@ -1886,8 +1927,9 @@ const handleConfirmImport = async () => {
 
 <style scoped>
 .settings-root {
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Custom scrollbar for navigation */
