@@ -18,6 +18,22 @@ export const useConfigTeamStore = defineStore('config-team', () => {
     const teams = ref<TeamItem[]>([])
     const isLoaded = ref(false)
     const isLoading = ref(false)
+    const CACHE_KEY = 'aigen_team_config_cache'
+
+    /**
+     * 从本地缓存加载 (同步)
+     */
+    function loadFromCache() {
+        const cached = localStorage.getItem(CACHE_KEY)
+        if (cached) {
+            try {
+                teams.value = JSON.parse(cached)
+                isLoaded.value = true
+            } catch (e) {
+                console.error('Failed to parse team config cache', e)
+            }
+        }
+    }
 
     /**
      * 加载团队配置
@@ -38,6 +54,8 @@ export const useConfigTeamStore = defineStore('config-team', () => {
 
             if (data?.team_config) {
                 teams.value = data.team_config
+                // 更新缓存
+                localStorage.setItem(CACHE_KEY, JSON.stringify(teams.value))
             } else {
                 // 如果云端没数据，使用默认值
                 teams.value = JSON.parse(JSON.stringify(DEFAULT_TEAM_CONFIG))
@@ -68,6 +86,9 @@ export const useConfigTeamStore = defineStore('config-team', () => {
                 ...team,
                 logo: typeof team.logo === 'string' ? team.logo : (team.logo as any)?.name || 'GalleryVerticalEnd'
             }))
+
+            // 乐观更新缓存
+            localStorage.setItem(CACHE_KEY, JSON.stringify(teams.value))
 
             const { error } = await supabase
                 .from('team_configs')
@@ -119,6 +140,7 @@ export const useConfigTeamStore = defineStore('config-team', () => {
         teams,
         isLoaded,
         isLoading,
+        loadFromCache,
         loadTeams,
         saveTeams,
         addTeam,

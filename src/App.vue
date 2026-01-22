@@ -60,13 +60,24 @@ onMounted(async () => {
 
 
 
-    await Promise.all([
+    // 1. 立即从本地缓存加载 (同步)
+    // 这样 UI 可以立刻渲染，无需等待网络请求
+    teamStore.loadFromCache()
+    menuStore.loadFromCache()
+    pageStore.loadFromCache()
+    
+    console.log(`App: Cache loaded in ${(performance.now() - startTime).toFixed(2)}ms`)
+
+    // 2. 后台并行同步最新配置
+    // 我们不等待这个 Promise 完成就允许交互，但为了日志记录仍保留 await (或者移除 await 让其完全后台运行)
+    // 但鉴于 Promise.all 本身非阻塞 UI 渲染 (Vue 是响应式的), 这里 await 只是阻塞 onMounted 函数的结束
+    Promise.all([
         teamStore.loadTeams(),
         menuStore.loadMenu(),
         pageStore.loadPageConfigs()
-    ])
-    
-    console.log(`App: Parallel bootstrap finished in ${(performance.now() - startTime).toFixed(2)}ms`)
+    ]).then(() => {
+        console.log(`App: Background sync finished in ${(performance.now() - startTime).toFixed(2)}ms`)
+    })
 
     
     // For test accounts, always force Arco style

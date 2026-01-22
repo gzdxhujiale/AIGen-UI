@@ -125,6 +125,39 @@ export const useConfigPageStore = defineStore('config-page', () => {
     const isSyncing = ref(false)
     const lastSyncTime = ref<Date | null>(null)
     const syncError = ref<string | null>(null)
+    const CACHE_KEY = 'aigen_page_config_cache'
+
+    /**
+     * 从本地缓存加载 (同步)
+     */
+    function loadFromCache() {
+        const cached = localStorage.getItem(CACHE_KEY)
+        if (cached) {
+            try {
+                const arr = JSON.parse(cached) as PageConfigRecord[]
+                pageConfigs.value.clear()
+                arr.forEach(record => {
+                    pageConfigs.value.set(record.title, record)
+                })
+                isLoaded.value = true
+                console.log('Page config loaded from cache', pageConfigs.value.size)
+            } catch (e) {
+                console.error('Failed to parse page config cache', e)
+            }
+        }
+    }
+
+    /**
+     * 更新缓存 (私有)
+     */
+    function updateCache() {
+        try {
+            const arr = Array.from(pageConfigs.value.values())
+            localStorage.setItem(CACHE_KEY, JSON.stringify(arr))
+        } catch (e) {
+            console.error('Failed to update page config cache', e)
+        }
+    }
 
     // ============================================
     // Computed
@@ -186,6 +219,8 @@ export const useConfigPageStore = defineStore('config-page', () => {
                 data.forEach((record: PageConfigRecord) => {
                     pageConfigs.value.set(record.title, record)
                 })
+                // 更新缓存
+                updateCache()
             } else {
                 // 如果云端没数据，自动创建默认配置 (与 menu/team store 逻辑一致)
                 const defaultTitle = DEFAULT_PAGE_CONFIG_RECORD.title
@@ -262,6 +297,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
             // 更新本地缓存
             if (data) {
                 pageConfigs.value.set(title, data)
+                updateCache() // 更新缓存
             }
             lastSyncTime.value = new Date()
             return { success: true, data }
@@ -301,6 +337,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
             if (error) throw error
 
             pageConfigs.value.delete(title)
+            updateCache() // 更新缓存
             return { success: true }
         } catch (error: any) {
             console.error('删除页面配置失败:', error)
@@ -349,12 +386,12 @@ export const useConfigPageStore = defineStore('config-page', () => {
 
             if (deleteError) throw deleteError
 
-            pageConfigs.value.delete(oldTitle)
             pageConfigs.value.set(newTitle, {
                 ...record,
                 title: newTitle,
                 page_config: newContent
             })
+            updateCache() // 更新缓存
 
             return { success: true }
         } catch (error: any) {
@@ -870,6 +907,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
 
         // 加载
         loadPageConfigs,
+        loadFromCache,
 
         // 查询
         getPageConfigByTitle,

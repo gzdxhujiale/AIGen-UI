@@ -25,6 +25,22 @@ export const useConfigMenuStore = defineStore('config-menu', () => {
     const menuConfig = ref<MenuConfig>(DEFAULT_MENU_CONFIG)
     const isLoaded = ref(false)
     const isLoading = ref(false)
+    const CACHE_KEY = 'aigen_menu_config_cache'
+
+    /**
+     * 从本地缓存加载 (同步)
+     */
+    function loadFromCache() {
+        const cached = localStorage.getItem(CACHE_KEY)
+        if (cached) {
+            try {
+                menuConfig.value = JSON.parse(cached)
+                isLoaded.value = true
+            } catch (e) {
+                console.error('Failed to parse menu config cache', e)
+            }
+        }
+    }
 
     /**
      * 加载菜单配置
@@ -45,6 +61,8 @@ export const useConfigMenuStore = defineStore('config-menu', () => {
 
             if (data?.menu_config) {
                 menuConfig.value = data.menu_config
+                // 更新缓存
+                localStorage.setItem(CACHE_KEY, JSON.stringify(menuConfig.value))
             } else {
                 // 如果云端没数据，使用默认值
                 menuConfig.value = JSON.parse(JSON.stringify(DEFAULT_MENU_CONFIG))
@@ -78,6 +96,9 @@ export const useConfigMenuStore = defineStore('config-menu', () => {
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'user_id' })
 
+            // 乐观更新缓存
+            localStorage.setItem(CACHE_KEY, JSON.stringify(menuConfig.value))
+
             if (error) throw error
             return { success: true }
         } catch (error: any) {
@@ -98,6 +119,7 @@ export const useConfigMenuStore = defineStore('config-menu', () => {
         menuConfig,
         isLoaded,
         isLoading,
+        loadFromCache,
         loadMenu,
         saveMenu,
         updateMenu
