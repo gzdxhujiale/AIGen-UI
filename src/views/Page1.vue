@@ -53,13 +53,16 @@ const currentNavTitle = computed(() => pageStore.findNavTitleBySubId(currentNavI
 const pageConfig = computed<Page1Config | undefined>(() => {
   const navId = currentNavId.value
   
-  // V9: 从 pageStore 获取组件配置
-  const v9Component = pageStore.getComponentById(navId)
-  if (v9Component) {
-    return {
-      ...v9Component,
-      mockData: () => []  // V9 不存储 mockData
-    } as Page1Config
+  // V9: 从 pageStore 获取组件配置 (Strict V9 Pattern)
+  const navTitle = currentNavTitle.value
+  if (navTitle) {
+      const subItem = pageStore.getSubPageConfig(navTitle, navId)
+      if (subItem?.component) {
+        return {
+          ...subItem.component,
+          mockData: () => []  // V9 不存储 mockData
+        } as Page1Config
+      }
   }
   
   return undefined
@@ -155,7 +158,8 @@ const filterCrud = useConfigCrud({
     }
     
     // V9: 获取当前组件配置，更新后整体保存
-    const component = pageStore.getComponentById(subId)
+    const subItem = pageStore.getSubPageConfig(navTitle, subId)
+    const component = subItem?.component
     if (!component) {
       Message.error('页面配置不存在')
       return
@@ -177,7 +181,8 @@ const filterCrud = useConfigCrud({
     const subId = currentNavId.value
     if (!navTitle) return
     
-    const component = pageStore.getComponentById(subId)
+    const subItem = pageStore.getSubPageConfig(navTitle, subId)
+    const component = subItem?.component
     if (!component) return
     
     component.filterArea.filters.splice(index, 1)
@@ -215,7 +220,8 @@ const columnCrud = useConfigCrud({
       tooltip: form.tooltip || undefined
     }
     
-    const component = pageStore.getComponentById(subId)
+    const subItem = pageStore.getSubPageConfig(navTitle, subId)
+    const component = subItem?.component
     if (!component) {
       Message.error('页面配置不存在')
       return
@@ -237,7 +243,8 @@ const columnCrud = useConfigCrud({
     const subId = currentNavId.value
     if (!navTitle) return
     
-    const component = pageStore.getComponentById(subId)
+    const subItem = pageStore.getSubPageConfig(navTitle, subId)
+    const component = subItem?.component
     if (!component) return
     
     component.tableArea.columns.splice(index, 1)
@@ -260,7 +267,8 @@ const actionCrud = useConfigCrud({
       return
     }
     
-    const component = pageStore.getComponentById(subId)
+    const subItem = pageStore.getSubPageConfig(navTitle, subId)
+    const component = subItem?.component
     if (!component) {
       Message.error('页面配置不存在')
       return
@@ -298,7 +306,8 @@ const actionCrud = useConfigCrud({
     const subId = currentNavId.value
     if (!navTitle) return
     
-    const component = pageStore.getComponentById(subId)
+    const subItem = pageStore.getSubPageConfig(navTitle, subId)
+    const component = subItem?.component
     if (!component?.actionsArea?.buttons) return
     
     component.actionsArea.buttons.splice(index, 1)
@@ -318,7 +327,8 @@ const cardCrud = useConfigCrud({
       return
     }
     
-    const component = pageStore.getComponentById(subId)
+    const subItem = pageStore.getSubPageConfig(navTitle, subId)
+    const component = subItem?.component
     if (!component) {
       Message.error('页面配置不存在')
       return
@@ -349,7 +359,8 @@ const cardCrud = useConfigCrud({
     const subId = currentNavId.value
     if (!navTitle) return
     
-    const component = pageStore.getComponentById(subId)
+    const subItem = pageStore.getSubPageConfig(navTitle, subId)
+    const component = subItem?.component
     if (!component?.cardArea?.cards) return
     
     component.cardArea.cards.splice(index, 1)
@@ -367,11 +378,14 @@ const currentCrud = computed(() => {
   }
 })
 
-// 兼容性：保留旧的表单引用（用于模板中的 v-model）
+// Fix: Vue template does not auto-unwrap nested refs in plain objects (filterCrud.formData).
+// We must use top-level aliases for v-model to work correctly in ConfigForm.
 const filterEditForm = filterCrud.formData
 const columnEditForm = columnCrud.formData
 const actionEditForm = actionCrud.formData
 const cardEditForm = cardCrud.formData
+
+
 
 // 兼容性：保留旧的弹窗状态引用
 const editDialogOpen = computed({
@@ -447,7 +461,8 @@ async function saveAreaConfig() {
     return
   }
   
-  const component = pageStore.getComponentById(subId)
+  const subItem = pageStore.getSubPageConfig(navTitle, subId)
+  const component = subItem?.component
   if (!component) {
     Message.error('页面配置不存在')
     return
@@ -501,7 +516,8 @@ async function handleDrop(type: 'filter' | 'action' | 'column', targetIndex: num
   const subId = currentNavId.value
   if (!navTitle) return
   
-  const component = pageStore.getComponentById(subId)
+  const subItem = pageStore.getSubPageConfig(navTitle, subId)
+  const component = subItem?.component
   if (!component) return
   
   // 直接在组件配置数组上操作
@@ -1193,7 +1209,6 @@ const handleEffectModalOk = () => {
       @cancel="editDialogOpen = false"
       :width="480"
     >
-      <!-- 筛选项编辑表单 -->
       <div v-if="editDialogType === 'filter'" class="space-y-4">
         <ConfigForm type="filter" v-model="filterEditForm" />
       </div>

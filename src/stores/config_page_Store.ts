@@ -16,7 +16,6 @@ import type {
 import type { NavSubItem, NavGroup, NavMainItem } from '@/types/navigation'
 import {
     setNavGroupsRef,
-    setPageConfigsRef,
     initNavigation,
 } from '@/composables/useNavigation'
 import { watch } from 'vue'
@@ -70,7 +69,7 @@ const DEFAULT_PAGE_CONFIG_CONTENT: PageConfigContent = {
 
 /**
  * 默认的页面配置记录 (新用户初始化时自动创建)
- * 与 SQL 表 page_configs 的 default 值完全一致
+ * 纯净版 V9 默认值
  */
 const DEFAULT_PAGE_CONFIG_RECORD: PageConfigContent = {
     title: '一级测试导航栏',
@@ -81,127 +80,8 @@ const DEFAULT_PAGE_CONFIG_RECORD: PageConfigContent = {
             id: '1',
             name: 'test',
             component: {
-                cardArea: {
-                    gap: '16px',
-                    show: false,
-                    cards: [{ key: 'total_order', data: '1000', title: '订单数' }],
-                    columns: 4
-                },
-                tableArea: {
-                    height: '500px',
-                    columns: [
-                        { key: 'orderNo', label: '订单号', width: '100px' },
-                        { key: 'statusText', label: '订单状态', width: '100px' },
-                        { key: 'userName', label: '用户信息', width: '100px' },
-                        { key: 'guildName', label: '用户状态', width: '120px' },
-                        { key: 'deviceModel', label: '用户设备信息', width: '150px' }
-                    ],
-                    scrollX: false,
-                    scrollY: false,
-                    pageSize: 10,
-                    fixedLayout: true,
-                    showCheckbox: true
-                },
-                filterArea: {
-                    gap: '16px',
-                    columns: 4,
-                    filters: [
-                        { key: 'userId', type: 'input', label: '用户ID', placeholder: '请输入用户ID', defaultValue: '' },
-                        { key: 'platformOrderNo', type: 'input', label: '平台订单号', placeholder: '请输入平台订单号', defaultValue: '' },
-                        { key: 'businessNo', type: 'input', label: '业务单号', placeholder: '请输入业务单号', defaultValue: '' },
-                        { key: 'channelNo', type: 'input', label: '渠道单号', placeholder: '请输入渠道单号', defaultValue: '' },
-                        { key: 'orderStatus', type: 'select', label: '订单状态', options: ['全部', '待审核', '审核中'], placeholder: '请选择订单状态', defaultValue: '' },
-                        { key: 'platformOrder', type: 'select', label: '平台订单号', options: ['全部', 'PO001', 'PO002', 'PO003'], placeholder: '请选择平台订单号', defaultValue: '全部' },
-                        { key: 'accountType', type: 'select', label: '账户类型', options: ['全部', '支付宝', '微信', '银行卡', 'PayPal', 'Payoneer'], placeholder: '请选择账户类型', defaultValue: '全部' },
-                        {
-                            key: 'country', type: 'tree-select', label: '国家-渠道', placeholder: '请选择国家-渠道', defaultValue: '',
-                            treeOptions: [
-                                { label: '埃及', value: 'egypt', children: [{ label: 'airwallex', value: 'egypt-airwallex' }, { label: 'payoneer', value: 'egypt-payoneer' }] },
-                                { label: '摩洛哥', value: 'morocco', children: [{ label: 'dlocal', value: 'morocco-dlocal' }] },
-                                { label: '土耳其', value: 'turkey', children: [{ label: 'dlocal', value: 'turkey-dlocal' }] }
-                            ]
-                        },
-                        { key: 'region', type: 'select', label: '大区', options: ['全部', '华东', '华南', '华北', '华中'], placeholder: '请选择大区', defaultValue: '全部' },
-                        { key: 'projectType', type: 'select', label: '项目类型', options: ['全部', '直播', '短视频', '游戏', '电商'], placeholder: '请选择项目类型', defaultValue: '全部' },
-                        { key: 'applyTime', type: 'date-range', label: '申请时间', placeholder: '请选择申请时间' }
-                    ]
-                },
-                actionsArea: {
-                    show: true,
-                    buttons: [
-                        { key: 'search', label: '查询', variant: 'outline' },
-                        { key: 'reset', label: '重置', variant: 'outline' }
-                    ]
-                }
-            }
-        },
-        {
-            id: '2',
-            name: 'test-各组件展示',
-            component: {
-                cardArea: {
-                    gap: '16px',
-                    show: true,
-                    cards: [
-                        { key: '卡片1', data: '1000', title: '卡片1' },
-                        { key: '卡片2', data: '2000', title: '卡片2' },
-                        { key: '卡片3', data: '3000', title: '卡片3' },
-                        { key: '卡片4', data: '4000', title: '卡片4' }
-                    ],
-                    columns: 4
-                },
-                tableArea: {
-                    height: '500px',
-                    columns: [
-                        { key: '列表1', label: '列表1-空状态', width: '120px', visible: true },
-                        { key: '列表2', label: '列表2-随机数字', width: '120px', visible: true, mockFormat: 'number' },
-                        { key: '列表3', label: '列表3', width: '120px', visible: true, mockList: ['随机1', '随机2', '随机3', '随机4'], mockFormat: 'list' },
-                        { key: '列表4', type: 'badge', label: '列表4-徽标', width: '120px', visible: true, mockFormat: 'text' },
-                        { key: '列表5', type: 'status-badge', label: '列表-时间', width: '120px', visible: true, mockFormat: 'datetime' },
-                        { key: '列表6', type: 'text-button', label: '列表6-按钮', width: '80px', buttons: ['编辑', '删除'], visible: true, mockFormat: 'number' }
-                    ],
-                    scrollX: true,
-                    scrollY: true,
-                    pageSize: 10,
-                    fixedLayout: true,
-                    showCheckbox: true
-                },
-                filterArea: {
-                    gap: '16px',
-                    columns: 4,
-                    filters: [
-                        { key: '输入框1', type: 'input', label: '输入框1', options: [], visible: true, placeholder: '请输入......' },
-                        { key: '下拉框1', type: 'select', label: '下拉框1', options: ['选项A', '选项B', '选项C'], visible: true, placeholder: '请选择' },
-                        { key: '时间选择1', type: 'date-range', label: '时间选择1', options: [], visible: true, placeholder: '请选择时间段' },
-                        { key: '树形选择1', type: 'tree-select', label: '树形选择1', options: [], visible: true, placeholder: '请选择', treeOptions: [{ label: '1', value: '1', children: [] }] }
-                    ]
-                },
-                actionsArea: {
-                    show: true,
-                    buttons: [
-                        { key: 'search', label: '查询', variant: 'outline' },
-                        { key: 'reset', label: '重置', variant: 'outline' },
-                        { key: '可增删改按钮', label: '可增删改按钮', variant: 'outline', visible: true }
-                    ]
-                }
-            }
-        },
-        {
-            id: 'sub-1768982565514',
-            name: 'test-空状态',
-            component: {
-                tableArea: {
-                    height: '500px',
-                    columns: [],
-                    scrollX: true,
-                    scrollY: true,
-                    showCheckbox: true
-                },
-                filterArea: {
-                    gap: '16px',
-                    columns: 4,
-                    filters: []
-                }
+                filterArea: { columns: 4, gap: '16px', filters: [] },
+                tableArea: { height: '500px', columns: [], scrollX: true, scrollY: true, showCheckbox: true }
             }
         }
     ]
@@ -226,50 +106,7 @@ const DEFAULT_PAGE_COMPONENT: Page1ConfigData = {
     }
 }
 
-// ============================================
-// 防抖同步工具
-// ============================================
 
-function createDebouncedSync(delay = 500) {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
-    let pendingPromise: Promise<void> | null = null
-    let resolvePending: (() => void) | null = null
-
-    const debouncedSave = (saveFn: () => Promise<any>): void => {
-        if (timeoutId) {
-            clearTimeout(timeoutId)
-        }
-
-        timeoutId = setTimeout(async () => {
-            timeoutId = null
-            pendingPromise = saveFn().finally(() => {
-                pendingPromise = null
-                if (resolvePending) {
-                    resolvePending()
-                    resolvePending = null
-                }
-            })
-        }, delay)
-    }
-
-    const flush = (): Promise<void> => {
-        return new Promise((resolve) => {
-            if (timeoutId) {
-                clearTimeout(timeoutId)
-                timeoutId = null
-            }
-            if (pendingPromise) {
-                resolvePending = resolve
-            } else {
-                resolve()
-            }
-        })
-    }
-
-    const hasPending = () => timeoutId !== null || pendingPromise !== null
-
-    return { debouncedSave, flush, hasPending }
-}
 
 // ============================================
 // Store 定义
@@ -289,10 +126,6 @@ export const useConfigPageStore = defineStore('config-page', () => {
     const lastSyncTime = ref<Date | null>(null)
     const syncError = ref<string | null>(null)
 
-    // 创建防抖同步器 (备用，未来可用于自动同步)
-    const syncUtils = createDebouncedSync(500)
-    const flushPendingSync = syncUtils.flush
-
     // ============================================
     // Computed
     // ============================================
@@ -302,18 +135,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
      */
     const pageConfigList = computed(() => Array.from(pageConfigs.value.values()))
 
-    /**
-     * 根据二级导航 ID 获取页面配置 (兼容 configStore 的 getPage1Config)
-     */
-    const getComponentById = computed(() => (subId: string): Page1ConfigData | undefined => {
-        for (const record of pageConfigs.value.values()) {
-            const subItem = record.page_config.items.find(item => item.id === subId)
-            if (subItem?.component) {
-                return subItem.component
-            }
-        }
-        return undefined
-    })
+
 
     /**
      * 适配 layouts 的导航组结构 (将所有一级导航聚合到一个默认组)
@@ -365,7 +187,6 @@ export const useConfigPageStore = defineStore('config-page', () => {
                     pageConfigs.value.set(record.title, record)
                 })
             } else {
-                // 如果云端没数据，自动创建默认配置 (与 menu/team store 逻辑一致)
                 // 如果云端没数据，自动创建默认配置 (与 menu/team store 逻辑一致)
                 const defaultTitle = DEFAULT_PAGE_CONFIG_RECORD.title
                 await savePageConfig(defaultTitle, DEFAULT_PAGE_CONFIG_RECORD)
@@ -1004,22 +825,9 @@ export const useConfigPageStore = defineStore('config-page', () => {
     // 同步控制
     // ============================================
 
-    // 同步配置到导航系统 (替换 configStore 的同步逻辑)
+    // 同步配置到导航系统
     watch([navGroups, pageConfigs], () => {
         setNavGroupsRef(navGroups.value)
-        // 将 Map 转换为 Record<string, any>
-        const configsRecord: Record<string, any> = {}
-        for (const [key, value] of pageConfigs.value) {
-            // V2 兼容: 将 pageConfig 内容映射为旧版结构
-            if (value.page_config && value.page_config.items) {
-                value.page_config.items.forEach(sub => {
-                    if (sub.component) {
-                        configsRecord[sub.id] = sub.component
-                    }
-                })
-            }
-        }
-        setPageConfigsRef(configsRecord)
 
         // 如果未初始化且有数据，尝试初始化导航选中状态
         if (!isLoaded.value && navGroups.value.length > 0) {
@@ -1030,8 +838,11 @@ export const useConfigPageStore = defineStore('config-page', () => {
     /**
      * 确保所有待处理的同步完成
      */
+    /**
+     * 确保所有待处理的同步完成
+     */
     async function ensureSynced(): Promise<void> {
-        await flushPendingSync()
+        // V9: 取消防抖同步，改为直接同步，此方法保留为空以兼容接口
     }
 
     /**
@@ -1055,7 +866,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
         syncError,
 
         // Computed
-        getComponentById,
+
 
         // 加载
         loadPageConfigs,

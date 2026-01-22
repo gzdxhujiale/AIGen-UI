@@ -7,14 +7,7 @@ import Profile from '@/views/Profile.vue'
 import SkeletonLoading from '@/views/SkeletonLoading.vue'
 import UpdateAnnouncement from '@/components/common/UpdateAnnouncement.vue'
 
-// AI Components - Only types or global listeners if needed? 
-// No, the UI buttons are now inside layouts.
-// But wait, the previous code had AIChatButton/Window inside SidebarProvider in simple App.vue
-// Now they are inside ShadcnLayout.
-// What about ArcoLayout? 
-// ArcoLayout doesn't have them yet. The user might want them global?
-// For now I'm removing them from App.vue because I removed them from template.
-// If I need them back I'll add them to layouts.
+
 
 // Composables
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
@@ -24,6 +17,9 @@ import { useOnboarding } from '@/composables/useOnboarding'
 import { useAuthStore } from '@/stores/authStore'
 // Config Store
 import { useConfigStore } from '@/stores/configStore'
+import { useConfigTeamStore } from '@/stores/config_team_Store'
+import { useConfigMenuStore } from '@/stores/config_menu_Store'
+import { useConfigPageStore } from '@/stores/config_page_Store'
 
 // Import layouts
 import ArcoLayout from '@/components/layout/ArcoLayout.vue'
@@ -34,6 +30,9 @@ import { useNavigation } from '@/composables/useNavigation'
 const { currentPage } = useNavigation() 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
+const teamStore = useConfigTeamStore()
+const menuStore = useConfigMenuStore()
+const pageStore = useConfigPageStore()
 const { startOnboarding, showAnnouncement } = useOnboarding()
 
 // 页面模板映射
@@ -56,9 +55,15 @@ onMounted(async () => {
     console.log('App: Starting parallel bootstrap...')
     const startTime = performance.now()
     
+    // 并行加载所有配置
+    
+
+
+
     await Promise.all([
-        authStore.fetchUserConfigs(),
-        // configStore.loadFromSupabase() // Removed: handled by authStore.fetchUserConfigs
+        teamStore.loadTeams(),
+        menuStore.loadMenu(),
+        pageStore.loadPageConfigs()
     ])
     
     console.log(`App: Parallel bootstrap finished in ${(performance.now() - startTime).toFixed(2)}ms`)
@@ -67,48 +72,30 @@ onMounted(async () => {
     // For test accounts, always force Arco style
     if (authStore.userEmail.toLowerCase().includes('test')) {
         configStore.navigationStyle = 'arco'
-    } else if (authStore.stylePreference) {
-        // Sync style preference from user profile once on startup
-        configStore.navigationStyle = authStore.stylePreference
+    } else if (localStorage.getItem('shadcn_nav_style_pref')) {
+        // Sync style preference from local storage (already handled in configStore init, but ensuring here)
+        // configStore.navigationStyle = ... 
     }
     
     // 启动用户引导
     startOnboarding(authStore.userEmail)
   }
-
-  // 页面关闭/刷新前确保同步完成 - 移除，避免干扰用户
-  // window.addEventListener('beforeunload', handleBeforeUnload)
-})
-
-// 页面关闭前处理 - 移除
-/*
-const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-  if (configStore.isSyncing) {
-    // 提示用户有未保存的更改
-    e.preventDefault()
-    e.returnValue = '配置正在同步中，确定要离开吗？'
-    // 尝试完成同步
-    configStore.ensureSynced()
-  }
-}
-*/
-
-onUnmounted(() => {
-  // window.removeEventListener('beforeunload', handleBeforeUnload)
-})
-
-// 监听认证状态变化，登录后加载配置
+})// 监听认证状态变化，登录后加载配置
 watch(() => authStore.isAuthenticated, async (isAuth) => {
   if (isAuth) {
-    // await configStore.loadFromSupabase() // Removed: handled by authStore.fetchUserConfigs
-    
     // For test accounts, always force Arco style
     if (authStore.userEmail.toLowerCase().includes('test')) {
         configStore.navigationStyle = 'arco'
-    } else if (authStore.stylePreference) {
-        // Sync style preference from user profile on login
-        configStore.navigationStyle = authStore.stylePreference
     }
+
+    // Load configs
+
+    
+    await Promise.all([
+        teamStore.loadTeams(),
+        menuStore.loadMenu(),
+        pageStore.loadPageConfigs()
+    ])
     
     // 启动用户引导
     startOnboarding(authStore.userEmail)

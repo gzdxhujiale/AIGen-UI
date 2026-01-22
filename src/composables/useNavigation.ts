@@ -10,7 +10,6 @@ const currentSubNav = ref('')
 const _currentNavId = ref('')
 const detailTitle = ref<string | null>(null)
 const _navGroupsRef = ref<NavGroup[] | null>(null)
-const _pageConfigsRef = ref<Record<string, any> | null>(null)
 
 /**
  * 设置 navGroups 引用（由 configStore 调用）
@@ -19,12 +18,7 @@ export function setNavGroupsRef(navGroups: NavGroup[]) {
     _navGroupsRef.value = navGroups
 }
 
-/**
- * 设置 pageConfigs 引用（由 configStore 调用，V2 支持）
- */
-export function setPageConfigsRef(pageConfigs: Record<string, any>) {
-    _pageConfigsRef.value = pageConfigs
-}
+
 
 /**
  * 初始化导航状态（在配置加载后调用）
@@ -84,10 +78,7 @@ export function useNavigation() {
         const navId = _currentNavId.value
         if (!navId) return undefined
 
-        // V2: 先查页面配置是否存在
-        if (_pageConfigsRef.value && _pageConfigsRef.value[navId]) {
-            return 'Page1'
-        }
+        if (!navId) return undefined
 
         // 回退到导航树中查找显式指定的 template
         if (_navGroupsRef.value) {

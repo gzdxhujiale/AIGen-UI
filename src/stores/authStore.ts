@@ -3,9 +3,7 @@ import { defineStore } from 'pinia'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '@/api/supabase'
 // import { useConfigStore } from '@/stores/configStore'
-import { useConfigTeamStore } from '@/stores/config_team_Store'
-import { useConfigMenuStore } from '@/stores/config_menu_Store'
-import { useConfigPageStore } from '@/stores/config_page_Store'
+
 
 export const useAuthStore = defineStore('auth', () => {
     // 状态
@@ -15,10 +13,11 @@ export const useAuthStore = defineStore('auth', () => {
     const error = ref<string | null>(null)
 
     // style 默认使用 'arco'
+    // style 默认使用 'arco'
     const customUserName = ref('')
-    const teamsConfig = ref<any>(null)
-    const stylePreference = ref<'shadcn' | 'arco'>('arco') // 默认 Arco Design
-    const menuConfig = ref<any[]>([])
+    // const teamsConfig = ref<any>(null) // Removed
+    // const stylePreference = ref<'shadcn' | 'arco'>('arco') // Removed
+    // const menuConfig = ref<any[]>([]) // Removed
 
     let authSubscription: { unsubscribe: () => void } | null = null
 
@@ -43,110 +42,7 @@ export const useAuthStore = defineStore('auth', () => {
             ''
     })
 
-    const DEFAULT_MENU_CONFIG = [
-        { type: 'text-button', label: '权限申请' },
-        { type: 'dropdown', label: '语言', options: ['中文', 'English'] }
-    ]
 
-    // 获取用户配置的辅助函数
-    const fetchUserConfigs = async () => {
-        try {
-            const teamStore = useConfigTeamStore()
-            const menuStore = useConfigMenuStore()
-            const pageStore = useConfigPageStore()
-
-            // 1. 并行获取团队配置、菜单配置和页面配置
-            const [teamsResult, menuResult, pageResult] = await Promise.all([
-                teamStore.loadTeams(),
-                menuStore.loadMenu(),
-                pageStore.loadPageConfigs()
-            ])
-
-            const { success: teamsSuccess, message: teamsError } = teamsResult
-            const { success: menuSuccess, message: menuError } = menuResult
-            const { success: pageSuccess, message: pageError } = pageResult
-
-            if (!teamsSuccess) {
-                console.error('获取团队配置失败:', teamsError)
-            }
-
-            if (teamStore.teams.length > 0) {
-                teamsConfig.value = teamStore.teams
-            } else {
-                // 如果为空（理论上 loadTeams 已处理默认值，但这里做双重保险）
-                teamsConfig.value = [{
-                    id: 'team-default',
-                    name: 'AIGen-UI',
-                    logo: 'IconMosaic',
-                    role: 'online',
-                    permissions: ['read']
-                }]
-            }
-
-            if (!menuSuccess) {
-                console.error('获取应用设置失败:', menuError)
-            }
-
-            if (!pageSuccess) {
-                console.error('获取页面配置失败:', pageError)
-            }
-
-            if (menuStore.menuConfig && menuStore.menuConfig.items) {
-                menuConfig.value = menuStore.menuConfig.items
-            } else {
-                // 使用默认菜单配置
-                menuConfig.value = JSON.parse(JSON.stringify(DEFAULT_MENU_CONFIG))
-            }
-        } catch (e) {
-            console.error('获取用户配置失败:', e)
-        }
-    }
-
-
-    /**
-     * 更新用户个人资料配置
-     */
-    const updateUserProfile = async (name: string, teams: any, style?: 'shadcn' | 'arco', menu?: any[]) => {
-        if (!user.value) return { success: false, error: '未登录' }
-
-        try {
-            const teamStore = useConfigTeamStore()
-            const menuStore = useConfigMenuStore()
-
-            // 更新团队配置
-            const { success: teamsSuccess, message: teamsError } = await teamStore.saveTeams()
-            if (!teamsSuccess) throw new Error(teamsError)
-
-            const menuToSave = menu || menuConfig.value
-            const { success: menuSuccess, message: menuError } = await menuStore.updateMenu({ items: menuToSave })
-            if (!menuSuccess) throw new Error(menuError)
-
-
-
-            // 更新本地状态
-            customUserName.value = name
-            teamsConfig.value = teams
-            if (style) stylePreference.value = style
-            if (menu) menuConfig.value = menu
-
-            return { success: true }
-        } catch (err: any) {
-            console.error('更新个人资料失败:', err)
-            return { success: false, error: err.message }
-        }
-    }
-
-    /**
-     * 仅更新菜单配置
-     */
-    const updateMenuConfig = async (menu: any[]) => {
-        return updateUserProfile(
-            customUserName.value,
-            teamsConfig.value,
-            stylePreference.value,
-            menu
-        )
-    }
 
     // Actions
 
@@ -185,11 +81,11 @@ export const useAuthStore = defineStore('auth', () => {
                     user.value = newSession?.user ?? null
 
                     if (event === 'SIGNED_IN' && user.value) {
-                        await fetchUserConfigs()
+                        // Removed: await fetchUserConfigs() - handled by App.vue / layout init
                     } else if (event === 'SIGNED_OUT') {
                         error.value = null
                         customUserName.value = ''
-                        teamsConfig.value = null
+                        // teamsConfig.value = null // Removed
                     }
                 }
             )
@@ -337,9 +233,9 @@ export const useAuthStore = defineStore('auth', () => {
         isLoading,
         error,
         customUserName,
-        teamsConfig,
-        stylePreference,
-        menuConfig,
+        // teamsConfig, // Removed
+        // stylePreference, // Removed
+        // menuConfig, // Removed
         // Getters
         isAuthenticated,
         userDisplayName,
@@ -351,9 +247,9 @@ export const useAuthStore = defineStore('auth', () => {
         signUp,
         signOut,
         resetPassword,
-        updateUserProfile,
-        updateMenuConfig,
-        fetchUserConfigs, // Expose for parallel loading
+        // updateUserProfile, // Removed
+        // updateMenuConfig, // Removed
+        // fetchUserConfigs, // Removed
         cleanup
     }
 })

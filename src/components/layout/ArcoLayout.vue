@@ -57,7 +57,6 @@ import { useConfigTeamStore } from '@/stores/config_team_Store'
 import { useConfigMenuStore } from '@/stores/config_menu_Store'
 import { useAuthStore } from '@/stores/authStore'
 import { useNavigation } from '@/composables/useNavigation'
-// import { defaultSidebarConfig } from '@/config/schema' // Removed
 import type { TeamItem } from '@/types'
 import AIChatAssistant from '@/views/AIChatAssistant.vue'
 import draggable from 'vuedraggable'
@@ -98,11 +97,7 @@ const handleTeamSelect = (value: any) => {
 // --- 导航过滤 ---
 const filteredNavGroups = computed(() => {
   const team = activeTeam.value
-  // Use pageStore.navGroups instead of configStore
-  const navGroups = pageStore.navGroups.flat() // pageStore.navGroups returns NavGroup[] but computed expects flat array logic or adapt logic below
-  
-  // pageStore.navGroups is NavGroup[]. The filteredNavGroups logic expects NavGroup[].
-  // pageStore.navGroups = [{ label: 'Application', items: [...] }]
+  const navGroups = pageStore.navGroups.flat()
   
   // 如果没有导航组数据，直接返回空数组
   if (!navGroups || navGroups.length === 0) return []
@@ -236,8 +231,6 @@ const editForm = reactive({
     icon: ''
 })
 
-// 编辑模式函数直接使用 groupIdx，不需要 getGroupIndex
-
 const openAddMainDialog = (groupIdx: number) => {
     if (groupIdx < 0 || groupIdx >= pageStore.navGroups.length) {
         Message.error('无法找到对应的导航组')
@@ -307,11 +300,9 @@ const handleEditSubmit = () => {
         })
         Message.success('更新成功')
     } else if (editDialogMode.value === 'add-sub') {
-        // V9: 使用 pageStore.addSubPage，它会自动处理组件默认配置
         pageStore.addSubPage(editForm.mainItemId, {
             id: crypto.randomUUID(), // 需要生成 ID
             name: editForm.title,
-            // url: editForm.url // PageSubItem 没有 url 字段，只有 component
         })
         Message.success('添加成功')
     } else if (editDialogMode.value === 'edit-sub') {
@@ -481,7 +472,6 @@ const headerMenuList = computed({
 
         <!-- 1.2 主导航 -->
         <div class="flex-1 overflow-y-auto py-4 px-2 custom-scrollbar">
-          <!-- 预览模式使用 filteredNavGroups，编辑模式使用 pageStore.navGroups 以保证索引正确 -->
           <div v-for="(group, groupIdx) in (configStore.isEditMode ? pageStore.navGroups : filteredNavGroups)" :key="group.label || groupIdx" class="mb-6">
             <div v-if="!collapsed && (group.showLabel ?? true)" class="px-4 mb-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
               {{ group.label }}

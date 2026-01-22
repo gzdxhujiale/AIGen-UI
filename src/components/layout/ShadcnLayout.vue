@@ -127,7 +127,7 @@ watch(effectiveTeams, (newTeams) => {
 // --- 导航过滤 ---
 const filteredNavGroups = computed(() => {
   const team = activeTeam.value
-  const navGroups = pageStore.navGroups.flat() // Use pageStore instead of configStore configStore.effectiveNavGroups
+  const navGroups = pageStore.navGroups.flat()
   
   // 如果没有导航组数据，直接返回空数组
   if (!navGroups || navGroups.length === 0) return []

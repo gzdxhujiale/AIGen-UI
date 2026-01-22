@@ -26,13 +26,13 @@ import {
   IconInfoCircle,
   IconRefresh
 } from '@arco-design/web-vue/es/icon'
-import { useConfigStore } from '@/stores/configStore'
+
 import { useConfigTeamStore } from '@/stores/config_team_Store'
 
 const { Row: ARow, Col: ACol } = AGrid
 
 const authStore = useAuthStore()
-const configStore = useConfigStore()
+
 const teamStore = useConfigTeamStore()
 const isSaving = ref(false)
 
@@ -71,9 +71,8 @@ const autoSave = () => {
     isSaving.value = true
     try {
       // 1. 更新用户信息（显示名称）
-      if (form.userName !== authStore.userDisplayName) {
-        await authStore.updateUserProfile(form.userName, [], configStore.navigationStyle)
-      }
+      // Note: customUserName logic in authStore is legacy and not persisted. 
+      // If we want to support name updates, we should use supabase.auth.updateUser() in a future task.
       
       // 2. 更新团队信息
       teamStore.teams = JSON.parse(JSON.stringify(form.teams))
