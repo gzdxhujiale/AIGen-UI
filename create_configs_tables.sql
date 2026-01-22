@@ -1,4 +1,120 @@
-{
+-- 创建 team_configs 表
+create table if not exists team_configs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  team_config jsonb default '[
+    {
+      "id": "team-default",
+      "logo": "IconMosaic",
+      "name": "AIGen-UI",
+      "role": "online",
+      "permissions": [
+        "read"
+      ]
+    }
+  ]'::jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- 确保每个用户只有一个团队配置 (唯一索引)
+create unique index if not exists idx_team_configs_user_id on team_configs(user_id);
+
+-- 启用团队配置表的 RLS (行级安全策略)
+alter table team_configs enable row level security;
+
+-- 团队配置表策略
+create policy "Users can view their own team config"
+  on team_configs for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert their own team config"
+  on team_configs for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own team config"
+  on team_configs for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete their own team config"
+  on team_configs for delete
+  using (auth.uid() = user_id);
+
+
+-- 创建 menu_configs 表
+create table if not exists menu_configs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  menu_config jsonb default '{
+    "items": [
+      {
+        "type": "text-button",
+        "label": "权限申请"
+      },
+      {
+        "type": "dropdown",
+        "label": "语言",
+        "options": [
+          "中文",
+          "English"
+        ]
+      }
+    ]
+  }'::jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- 确保每个用户只有一个菜单配置 (唯一索引)
+create unique index if not exists idx_menu_configs_user_id on menu_configs(user_id);
+
+-- 启用菜单配置表的 RLS
+alter table menu_configs enable row level security;
+
+-- 菜单配置表策略
+create policy "Users can view their own menu config"
+  on menu_configs for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert their own menu config"
+  on menu_configs for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own menu config"
+  on menu_configs for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete their own menu config"
+  on menu_configs for delete
+  using (auth.uid() = user_id);
+
+-- 创建自动更新 updated_at 时间戳的函数
+create or replace function update_updated_at_column()
+returns trigger as $$
+begin
+    new.updated_at = now();
+    return new;
+end;
+$$ language 'plpgsql';
+
+-- 为团队配置表添加更新时间触发器
+create trigger update_team_configs_updated_at
+before update on team_configs
+for each row
+execute procedure update_updated_at_column();
+
+-- 为菜单配置表添加更新时间触发器
+create trigger update_menu_configs_updated_at
+before update on menu_configs
+for each row
+execute procedure update_updated_at_column();
+
+-- 创建 page_configs 表
+create table if not exists page_configs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  title text not null,
+  page_config jsonb default '{
     "title": "一级测试导航栏",
     "icon": "IconSettings",
     "isOpen": true,
@@ -475,4 +591,37 @@
             }
         }
     ]
-}
+}'::jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- 确保同一个用户只能有一个相同的一级导航名称 (复合唯一索引)
+create unique index if not exists idx_page_configs_user_id_title on page_configs(user_id, title);
+
+-- 启用页面配置表的 RLS
+alter table page_configs enable row level security;
+
+-- 页面配置表策略
+create policy "Users can view their own page configs"
+  on page_configs for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert their own page configs"
+  on page_configs for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own page configs"
+  on page_configs for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete their own page configs"
+  on page_configs for delete
+  using (auth.uid() = user_id);
+
+-- 为页面配置表添加更新时间触发器
+create trigger update_page_configs_updated_at
+before update on page_configs
+for each row
+execute procedure update_updated_at_column();
+

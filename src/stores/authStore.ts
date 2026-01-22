@@ -3,6 +3,8 @@ import { defineStore } from 'pinia'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '@/api/supabase'
 import { useConfigStore } from '@/stores/configStore'
+import { useConfigTeamStore } from '@/stores/config_team_Store'
+import { useConfigMenuStore } from '@/stores/config_menu_Store'
 
 export const useAuthStore = defineStore('auth', () => {
     // State
@@ -53,25 +55,26 @@ export const useAuthStore = defineStore('auth', () => {
     // 配置现在由 configStore 的分类存储管理
     const fetchUserConfigs = async () => {
         try {
-            const configStore = useConfigStore()
+            const teamStore = useConfigTeamStore()
+            const menuStore = useConfigMenuStore()
 
             // 1. 并行获取团队配置和菜单配置
-            const [teamsResult, appSettingsResult] = await Promise.all([
-                configStore.loadTeams(),
-                configStore.loadAppSettings()
+            const [teamsResult, menuResult] = await Promise.all([
+                teamStore.loadTeams(),
+                menuStore.loadMenu()
             ])
 
-            const { data: teamsData, error: teamsError } = teamsResult
-            const { data: appSettingsData, error: appSettingsError } = appSettingsResult
+            const { success: teamsSuccess, message: teamsError } = teamsResult
+            const { success: menuSuccess, message: menuError } = menuResult
 
-            if (teamsError) {
+            if (!teamsSuccess) {
                 console.error('Error fetching teams config:', teamsError)
             }
 
-            if (teamsData) {
-                teamsConfig.value = teamsData
+            if (teamStore.teams.length > 0) {
+                teamsConfig.value = teamStore.teams
             } else {
-                // 使用默认团队配置
+                // 如果为空（理论上 loadTeams 已处理默认值，但这里做双重保险）
                 teamsConfig.value = [{
                     id: 'team-default',
                     name: 'AIGen-UI',
@@ -81,12 +84,12 @@ export const useAuthStore = defineStore('auth', () => {
                 }]
             }
 
-            if (appSettingsError) {
-                console.error('Error fetching app settings:', appSettingsError)
+            if (!menuSuccess) {
+                console.error('Error fetching app settings:', menuError)
             }
 
-            if (appSettingsData && appSettingsData.items) {
-                menuConfig.value = appSettingsData.items
+            if (menuStore.menuConfig && menuStore.menuConfig.items) {
+                menuConfig.value = menuStore.menuConfig.items
             } else {
                 // 使用默认菜单配置
                 menuConfig.value = JSON.parse(JSON.stringify(DEFAULT_MENU_CONFIG))
@@ -110,18 +113,18 @@ export const useAuthStore = defineStore('auth', () => {
         if (!user.value) return { success: false, error: 'Not authenticated' }
 
         try {
-            const configStore = useConfigStore()
+            const teamStore = useConfigTeamStore()
+            const menuStore = useConfigMenuStore()
 
             // 更新团队配置
-            const { error: teamsError } = await configStore.saveTeams(teams)
-            if (teamsError) throw new Error(teamsError)
+            const { success: teamsSuccess, message: teamsError } = await teamStore.saveTeams()
+            if (!teamsSuccess) throw new Error(teamsError)
 
             // 更新菜单配置 (app_settings)
             // 如果传入了 menu，则保存；否则保存当前的 menuConfig
             const menuToSave = menu || menuConfig.value
-            // 包装在 items 属性中以匹配预期结构
-            const { error: menuError } = await configStore.saveAppSettings({ items: menuToSave })
-            if (menuError) throw new Error(menuError)
+            const { success: menuSuccess, message: menuError } = await menuStore.updateMenu({ items: menuToSave })
+            if (!menuSuccess) throw new Error(menuError)
 
 
 

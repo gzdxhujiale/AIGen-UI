@@ -28,4 +28,6 @@ export type {
     TeamItem,
     UserInfo,
     SidebarConfig,
+    MenuItem,
+    MenuConfig,
 } from './navigation'

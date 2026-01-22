@@ -20,7 +20,6 @@ import type {
     TreeNode,
     CardAreaConfig,
     CardItemConfig,
-    TeamItem
 } from '@/types'
 import { supabase } from '@/api/supabase'
 import { toast } from 'vue-sonner'
@@ -140,14 +139,6 @@ export const useConfigStore = defineStore('config', () => {
     const navigationStyle = ref<'shadcn' | 'arco'>('arco')
     // 筛选区与功能区融合设置
     const filterActionFusion = ref(true)
-
-    // 团队与项目配置
-    const teams = ref<TeamItem[]>([{
-        name: 'AIGen UI',
-        logo: GalleryVerticalEnd,
-        plan: 'online',
-        permissions: { navMain: 'all', projects: 'all' }
-    }])
 
     // 默认项目分组配置 (暂时硬编码，后续也可从云端加载)
     const projectGroups = ref<any[]>([])
@@ -340,26 +331,6 @@ export const useConfigStore = defineStore('config', () => {
         return { data: cleaned, error: result.error }
     }
 
-    /** 保存团队列表 */
-    async function saveTeams(teamsData: TeamItem[]): Promise<{ success: boolean; error?: string }> {
-        return saveConfig('team', 'team-list', teamsData)
-    }
-
-    /** 加载团队列表 */
-    async function loadTeams(): Promise<{ data: TeamItem[] | null; error?: string }> {
-        return loadConfig<TeamItem[]>('team', 'team-list')
-    }
-
-    /** 保存应用设置 */
-    async function saveAppSettings(settings: Record<string, any>): Promise<{ success: boolean; error?: string }> {
-        return saveConfig('app_settings', 'top-bar', settings)
-    }
-
-    /** 加载应用设置 */
-    async function loadAppSettings(): Promise<{ data: Record<string, any> | null; error?: string }> {
-        return loadConfig('app_settings', 'top-bar')
-    }
-
     // ============================================
     // 同步状态
     // ============================================
@@ -378,13 +349,13 @@ export const useConfigStore = defineStore('config', () => {
     }, { deep: true })
 
     // 同步配置到导航系统（V2：分别同步结构和数据）
-    watch([navGroups, page1Configs, teams], () => {
+    watch([navGroups, page1Configs], () => {
         setNavGroupsRef(navGroups.value)
         setPageConfigsRef(page1Configs.value)
     }, { deep: true, immediate: true })
 
     watch(
-        [navGroups, page1Configs, teams],
+        [navGroups, page1Configs],
         () => {
             // 仅在配置已加载后才自动同步（避免初始化时触发）
             if (!isConfigLoaded.value) return
@@ -518,18 +489,6 @@ export const useConfigStore = defineStore('config', () => {
         // TODO: 实现根据预览配置更新实际配置的逻辑
         // 这可能需要一个新的 actions 支持，或者只是提示用户
         console.log('Applying preview config is not fully implemented yet')
-    }
-
-    // --- Team & Project Actions ---
-
-    function setTeams(newTeams: TeamItem[]) {
-        teams.value = newTeams
-    }
-
-    function updateTeam(index: number, updates: Partial<TeamItem>) {
-        if (teams.value[index]) {
-            Object.assign(teams.value[index], updates)
-        }
     }
 
     function setProjectGroups(groups: any[]) {
@@ -913,15 +872,6 @@ export const useConfigStore = defineStore('config', () => {
                 }
             }
 
-            // 3. 保存团队配置
-            if (teams.value.length > 0) {
-                const { success: teamSuccess, error: teamError } = await saveTeams(teams.value)
-                if (!teamSuccess) {
-                    console.error('保存团队配置失败:', teamError)
-                    errors.push(`团队: ${teamError}`)
-                }
-            }
-
             if (errors.length > 0) {
                 return { success: false, message: errors.join('; ') }
             }
@@ -983,15 +933,6 @@ export const useConfigStore = defineStore('config', () => {
                 console.error('Failed to load page configs:', pagesResult.error)
             }
 
-            // 补充：加载团队配置
-            const teamsResult = await loadTeams()
-            if (teamsResult.error) {
-                console.error('Failed to load teams:', teamsResult.error)
-            }
-
-            // 先清除 localStorage，确保使用云端数据
-            localStorage.removeItem(STORAGE_KEY_PAGE1_CONFIGS)
-
             // 1. 处理导航配置
             let hasValidConfig = false
             let hasCloudData = !!navResult.data
@@ -1023,11 +964,6 @@ export const useConfigStore = defineStore('config', () => {
                         } as Page1Config
                     }
                 }
-            }
-
-            // 3. 处理团队配置
-            if (teamsResult.data && teamsResult.data.length > 0) {
-                teams.value = teamsResult.data
             }
 
             // 逻辑优化：只有在真正没有任何配置的情况下，才进行初始化并保存
@@ -1131,7 +1067,6 @@ export const useConfigStore = defineStore('config', () => {
         isConfigLoaded,
         isConfigLoading,
         // State
-        teams,
         projectGroups,
         // Getters
         isInPreviewMode,
@@ -1142,9 +1077,6 @@ export const useConfigStore = defineStore('config', () => {
         setNavigationStyle,
         // Filter Actions
         setFilterActionFusion,
-        // Team Actions
-        setTeams,
-        updateTeam,
         // Project Group Actions
         setProjectGroups,
         updateProjectGroup,
@@ -1178,10 +1110,6 @@ export const useConfigStore = defineStore('config', () => {
         importAndSyncToCloud,
         // Supabase CRUD (供 authStore 等外部使用)
         initSupabase,
-        saveTeams,
-        loadTeams,
-        saveAppSettings,
-        loadAppSettings,
         loadPageConfig,
         // Auto-sync State
         isSyncing,

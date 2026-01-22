@@ -51,6 +51,8 @@ import {
     GripVertical
 } from 'lucide-vue-next'
 import { useConfigStore, type NavMainItem, type NavSubItem } from '@/stores/configStore'
+import { useConfigTeamStore } from '@/stores/config_team_Store'
+import { useConfigMenuStore } from '@/stores/config_menu_Store'
 import { useAuthStore } from '@/stores/authStore'
 import { useNavigation } from '@/composables/useNavigation'
 // import { defaultSidebarConfig } from '@/config/schema' // Removed
@@ -60,6 +62,8 @@ import draggable from 'vuedraggable'
 import { Modal as AModal, Input as AInput, Form as AForm, FormItem as AFormItem, Message, Popconfirm as APopconfirm } from '@arco-design/web-vue'
 
 const configStore = useConfigStore()
+const teamStore = useConfigTeamStore()
+const menuStore = useConfigMenuStore()
 const authStore = useAuthStore()
 const { breadcrumbs, currentNavId, setNavigation, setDetailTitle } = useNavigation()
 
@@ -71,7 +75,7 @@ const activeTeam = ref<TeamItem | null>(null)
 
 
 const effectiveTeams = computed<TeamItem[]>(() => {
-  return configStore.teams
+  return teamStore.teams
 })
 
 watch(effectiveTeams, (newTeams) => {
@@ -400,9 +404,7 @@ const handleHeaderMenuSave = async () => {
     }
 
     // Clone current config
-    // 注意：authStore.menuConfig 是 readonly ref (computed?) 还是 ref?
-    // authStore definition says ref.
-    const newConfig = [...(authStore.menuConfig || [])]
+    const newConfig = [...(menuStore.menuConfig?.items || [])]
 
     if (menuEditDialog.isEdit && menuEditDialog.editIndex > -1) {
         newConfig[menuEditDialog.editIndex] = newItem
@@ -410,28 +412,24 @@ const handleHeaderMenuSave = async () => {
         newConfig.push(newItem)
     }
 
-    await authStore.updateMenuConfig(newConfig)
+    await menuStore.updateMenu({ items: newConfig })
     Message.success('菜单配置已更新')
     menuEditDialog.visible = false
 }
 
 const handleHeaderMenuDelete = async (index: number) => {
-     const newConfig = [...(authStore.menuConfig || [])]
+     const newConfig = [...(menuStore.menuConfig?.items || [])]
      newConfig.splice(index, 1)
-     await authStore.updateMenuConfig(newConfig)
+     await menuStore.updateMenu({ items: newConfig })
      Message.success('菜单项已删除')
 }
 
 
 
 const headerMenuList = computed({
-    get: () => authStore.menuConfig || [],
+    get: () => menuStore.menuConfig?.items || [],
     set: async (val) => {
-        // This setter might be called frequently during drag.
-        // We might want to debounce or wait for @end event.
-        // vuedraggable modifies the array. if we pass store ref directly to v-model, it mutates.
-        // If we use computed setter, we trigger action.
-        await authStore.updateMenuConfig(val)
+        await menuStore.updateMenu({ items: val })
     }
 })
 
@@ -628,7 +626,7 @@ const headerMenuList = computed({
                 <!-- 动态菜单按钮 -->
                 <!-- 动态菜单按钮 -->
                 <template v-if="!configStore.isEditMode">
-                    <template v-for="(item, index) in authStore.menuConfig" :key="index">
+                    <template v-for="(item, index) in menuStore.menuConfig?.items || []" :key="index">
                         <!-- 文字按钮 -->
                         <a-button 
                             v-if="item.type === 'text-button'" 

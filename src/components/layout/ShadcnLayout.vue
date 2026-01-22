@@ -91,44 +91,30 @@ import {
 
 // --- Logic & Config ---
 import { useConfigStore } from '@/stores/configStore'
+import { useConfigTeamStore } from '@/stores/config_team_Store'
+import { useConfigMenuStore } from '@/stores/config_menu_Store'
 import { useAuthStore } from '@/stores/authStore'
 import { useNavigation } from '@/composables/useNavigation'
 // import { defaultSidebarConfig } from '@/config/schema' // Removed
-import type { TeamItem, TeamPermissions } from '@/types'
+import type { TeamItem } from '@/types'
 
 const configStore = useConfigStore()
+const teamStore = useConfigTeamStore()
+const menuStore = useConfigMenuStore()
 const authStore = useAuthStore()
 const { breadcrumbs, currentSubNav, setNavigation, setDetailTitle } = useNavigation()
 
 // --- 状态与配置 ---
 // const sidebarConfig = defaultSidebarConfig // Removed legacy config
-const TEAM_ICONS = [GalleryVerticalEnd, AudioWaveform, Command]
 const isLoggingOut = ref(false)
 const accountDialogOpen = ref(false)
 
 // --- 团队计算 ---
 const effectiveTeams = computed<TeamItem[]>(() => {
-  const cloudTeams = authStore.teamsConfig
-  if (Array.isArray(cloudTeams) && cloudTeams.length > 0) {
-    return cloudTeams.map((t: any, index: number) => {
-      const perms = t.permissions || []
-      const isFullAccess = perms.includes('admin') || perms.includes('all') || perms.includes('write') || true
-      const mappedPermissions: TeamPermissions = {
-         navMain: isFullAccess ? 'all' : [],
-         projects: isFullAccess ? 'all' : []
-      }
-      return {
-        name: t.name || 'Unnamed Team',
-        logo: TEAM_ICONS[index % TEAM_ICONS.length],
-        plan: t.role || 'Member',
-        permissions: mappedPermissions
-      }
-    })
-  }
-  return configStore.teams
+  return teamStore.teams
 })
 
-const activeTeam = ref(configStore.teams[0] || { name: 'AIGen', logo: 'icon', plan: 'free', permissions: {} }) // Default fallbackrticalEnd, AudioWaveform, Command]
+const activeTeam = ref<TeamItem | null>(null)
 
 watch(effectiveTeams, (newTeams) => {
     if (newTeams.length > 0 && (!activeTeam.value || !newTeams.find(t => t.name === activeTeam.value?.name))) {
@@ -407,7 +393,7 @@ const handleHeaderMenuSave = async () => {
         newItem.options = menuEditDialog.form.options.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
     }
 
-    const newConfig = [...(authStore.menuConfig || [])]
+    const newConfig = [...(menuStore.menuConfig?.items || [])]
 
     if (menuEditDialog.isEdit && menuEditDialog.editIndex > -1) {
         newConfig[menuEditDialog.editIndex] = newItem
@@ -415,23 +401,23 @@ const handleHeaderMenuSave = async () => {
         newConfig.push(newItem)
     }
 
-    await authStore.updateMenuConfig(newConfig)
+    await menuStore.updateMenu({ items: newConfig })
     Message.success('菜单配置已更新')
     menuEditDialog.visible = false
 }
 
 const handleHeaderMenuDelete = async (index: number) => {
      if(!confirm('确定删除此菜单项吗?')) return
-     const newConfig = [...(authStore.menuConfig || [])]
+     const newConfig = [...(menuStore.menuConfig?.items || [])]
      newConfig.splice(index, 1)
-     await authStore.updateMenuConfig(newConfig)
+     await menuStore.updateMenu({ items: newConfig })
      Message.success('菜单项已删除')
 }
 
 const headerMenuList = computed({
-    get: () => authStore.menuConfig || [],
+    get: () => menuStore.menuConfig?.items || [],
     set: async (val) => {
-        await authStore.updateMenuConfig(val)
+        await menuStore.updateMenu({ items: val })
     }
 })
 </script>
@@ -462,12 +448,12 @@ const headerMenuList = computed({
               </DropdownMenuTrigger>
               <DropdownMenuContent class="w-[--reka-dropdown-menu-trigger-width] min-w-56 rounded-lg" align="start" side="right" :side-offset="4">
                 <DropdownMenuLabel class="text-xs text-muted-foreground">Teams</DropdownMenuLabel>
-                            <DropdownMenuItem v-for="team in configStore.teams" :key="team.name" @click="activeTeam = team" class="gap-2 p-2">
+                            <DropdownMenuItem v-for="team in effectiveTeams" :key="team.name" @click="activeTeam = team" class="gap-2 p-2">
                                 <div class="flex size-6 items-center justify-center rounded-sm border">
                                     <component :is="team.logo" class="size-4 shrink-0" />
                                 </div>
                                 {{ team.name }}
-                                <DropdownMenuShortcut>⌘{{ configStore.teams.indexOf(team) + 1 }}</DropdownMenuShortcut>
+                                <DropdownMenuShortcut>⌘{{ effectiveTeams.indexOf(team) + 1 }}</DropdownMenuShortcut>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem class="gap-2 p-2" @click="handleNavClick('Account', 'Profile', 'profile')">
@@ -695,7 +681,7 @@ const headerMenuList = computed({
         <div id="breadcrumb-actions" class="flex items-center gap-4 ml-auto">
             <!-- Normal Mode: Render Menu Items -->
             <template v-if="!configStore.isEditMode">
-                <template v-for="(item, index) in authStore.menuConfig" :key="index">
+                <template v-for="(item, index) in menuStore.menuConfig?.items || []" :key="index">
                     <!-- Text Button -->
                     <Button 
                         v-if="item.type === 'text-button'" 

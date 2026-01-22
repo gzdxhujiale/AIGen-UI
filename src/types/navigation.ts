@@ -75,8 +75,23 @@ export interface UserInfo {
 }
 
 export interface SidebarConfig {
-    user: UserInfo
-    teams: TeamItem[]
-    navGroups: NavGroup[]
-    projectGroups: ProjectGroup[]
+    user: UserInfo,
+    teams: TeamItem[],
+    navGroups: NavGroup[],
+    projectGroups: ProjectGroup[],
 }
+
+// --- 菜单与顶部栏配置 ---
+
+export interface MenuItem {
+    type: 'text-button' | 'dropdown' | 'icon-button'
+    label: string
+    key?: string
+    icon?: string
+    options?: string[]
+}
+
+export interface MenuConfig {
+    items: MenuItem[]
+}
+

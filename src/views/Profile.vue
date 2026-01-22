@@ -11,7 +11,6 @@ import {
   Space as ASpace, 
   Grid as AGrid,
   Alert as AAlert,
-  Divider as ADivider,
   Tooltip as ATooltip,
   Scrollbar as AScrollbar,
   Select as ASelect,
@@ -25,42 +24,32 @@ import {
   IconSafe, 
   IconAt,
   IconInfoCircle,
-  IconCode,
   IconRefresh
 } from '@arco-design/web-vue/es/icon'
 import { useConfigStore } from '@/stores/configStore'
+import { useConfigTeamStore } from '@/stores/config_team_Store'
 
 const { Row: ARow, Col: ACol } = AGrid
 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
+const teamStore = useConfigTeamStore()
 const isSaving = ref(false)
 
-// Form state
 // 表单状态
 const form = reactive({
   userName: '',
   teams: [] as any[]
 })
 
-
 // 防抖定时器
 let saveTimer: ReturnType<typeof setTimeout> | null = null
-
-// Helper to safely extract array
-const getArray = (data: any) => {
-    if (Array.isArray(data)) return data
-    if (data && Array.isArray(data.teams)) return data.teams
-    return []
-}
 
 
 // 从 store 初始化表单数据
 const initForm = () => {
   form.userName = authStore.userDisplayName
-  // 以前是从 authStore 取，现在应该从 configStore 取，或者两者同步
-  // 这里暂时保持从 configStore 初始化，因为我们要迁移到 configStore 管理团队
-  form.teams = JSON.parse(JSON.stringify(configStore.teams))
+  form.teams = JSON.parse(JSON.stringify(teamStore.teams))
 }
 
 onMounted(() => {
@@ -81,17 +70,17 @@ const autoSave = () => {
 
     isSaving.value = true
     try {
-      // 1. Update User Profile (Name)
+      // 1. 更新用户信息（显示名称）
       if (form.userName !== authStore.userDisplayName) {
         await authStore.updateUserProfile(form.userName, [], configStore.navigationStyle)
       }
       
-      // 2. Update Teams (via ConfigStore -> Supabase)
-      configStore.setTeams(form.teams)
-      // Trigger save (debounced in store, but we can force or just let store handle it)
-      // The store watcher will pick up changes to `teams` and save automatically if configured
-      // But we might need to explicit save if deep watch isn't fully robust for nested objects without direct assignment
-      // configStore.teams = form.teams // This triggers the watch
+      // 2. 更新团队信息
+      teamStore.teams = JSON.parse(JSON.stringify(form.teams))
+      await teamStore.saveTeams()
+      // 这里的 store watcher 会捕获 teams 的变更并自动保存
+      // 但对于深层嵌套对象的修改，显式调用 saveTeams 更加稳健
+
 
     } catch (e) {
       console.error(e)
@@ -108,29 +97,24 @@ watch(() => form.teams, () => {
 
 
 // 监听 store 变化
-watch(() => configStore.teams, (newVal) => {
+watch(() => teamStore.teams, (newVal) => {
     if (newVal && newVal.length > 0 && JSON.stringify(newVal) !== JSON.stringify(form.teams)) {
         form.teams = JSON.parse(JSON.stringify(newVal))
     }
 }, { deep: true })
 
-watch(() => authStore.teamsConfig, (newVal) => {
 
-    const newTeams = getArray(newVal)
-    if (newTeams.length > 0 && form.teams.length === 0) {
-        form.teams = JSON.parse(JSON.stringify(newTeams))
-    }
-})
 
 // 团队管理操作
 const addTeam = () => {
   form.teams.push({
     name: '新团队',
-    logo: IconUser, // Default logo
+    logo: IconUser, // 默认图标
     plan: 'free',
     permissions: { navMain: [], projects: [] } 
   })
 }
+
 
 const removeTeam = (name: string) => {
   const index = form.teams.findIndex(t => t.name === name)
@@ -142,8 +126,8 @@ const removeTeam = (name: string) => {
 // 表格列定义
 const columns = [
   { title: '团队名称', dataIndex: 'name', slotName: 'name' },
-  { title: '角色 (Role)', dataIndex: 'role', slotName: 'role', width: 150 },
-  { title: '权限 (Permissions)', dataIndex: 'permissions', slotName: 'permissions' },
+  { title: '角色', dataIndex: 'plan', slotName: 'role', width: 150 },
+  { title: '权限', dataIndex: 'permissions', slotName: 'permissions' },
   { title: '操作', slotName: 'actions', width: 80, align: 'center' }
 ]
 </script>
@@ -194,7 +178,7 @@ const columns = [
             </ACol>
           </ARow>
           
-          <!-- Team Management (Full Width) -->
+          <!-- 团队管理 -->
           <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden">
             <template #title>
               <ASpace>
@@ -234,7 +218,7 @@ const columns = [
                 </ASelect>
               </template>
               <template #permissions>
-                 <div class="text-xs text-gray-500">Todo: Permission Editor</div>
+                 <div class="text-xs text-gray-500">待办：权限编辑器</div>
               </template>
               <template #actions="{ record }">
                 <ATooltip content="删除团队">
@@ -244,16 +228,8 @@ const columns = [
                 </ATooltip>
               </template>
             </ATable>
-
-            <div class="mt-6">
-              <ADivider orientation="left">原始 JSON 数据</ADivider>
-              <div class="relative group">
-                <pre class="json-code">
-                  <icon-code class="code-icon" />{{ JSON.stringify(form.teams, null, 2) }}
-                </pre>
-              </div>
-            </div>
           </ACard>
+
 
           <!-- 底部保存状态提示 -->
           <div v-if="isSaving" class="fixed bottom-4 right-4 bg-white/80 backdrop-blur shadow-lg border rounded-full px-4 py-2 flex items-center gap-2 text-primary animate-fade-in z-50">
