@@ -15,6 +15,7 @@ import { FilterInput, FilterSelect, FilterDateRange, FilterTreeSelect, FilterCar
 import ConfigForm from '@/views/ConfigForm.vue'
 import { useNavigation } from '@/composables/useNavigation'
 import { useConfigStore, type Page1Config, type FilterConfig, type TableColumn, type ActionButtonConfig , type CardItemConfig } from '@/stores/configStore'
+import { useConfigPageStore } from '@/stores/config_page_Store'
 import { useConfigCrud } from '@/composables/useConfigCrud'
 
 // --- Props ---
@@ -38,15 +39,29 @@ const isSectionVisible = (section: 'filter' | 'actions' | 'card' | 'table') => {
 }
 
 // --- 使用 Pinia store ---
-const configStore = useConfigStore()
+const configStore = useConfigStore()  // 仅用于 isEditMode 和 filterActionFusion
+const pageStore = useConfigPageStore()
 
 // 编辑模式状态
 const isEditMode = computed(() => configStore.isEditMode)
 
-// --- 获取当前页面配置 ---
+// --- V9: 获取当前 subId 所属的一级导航标题 ---
+const currentNavTitle = computed(() => pageStore.findNavTitleBySubId(currentNavId.value))
+
+// --- V9: 获取当前页面配置 (纯 V9) ---
 const pageConfig = computed<Page1Config | undefined>(() => {
-  const config = configStore.getPage1Config(currentNavId.value)
-  return config
+  const navId = currentNavId.value
+  
+  // V9: 从 pageStore 获取组件配置
+  const v9Component = pageStore.getComponentById(navId)
+  if (v9Component) {
+    return {
+      ...v9Component,
+      mockData: () => []  // V9 不存储 mockData
+    } as Page1Config
+  }
+  
+  return undefined
 })
 
 // --- 响应式数据 ---
@@ -121,9 +136,13 @@ const filterCrud = useConfigCrud({
     key: '', type: 'input' as const, label: '', placeholder: '',
     options: '', treeOptions: '', visible: true
   }),
-  doSave: (modifying, index, form) => {
-    const config = configStore.page1Configs[currentNavId.value]
-    if (!config) return
+  doSave: async (modifying, index, form) => {
+    const navTitle = currentNavTitle.value
+    const subId = currentNavId.value
+    if (!navTitle) {
+      Message.error('无法找到当前页面所属的导航')
+      return
+    }
     const newFilter: FilterConfig = {
       key: form.key || `filter_${Date.now()}`,
       type: form.type,
@@ -133,25 +152,35 @@ const filterCrud = useConfigCrud({
       options: form.options ? form.options.split(/[，,]/).map((s: string) => s.trim()).filter((s: string) => s) : [],
       treeOptions: form.treeOptions ? safeJsonParseWithError(form.treeOptions, '树形数据') ?? undefined : undefined
     }
-    if (modifying && index !== null) {
-      config.filterArea.filters[index] = newFilter
-    } else {
-      config.filterArea.filters.push(newFilter)
-    }
-    configStore.saveToSupabase()
-  },
-  doDelete: (index) => {
-    const navId = currentNavId.value
-    console.log('[DEBUG] filterCrud.doDelete:', { navId, index, configExists: !!configStore.page1Configs[navId] })
-    const config = configStore.page1Configs[navId]
-    if (!config) {
-      console.error('[DEBUG] doDelete: Config not found for navId:', navId)
+    
+    // V9: 获取当前组件配置，更新后整体保存
+    const component = pageStore.getComponentById(subId)
+    if (!component) {
+      Message.error('页面配置不存在')
       return
     }
-    console.log('[DEBUG] Before delete, filters count:', config.filterArea.filters.length)
-    config.filterArea.filters.splice(index, 1)
-    console.log('[DEBUG] After delete, filters count:', config.filterArea.filters.length)
-    configStore.saveToSupabase()
+    
+    if (modifying && index !== null) {
+      component.filterArea.filters[index] = newFilter
+    } else {
+      component.filterArea.filters.push(newFilter)
+    }
+    
+    const result = await pageStore.updateSubPageComponent(navTitle, subId, component)
+    if (!result.success) {
+      Message.error('保存失败: ' + result.message)
+    }
+  },
+  doDelete: async (index) => {
+    const navTitle = currentNavTitle.value
+    const subId = currentNavId.value
+    if (!navTitle) return
+    
+    const component = pageStore.getComponentById(subId)
+    if (!component) return
+    
+    component.filterArea.filters.splice(index, 1)
+    await pageStore.updateSubPageComponent(navTitle, subId, component)
   }
 })
 
@@ -163,9 +192,13 @@ const columnCrud = useConfigCrud({
     type: 'text' as const, mockFormat: 'none' as const, mockList: '', buttons: '',
     fixed: 'none' as const, align: 'left' as const, ellipsis: false, tooltip: false, visible: true
   }),
-  doSave: (modifying, index, form) => {
-    const config = configStore.page1Configs[currentNavId.value]
-    if (!config) return
+  doSave: async (modifying, index, form) => {
+    const navTitle = currentNavTitle.value
+    const subId = currentNavId.value
+    if (!navTitle) {
+      Message.error('无法找到当前页面所属的导航')
+      return
+    }
     const newColumn: TableColumn = {
       key: form.key || `col_${Date.now()}`,
       label: form.label,
@@ -180,17 +213,34 @@ const columnCrud = useConfigCrud({
       ellipsis: form.ellipsis || undefined,
       tooltip: form.tooltip || undefined
     }
-    if (modifying && index !== null) {
-      config.tableArea.columns[index] = newColumn
-    } else {
-      config.tableArea.columns.push(newColumn)
+    
+    const component = pageStore.getComponentById(subId)
+    if (!component) {
+      Message.error('页面配置不存在')
+      return
     }
-    configStore.saveToSupabase()
+    
+    if (modifying && index !== null) {
+      component.tableArea.columns[index] = newColumn
+    } else {
+      component.tableArea.columns.push(newColumn)
+    }
+    
+    const result = await pageStore.updateSubPageComponent(navTitle, subId, component)
+    if (!result.success) {
+      Message.error('保存失败: ' + result.message)
+    }
   },
-  doDelete: (index) => {
-    const config = configStore.page1Configs[currentNavId.value]
-    config?.tableArea.columns.splice(index, 1)
-    configStore.saveToSupabase()
+  doDelete: async (index) => {
+    const navTitle = currentNavTitle.value
+    const subId = currentNavId.value
+    if (!navTitle) return
+    
+    const component = pageStore.getComponentById(subId)
+    if (!component) return
+    
+    component.tableArea.columns.splice(index, 1)
+    await pageStore.updateSubPageComponent(navTitle, subId, component)
   }
 })
 
@@ -201,11 +251,23 @@ const actionCrud = useConfigCrud({
     key: '', label: '', variant: 'outline' as const, className: '',
     effectType: 'none' as const, effectTitle: '', effectContent: '', effectFormItems: [] as any[], visible: true
   }),
-  doSave: (modifying, index, form) => {
-    const config = configStore.page1Configs[currentNavId.value]
-    if (!config) return
-    if (!config.actionsArea) config.actionsArea = { buttons: [] }
-    if (!config.actionsArea.buttons) config.actionsArea.buttons = []
+  doSave: async (modifying, index, form) => {
+    const navTitle = currentNavTitle.value
+    const subId = currentNavId.value
+    if (!navTitle) {
+      Message.error('无法找到当前页面所属的导航')
+      return
+    }
+    
+    const component = pageStore.getComponentById(subId)
+    if (!component) {
+      Message.error('页面配置不存在')
+      return
+    }
+    
+    if (!component.actionsArea) component.actionsArea = { buttons: [] }
+    if (!component.actionsArea.buttons) component.actionsArea.buttons = []
+    
     const newAction: ActionButtonConfig = {
       key: form.key || `action_${Date.now()}`,
       label: form.label,
@@ -217,18 +279,29 @@ const actionCrud = useConfigCrud({
         title: form.effectTitle, content: form.effectContent, formItems: form.effectFormItems
       } : undefined
     }
+    
     if (modifying && index !== null) {
-      config.actionsArea.buttons[index] = newAction
+      component.actionsArea.buttons[index] = newAction
     } else {
-      config.actionsArea.buttons.push(newAction)
+      component.actionsArea.buttons.push(newAction)
     }
-    config.actionsArea.show = true
-    configStore.saveToSupabase()
+    component.actionsArea.show = true
+    
+    const result = await pageStore.updateSubPageComponent(navTitle, subId, component)
+    if (!result.success) {
+      Message.error('保存失败: ' + result.message)
+    }
   },
-  doDelete: (index) => {
-    const config = configStore.page1Configs[currentNavId.value]
-    config?.actionsArea?.buttons?.splice(index, 1)
-    configStore.saveToSupabase()
+  doDelete: async (index) => {
+    const navTitle = currentNavTitle.value
+    const subId = currentNavId.value
+    if (!navTitle) return
+    
+    const component = pageStore.getComponentById(subId)
+    if (!component?.actionsArea?.buttons) return
+    
+    component.actionsArea.buttons.splice(index, 1)
+    await pageStore.updateSubPageComponent(navTitle, subId, component)
   }
 })
 
@@ -236,27 +309,50 @@ const actionCrud = useConfigCrud({
 const cardCrud = useConfigCrud({
   name: '卡片',
   defaultForm: () => ({ key: '', title: '', data: '' }),
-  doSave: (modifying, index, form) => {
-    const config = configStore.page1Configs[currentNavId.value]
-    if (!config) return
-    if (!config.cardArea) config.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
-    if (!config.cardArea.cards) config.cardArea.cards = []
+  doSave: async (modifying, index, form) => {
+    const navTitle = currentNavTitle.value
+    const subId = currentNavId.value
+    if (!navTitle) {
+      Message.error('无法找到当前页面所属的导航')
+      return
+    }
+    
+    const component = pageStore.getComponentById(subId)
+    if (!component) {
+      Message.error('页面配置不存在')
+      return
+    }
+    
+    if (!component.cardArea) component.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
+    if (!component.cardArea.cards) component.cardArea.cards = []
+    
     const newCard: CardItemConfig = {
       key: form.key || `card_${Date.now()}`,
       title: form.title,
       data: form.data
     }
+    
     if (modifying && index !== null) {
-      config.cardArea.cards[index] = newCard
+      component.cardArea.cards[index] = newCard
     } else {
-      config.cardArea.cards.push(newCard)
+      component.cardArea.cards.push(newCard)
     }
-    configStore.saveToSupabase()
+    
+    const result = await pageStore.updateSubPageComponent(navTitle, subId, component)
+    if (!result.success) {
+      Message.error('保存失败: ' + result.message)
+    }
   },
-  doDelete: (index) => {
-    const config = configStore.page1Configs[currentNavId.value]
-    config?.cardArea?.cards?.splice(index, 1)
-    configStore.saveToSupabase()
+  doDelete: async (index) => {
+    const navTitle = currentNavTitle.value
+    const subId = currentNavId.value
+    if (!navTitle) return
+    
+    const component = pageStore.getComponentById(subId)
+    if (!component?.cardArea?.cards) return
+    
+    component.cardArea.cards.splice(index, 1)
+    await pageStore.updateSubPageComponent(navTitle, subId, component)
   }
 })
 
@@ -342,34 +438,46 @@ function openAreaConfigDialog(type: 'filter' | 'card' | 'table') {
 }
 
 // 保存区域配置
-function saveAreaConfig() {
-  const navId = currentNavId.value
-  const config = configStore.page1Configs[navId]
-  if (!config) return
+async function saveAreaConfig() {
+  const navTitle = currentNavTitle.value
+  const subId = currentNavId.value
+  if (!navTitle) {
+    Message.error('无法找到当前页面所属的导航')
+    return
+  }
+  
+  const component = pageStore.getComponentById(subId)
+  if (!component) {
+    Message.error('页面配置不存在')
+    return
+  }
   
   if (areaConfigType.value === 'filter') {
-    // 直接修改 Store 状态
-    config.filterArea.columns = filterAreaConfig.value.columns
-    config.filterArea.gap = filterAreaConfig.value.gap
-    if (!config.actionsArea) config.actionsArea = { buttons: [] }
-    config.actionsArea.show = filterAreaConfig.value.showActions
+    component.filterArea.columns = filterAreaConfig.value.columns
+    component.filterArea.gap = filterAreaConfig.value.gap
+    if (!component.actionsArea) component.actionsArea = { buttons: [] }
+    component.actionsArea.show = filterAreaConfig.value.showActions
   } else if (areaConfigType.value === 'card') {
-    if (!config.cardArea) config.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
-    config.cardArea.show = cardAreaConfig.value.show
-    config.cardArea.columns = cardAreaConfig.value.columns
-    config.cardArea.gap = cardAreaConfig.value.gap
+    if (!component.cardArea) component.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
+    component.cardArea.show = cardAreaConfig.value.show
+    component.cardArea.columns = cardAreaConfig.value.columns
+    component.cardArea.gap = cardAreaConfig.value.gap
   } else if (areaConfigType.value === 'table') {
-    config.tableArea.height = tableAreaConfig.value.height
-    config.tableArea.pageSize = tableAreaConfig.value.pageSize
-    config.tableArea.scrollX = tableAreaConfig.value.scrollX
-    config.tableArea.scrollY = tableAreaConfig.value.scrollY
-    config.tableArea.showCheckbox = tableAreaConfig.value.showCheckbox
-    config.tableArea.stickyHeader = tableAreaConfig.value.stickyHeader
+    component.tableArea.height = tableAreaConfig.value.height
+    component.tableArea.pageSize = tableAreaConfig.value.pageSize
+    component.tableArea.scrollX = tableAreaConfig.value.scrollX
+    component.tableArea.scrollY = tableAreaConfig.value.scrollY
+    component.tableArea.showCheckbox = tableAreaConfig.value.showCheckbox
+    component.tableArea.stickyHeader = tableAreaConfig.value.stickyHeader
   }
   
   areaConfigDialogOpen.value = false
-  configStore.saveToSupabase()
-  Message.success('配置已更新')
+  const result = await pageStore.updateSubPageComponent(navTitle, subId, component)
+  if (result.success) {
+    Message.success('配置已更新')
+  } else {
+    Message.error('保存失败: ' + result.message)
+  }
 }
 
 // 拖拽排序
@@ -385,29 +493,33 @@ function handleDragOver(e: DragEvent, index: number) {
   dragOverIndex.value = index
 }
 
-function handleDrop(type: 'filter' | 'action' | 'column', targetIndex: number) {
+async function handleDrop(type: 'filter' | 'action' | 'column', targetIndex: number) {
   if (dragIndex.value === -1 || dragIndex.value === targetIndex) return
   
-  const navId = currentNavId.value
-  const config = configStore.page1Configs[navId]
-  if (!config) return
+  const navTitle = currentNavTitle.value
+  const subId = currentNavId.value
+  if (!navTitle) return
   
-  // 直接在 Store 数组上操作
+  const component = pageStore.getComponentById(subId)
+  if (!component) return
+  
+  // 直接在组件配置数组上操作
   if (type === 'filter') {
-    const [removed] = config.filterArea.filters.splice(dragIndex.value, 1)
-    config.filterArea.filters.splice(targetIndex, 0, removed)
+    const [removed] = component.filterArea.filters.splice(dragIndex.value, 1)
+    component.filterArea.filters.splice(targetIndex, 0, removed)
   } else if (type === 'action') {
-    if (!config.actionsArea?.buttons) return
-    const [removed] = config.actionsArea.buttons.splice(dragIndex.value, 1)
-    config.actionsArea.buttons.splice(targetIndex, 0, removed)
+    if (!component.actionsArea?.buttons) return
+    const [removed] = component.actionsArea.buttons.splice(dragIndex.value, 1)
+    component.actionsArea.buttons.splice(targetIndex, 0, removed)
   } else if (type === 'column') {
-    const [removed] = config.tableArea.columns.splice(dragIndex.value, 1)
-    config.tableArea.columns.splice(targetIndex, 0, removed)
+    const [removed] = component.tableArea.columns.splice(dragIndex.value, 1)
+    component.tableArea.columns.splice(targetIndex, 0, removed)
   }
   
   dragIndex.value = -1
   dragOverIndex.value = -1
-  configStore.saveToSupabase()}
+  await pageStore.updateSubPageComponent(navTitle, subId, component)
+}
 
 function handleDragEnd() {
   dragIndex.value = -1

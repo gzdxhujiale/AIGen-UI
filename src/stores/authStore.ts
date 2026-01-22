@@ -5,6 +5,7 @@ import { supabase } from '@/api/supabase'
 import { useConfigStore } from '@/stores/configStore'
 import { useConfigTeamStore } from '@/stores/config_team_Store'
 import { useConfigMenuStore } from '@/stores/config_menu_Store'
+import { useConfigPageStore } from '@/stores/config_page_Store'
 
 export const useAuthStore = defineStore('auth', () => {
     // State
@@ -57,15 +58,18 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             const teamStore = useConfigTeamStore()
             const menuStore = useConfigMenuStore()
+            const pageStore = useConfigPageStore()
 
-            // 1. 并行获取团队配置和菜单配置
-            const [teamsResult, menuResult] = await Promise.all([
+            // 1. 并行获取团队配置、菜单配置和页面配置
+            const [teamsResult, menuResult, pageResult] = await Promise.all([
                 teamStore.loadTeams(),
-                menuStore.loadMenu()
+                menuStore.loadMenu(),
+                pageStore.loadPageConfigs()
             ])
 
             const { success: teamsSuccess, message: teamsError } = teamsResult
             const { success: menuSuccess, message: menuError } = menuResult
+            const { success: pageSuccess, message: pageError } = pageResult
 
             if (!teamsSuccess) {
                 console.error('Error fetching teams config:', teamsError)
@@ -86,6 +90,10 @@ export const useAuthStore = defineStore('auth', () => {
 
             if (!menuSuccess) {
                 console.error('Error fetching app settings:', menuError)
+            }
+
+            if (!pageSuccess) {
+                console.error('Error fetching page configs:', pageError)
             }
 
             if (menuStore.menuConfig && menuStore.menuConfig.items) {

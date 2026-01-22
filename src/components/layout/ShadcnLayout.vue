@@ -92,6 +92,7 @@ import {
 // --- Logic & Config ---
 import { useConfigStore } from '@/stores/configStore'
 import { useConfigTeamStore } from '@/stores/config_team_Store'
+import { useConfigPageStore } from '@/stores/config_page_Store'
 import { useConfigMenuStore } from '@/stores/config_menu_Store'
 import { useAuthStore } from '@/stores/authStore'
 import { useNavigation } from '@/composables/useNavigation'
@@ -99,6 +100,7 @@ import { useNavigation } from '@/composables/useNavigation'
 import type { TeamItem } from '@/types'
 
 const configStore = useConfigStore()
+const pageStore = useConfigPageStore()
 const teamStore = useConfigTeamStore()
 const menuStore = useConfigMenuStore()
 const authStore = useAuthStore()
@@ -125,7 +127,7 @@ watch(effectiveTeams, (newTeams) => {
 // --- 导航过滤 ---
 const filteredNavGroups = computed(() => {
   const team = activeTeam.value
-  const navGroups = configStore.effectiveNavGroups
+  const navGroups = pageStore.navGroups.flat() // Use pageStore instead of configStore configStore.effectiveNavGroups
   
   // 如果没有导航组数据，直接返回空数组
   if (!navGroups || navGroups.length === 0) return []
@@ -271,36 +273,26 @@ const handleEditSubmit = () => {
     }
 
     if (editDialogMode.value === 'add-main') {
-        configStore.addNavMainItem(editForm.groupIdx, {
+        pageStore.addNavMainItem({
             title: editForm.title,
             icon: editForm.icon,
-            items: [],
-            url: ''
         })
         Message.success('添加成功')
     } else if (editDialogMode.value === 'edit-main') {
-        configStore.updateNavMainItem(editForm.groupIdx, editForm.mainItemId, {
+        pageStore.updateNavMainItem(editForm.mainItemId, {
             title: editForm.title,
             icon: editForm.icon
         })
         Message.success('更新成功')
     } else if (editDialogMode.value === 'add-sub') {
-        const newId = configStore.addSubNavItem(editForm.groupIdx, editForm.mainItemId, {
-            title: editForm.title,
-            url: editForm.url
+        pageStore.addSubPage(editForm.mainItemId, {
+            id: crypto.randomUUID(),
+            name: editForm.title,
         })
-        
-        if (newId) {
-             configStore.addPage1Config(newId, {
-                filterArea: { columns: 4, gap: '16px', filters: [] },
-                tableArea: { height: '500px', scrollX: true, scrollY: true, showCheckbox: true, columns: [] }
-             })
-        }
-         Message.success('添加成功')
+        Message.success('添加成功')
     } else if (editDialogMode.value === 'edit-sub') {
-        configStore.updateSubNavItem(editForm.groupIdx, editForm.mainItemId, editForm.subItemId, {
-            title: editForm.title,
-            url: editForm.url
+        pageStore.updateSubPage(editForm.mainItemId, editForm.subItemId, {
+            name: editForm.title
         })
          Message.success('更新成功')
     }
@@ -310,13 +302,13 @@ const handleEditSubmit = () => {
 const handleDeleteMain = (groupIdx: number, itemId: string) => {
     // 简单确认，因为 Popconfirm 不在 shadcn 默认组件中，或者需要额外引入
     if(!confirm('确定删除此一级导航及所有子项吗?')) return
-    configStore.deleteNavMainItem(groupIdx, itemId)
+    pageStore.deleteNavMainItem(itemId)
     Message.success('删除成功')
 }
 
 const handleDeleteSub = (groupIdx: number, mainItemId: string, subItemId: string) => {
     if(!confirm('确定删除此子项吗?')) return
-    configStore.deleteSubNavItem(groupIdx, mainItemId, subItemId)
+    pageStore.deleteSubPage(mainItemId, subItemId)
     Message.success('删除成功')
 }
 
@@ -501,7 +493,7 @@ const headerMenuList = computed({
 
         <!-- Edit Mode -->
         <template v-else>
-            <SidebarGroup v-for="(group, groupIdx) in configStore.navGroups" :key="group.label || groupIdx">
+            <SidebarGroup v-for="(group, groupIdx) in pageStore.navGroups" :key="group.label || groupIdx">
                  <div class="flex items-center justify-between px-2 mb-2">
                     <SidebarGroupLabel>{{ group.label || 'Group' }}</SidebarGroupLabel>
                     <Button 

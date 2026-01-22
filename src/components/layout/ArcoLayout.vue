@@ -51,6 +51,7 @@ import {
     GripVertical
 } from 'lucide-vue-next'
 import { useConfigStore, type NavMainItem, type NavSubItem } from '@/stores/configStore'
+import { useConfigPageStore } from '@/stores/config_page_Store'
 import { useConfigTeamStore } from '@/stores/config_team_Store'
 import { useConfigMenuStore } from '@/stores/config_menu_Store'
 import { useAuthStore } from '@/stores/authStore'
@@ -62,6 +63,7 @@ import draggable from 'vuedraggable'
 import { Modal as AModal, Input as AInput, Form as AForm, FormItem as AFormItem, Message, Popconfirm as APopconfirm } from '@arco-design/web-vue'
 
 const configStore = useConfigStore()
+const pageStore = useConfigPageStore()
 const teamStore = useConfigTeamStore()
 const menuStore = useConfigMenuStore()
 const authStore = useAuthStore()
@@ -95,7 +97,11 @@ const handleTeamSelect = (value: any) => {
 // --- 导航过滤 ---
 const filteredNavGroups = computed(() => {
   const team = activeTeam.value
-  const navGroups = configStore.effectiveNavGroups
+  // Use pageStore.navGroups instead of configStore
+  const navGroups = pageStore.navGroups.flat() // pageStore.navGroups returns NavGroup[] but computed expects flat array logic or adapt logic below
+  
+  // pageStore.navGroups is NavGroup[]. The filteredNavGroups logic expects NavGroup[].
+  // pageStore.navGroups = [{ label: 'Application', items: [...] }]
   
   // 如果没有导航组数据，直接返回空数组
   if (!navGroups || navGroups.length === 0) return []
@@ -288,36 +294,28 @@ const handleEditSubmit = () => {
     }
 
     if (editDialogMode.value === 'add-main') {
-        configStore.addNavMainItem(editForm.groupIdx, {
+        pageStore.addNavMainItem({
             title: editForm.title,
-            icon: editForm.icon,
-            items: [],
-            url: ''
+            icon: editForm.icon
         })
         Message.success('添加成功')
     } else if (editDialogMode.value === 'edit-main') {
-        configStore.updateNavMainItem(editForm.groupIdx, editForm.mainItemId, {
+        pageStore.updateNavMainItem(editForm.mainItemId, {
             title: editForm.title,
             icon: editForm.icon
         })
         Message.success('更新成功')
     } else if (editDialogMode.value === 'add-sub') {
-        const newId = configStore.addSubNavItem(editForm.groupIdx, editForm.mainItemId, {
-            title: editForm.title,
-            url: editForm.url
+        // V9: 使用 pageStore.addSubPage，它会自动处理组件默认配置
+        pageStore.addSubPage(editForm.mainItemId, {
+            id: crypto.randomUUID(), // 需要生成 ID
+            name: editForm.title,
+            // url: editForm.url // PageSubItem 没有 url 字段，只有 component
         })
-        
-        if (newId) {
-             configStore.addPage1Config(newId, {
-                filterArea: { columns: 4, gap: '16px', filters: [] },
-                tableArea: { height: '500px', scrollX: true, scrollY: true, showCheckbox: true, columns: [] }
-             })
-        }
-         Message.success('添加成功')
+        Message.success('添加成功')
     } else if (editDialogMode.value === 'edit-sub') {
-        configStore.updateSubNavItem(editForm.groupIdx, editForm.mainItemId, editForm.subItemId, {
-            title: editForm.title,
-            url: editForm.url
+        pageStore.updateSubPage(editForm.mainItemId, editForm.subItemId, {
+            name: editForm.title // PageSubItem 使用 name 而不是 title
         })
          Message.success('更新成功')
     }
@@ -325,17 +323,15 @@ const handleEditSubmit = () => {
 }
 
 const handleDeleteMain = (groupIdx: number, itemId: string) => {
-    if (groupIdx >= 0) {
-        configStore.deleteNavMainItem(groupIdx, itemId)
-        Message.success('删除成功')
-    }
+    // 忽略 groupIdx
+    pageStore.deleteNavMainItem(itemId)
+    Message.success('删除成功')
 }
 
 const handleDeleteSub = (groupIdx: number, mainItemId: string, subItemId: string) => {
-    if (groupIdx >= 0) {
-        configStore.deleteSubNavItem(groupIdx, mainItemId, subItemId)
-        Message.success('删除成功')
-    }
+    // 忽略 groupIdx
+    pageStore.deleteSubPage(mainItemId, subItemId)
+    Message.success('删除成功')
 }
 
 const iconOptions = [
@@ -484,8 +480,8 @@ const headerMenuList = computed({
 
         <!-- 1.2 主导航 -->
         <div class="flex-1 overflow-y-auto py-4 px-2 custom-scrollbar">
-          <!-- 预览模式使用 filteredNavGroups，编辑模式使用 configStore.navGroups 以保证索引正确 -->
-          <div v-for="(group, groupIdx) in (configStore.isEditMode ? configStore.navGroups : filteredNavGroups)" :key="group.label || groupIdx" class="mb-6">
+          <!-- 预览模式使用 filteredNavGroups，编辑模式使用 pageStore.navGroups 以保证索引正确 -->
+          <div v-for="(group, groupIdx) in (configStore.isEditMode ? pageStore.navGroups : filteredNavGroups)" :key="group.label || groupIdx" class="mb-6">
             <div v-if="!collapsed && (group.showLabel ?? true)" class="px-4 mb-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
               {{ group.label }}
             </div>

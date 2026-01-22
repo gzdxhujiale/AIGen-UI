@@ -349,10 +349,13 @@ export const useConfigStore = defineStore('config', () => {
     }, { deep: true })
 
     // 同步配置到导航系统（V2：分别同步结构和数据）
+    // [V9 迁移注] 已在 config_page_Store 中接管同步 logic，此处禁用以避免冲突
+    /*
     watch([navGroups, page1Configs], () => {
         setNavGroupsRef(navGroups.value)
         setPageConfigsRef(page1Configs.value)
     }, { deep: true, immediate: true })
+    */
 
     watch(
         [navGroups, page1Configs],
@@ -501,6 +504,9 @@ export const useConfigStore = defineStore('config', () => {
         }
     }
 
+    /**
+     * @deprecated 请使用 config_page_Store 的 addNavMainItem
+     */
     function addNavMainItem(groupIndex: number, item: Omit<NavMainItem, 'id'>): string | null {
         const group = navGroups.value[groupIndex]
         if (group) {
@@ -517,6 +523,9 @@ export const useConfigStore = defineStore('config', () => {
         return null
     }
 
+    /**
+     * @deprecated 请使用 config_page_Store 的 updateNavMainItem
+     */
     function updateNavMainItem(groupIndex: number, itemId: string, updates: Partial<NavMainItem>) {
         const group = navGroups.value[groupIndex]
         if (group) {
@@ -528,6 +537,9 @@ export const useConfigStore = defineStore('config', () => {
         }
     }
 
+    /**
+     * @deprecated 请使用 config_page_Store 的 deleteNavMainItem
+     */
     function deleteNavMainItem(groupIndex: number, itemId: string) {
         const group = navGroups.value[groupIndex]
         if (group) {
@@ -539,6 +551,9 @@ export const useConfigStore = defineStore('config', () => {
         }
     }
 
+    /**
+     * @deprecated 请使用 config_page_Store 的 addSubPage
+     */
     function addSubNavItem(groupIndex: number, mainItemId: string, item: Omit<NavSubItem, 'id'>): string | null {
         const group = navGroups.value[groupIndex]
         if (group) {
@@ -554,6 +569,9 @@ export const useConfigStore = defineStore('config', () => {
         return null
     }
 
+    /**
+     * @deprecated 请使用 config_page_Store 的 updateSubPage
+     */
     function updateSubNavItem(groupIndex: number, mainItemId: string, subItemId: string, updates: Partial<NavSubItem>) {
         const group = navGroups.value[groupIndex]
         if (group) {
@@ -568,6 +586,9 @@ export const useConfigStore = defineStore('config', () => {
         }
     }
 
+    /**
+     * @deprecated 请使用 config_page_Store 的 deleteSubPage
+     */
     function deleteSubNavItem(groupIndex: number, mainItemId: string, subItemId: string) {
         const group = navGroups.value[groupIndex]
         if (group) {
@@ -592,32 +613,37 @@ export const useConfigStore = defineStore('config', () => {
         }
     }
 
+    // ============================================
+    // 已废弃: 以下函数已迁移到 config_page_Store (V9 架构)
+    // 保留以维持向后兼容，后续版本将移除
+    // ============================================
+    /** @deprecated 请使用 useConfigPageStore().addSubPage() */
     function addPage1Config(navId: string, config: Omit<Page1Config, 'mockData'>) {
         page1Configs.value[navId] = config as Page1Config
         mockDataFunctions.value[navId] = () => []
-
-        // V2: 不再将 component 同步到 navGroups 树中
     }
 
+    /** @deprecated 请使用 useConfigPageStore().updateSubPageComponent() */
     function updatePage1Config(navId: string, updates: Partial<Page1Config>) {
         if (page1Configs.value[navId]) {
             Object.assign(page1Configs.value[navId], updates)
         }
     }
 
+    /** @deprecated 请使用 useConfigPageStore().deleteSubPage() */
     function deletePage1Config(navId: string) {
         delete page1Configs.value[navId]
         delete mockDataFunctions.value[navId]
-
-        // V2: 只需从 page1Configs 中删除
     }
 
+    /** @deprecated 请使用 useConfigPageStore().updateFilterArea() */
     function updateFilterAreaConfig(navId: string, updates: Partial<FilterAreaConfig>) {
         if (page1Configs.value[navId]) {
             Object.assign(page1Configs.value[navId].filterArea, updates)
         }
     }
 
+    /** @deprecated 请使用 useConfigPageStore().updateTableArea() */
     function updateTableAreaConfig(navId: string, updates: Partial<TableAreaConfig>) {
         if (page1Configs.value[navId]) {
             Object.assign(page1Configs.value[navId].tableArea, updates)
