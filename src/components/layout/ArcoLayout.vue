@@ -729,15 +729,11 @@ const headerMenuList = computed({
                                 </template>
                                 <span class="ml-1">{{ configStore.isEditMode ? '预览模式' : '编辑模式' }}</span>
                             </a-doption>
-                            <a-divider class="my-1" />
                             <a-doption value="profile" class="py-2.5" id="nav-profile">
                                 <template #icon><IconUser class="size-4 opacity-70"/></template>
                                 <span class="ml-1">用户中心</span>
                             </a-doption>
-                            <a-doption value="settings" class="py-2.5" id="nav-settings">
-                                <template #icon><IconSettings class="size-4 opacity-70"/></template>
-                                <span class="ml-1">用户设置</span>
-                            </a-doption>
+
                             <a-doption value="logout" class="text-red-500 py-2.5 font-medium">
                                 <template #icon><LogOut class="size-4"/></template>
                                 <span class="ml-1">退出登录</span>

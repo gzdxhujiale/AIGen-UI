@@ -104,15 +104,7 @@ export function useOnboarding() {
                             align: 'start'
                         }
                     },
-                    {
-                        element: '#nav-settings',
-                        popover: {
-                            title: '⚙️ 用户设置',
-                            description: '在这里您可以配置页面的详细设置，包括筛选器、表格列、操作按钮等。所有配置都会实时保存到云端。',
-                            side: 'left',
-                            align: 'start'
-                        }
-                    }
+
                 ]
             })
 

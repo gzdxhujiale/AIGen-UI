@@ -331,7 +331,13 @@ const iconOptions = [
 ]
 
 const resolveIcon = (icon: any) => {
-    // 简单处理 string icon 到 component 的映射，如果需要
+    if (typeof icon === 'string') {
+        const iconMap: Record<string, any> = {
+            Settings, GalleryVerticalEnd, AudioWaveform, Command,
+            Folder, Forward, MoreHorizontal, Trash2, Pencil, Eye
+        }
+        return iconMap[icon] || icon
+    }
     return icon
 }
 
@@ -624,10 +630,7 @@ const headerMenuList = computed({
                     {{ configStore.isEditMode ? '预览模式' : '编辑模式' }}
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem id="nav-settings" @click="handleNavClick('系统', '配置设置', 'settings')"><Settings />用户设置</DropdownMenuItem>
-                </DropdownMenuGroup>
+
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
                   <DropdownMenuItem id="nav-profile" @click="handleNavClick('账户', '个人资料', 'profile')"><BadgeCheck />用户中心</DropdownMenuItem>
