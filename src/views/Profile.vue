@@ -16,34 +16,23 @@ import {
   Divider as ADivider,
   Tooltip as ATooltip,
   Scrollbar as AScrollbar,
-  Switch as ASwitch,
-  Modal as AModal,
-  RadioGroup as ARadioGroup,
-  Radio as ARadio,
-  Textarea as ATextarea,
   Select as ASelect,
   Option as AOption
 } from '@arco-design/web-vue'
-import draggable from 'vuedraggable'
 import { 
   IconUser, 
   IconEdit, 
   IconDelete, 
   IconPlus, 
   IconSafe, 
-  IconCode, 
   IconAt,
   IconInfoCircle,
-  IconDragDotVertical,
+  IconCode,
   IconRefresh
 } from '@arco-design/web-vue/es/icon'
 import { useConfigStore } from '@/stores/configStore'
 
 const { Row: ARow, Col: ACol } = AGrid
-
-// Use ATypography directly instead of destructuring
-// 直接使用 ATypography 而不是解构
-// const { Text: AText } = ATypography 
 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
@@ -53,83 +42,12 @@ const isSaving = ref(false)
 // 表单状态
 const form = reactive({
   userName: '',
-  teams: [] as any[],
-  menuConfig: [] as any[]
-})
-
-const menuDialog = reactive({
-    visible: false,
-    isEdit: false,
-    editIndex: -1,
-    form: {
-        type: 'text-button',
-        label: '',
-        options: '' // 用于输入的逗号分隔字符串
-    }
+  teams: [] as any[]
 })
 
 // Debounce timer
 // 防抖定时器
 let saveTimer: ReturnType<typeof setTimeout> | null = null
-
-// --- Menu Configuration Methods ---
-// --- 菜单配置方法 ---
-
-const openAddMenuDialog = () => {
-    menuDialog.isEdit = false
-    menuDialog.editIndex = -1
-    menuDialog.form = { type: 'text-button', label: '', options: '' }
-    menuDialog.visible = true
-}
-
-const openEditMenuDialog = (index: number) => {
-    const item = form.menuConfig[index]
-    menuDialog.isEdit = true
-    menuDialog.editIndex = index
-    menuDialog.form = {
-        type: item.type,
-        label: item.label,
-        options: item.options ? item.options.join(',') : ''
-    }
-    menuDialog.visible = true
-}
-
-const removeMenuItem = (index: number) => {
-    form.menuConfig.splice(index, 1)
-    autoSave() // 删除后触发自动保存
-}
-
-const saveMenuItem = () => {
-    if (!menuDialog.form.label) {
-        Message.warning('请输入按钮文字')
-        return
-    }
-
-    const newItem: any = {
-        type: menuDialog.form.type,
-        label: menuDialog.form.label
-    }
-
-    if (menuDialog.form.type === 'dropdown') {
-        if (!menuDialog.form.options) {
-             Message.warning('请输入选项（以逗号分隔）')
-             return
-        }
-        newItem.options = menuDialog.form.options.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
-    }
-
-    if (menuDialog.isEdit && menuDialog.editIndex > -1) {
-        form.menuConfig[menuDialog.editIndex] = newItem
-    } else {
-        form.menuConfig.push(newItem)
-    }
-    menuDialog.visible = false
-    autoSave() // 添加/编辑后触发自动保存
-}
-
-const onMenuReorder = () => {
-    autoSave()
-}
 
 // Helper to safely extract array
 const getArray = (data: any) => {
@@ -143,7 +61,6 @@ const getArray = (data: any) => {
 const initForm = () => {
   form.userName = authStore.customUserName || authStore.userDisplayName
   form.teams = JSON.parse(JSON.stringify(getArray(authStore.teamsConfig)))
-  form.menuConfig = JSON.parse(JSON.stringify(authStore.menuConfig || []))
 }
 
 onMounted(() => {
@@ -167,8 +84,7 @@ const autoSave = () => {
       const result = await authStore.updateUserProfile(
         form.userName,
         form.teams,
-        configStore.navigationStyle,
-        form.menuConfig // Pass menu config
+        configStore.navigationStyle
       )
 
       if (result.success) {
@@ -189,10 +105,6 @@ const autoSave = () => {
 watch(() => form.teams, () => {
   autoSave()
 }, { deep: true })
-
-watch(() => configStore.navigationStyle, () => {
-  autoSave()
-})
 
 // Watch for store changes
 // 监听 store 变化
@@ -229,8 +141,8 @@ const removeTeam = (id: string) => {
   }
 }
 
-// Columns definition for table (kept for reference if needed, though we use custom slot rendering in template mostly)
-// 表格列定义（保留作为参考，尽管主要在模板中使用自定义插槽渲染）
+// Columns definition for table
+// 表格列定义
 const columns = [
   { title: 'ID', dataIndex: 'id', slotName: 'id', width: 100 },
   { title: '团队名称', dataIndex: 'name', slotName: 'name' },
@@ -246,30 +158,10 @@ const columns = [
       <div class="p-4 max-w-[1400px] mx-auto">
         <ASpace direction="vertical" size="large" fill>
           
-          <!-- Menu Config Dialog (Global within page) -->
-          <!-- 菜单配置弹窗（页面全局） -->
-          <AModal v-model:visible="menuDialog.visible" :title="menuDialog.isEdit ? '编辑按钮' : '新增按钮'" @ok="saveMenuItem">
-              <AForm :model="menuDialog.form" layout="vertical">
-                  <AFormItem label="按钮类型">
-                      <ARadioGroup v-model="menuDialog.form.type" type="button">
-                          <ARadio value="text-button">文字按钮</ARadio>
-                          <ARadio value="dropdown">下拉菜单</ARadio>
-                      </ARadioGroup>
-                  </AFormItem>
-                  <AFormItem label="按钮文字">
-                      <AInput v-model="menuDialog.form.label" placeholder="例如：权限申请" />
-                  </AFormItem>
-                  <AFormItem v-if="menuDialog.form.type === 'dropdown'" label="选项配置" help="多个选项请用逗号分隔">
-                      <ATextarea v-model="menuDialog.form.options" placeholder="例如：中文, English" />
-                  </AFormItem>
-              </AForm>
-          </AModal>
-
-          <!-- 顶部区域：基本信息与界面配置 -->
-          <!-- 使用带间距的 ARow 和 ACol 进行布局 -->
+          <!-- 顶部区域：基本信息 -->
           <ARow :gutter="24">
-            <!-- 左侧列：基本信息 -->
-            <ACol :span="24" :lg="12">
+            <!-- 基本信息（全宽） -->
+            <ACol :span="24">
               <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden h-full">
                 <template #title>
                   <ASpace>
@@ -279,117 +171,29 @@ const columns = [
                 </template>
                 
                 <AForm :model="form" layout="vertical">
-                  <AFormItem label="显示名称" help="修改后自动保存">
-                      <AInput v-model="form.userName" placeholder="请输入您的名字">
-                        <template #prefix><icon-edit /></template>
-                      </AInput>
-                  </AFormItem>
-                  
-                  <AFormItem label="关联邮箱" disabled>
-                      <AInput :model-value="authStore.userEmail" disabled>
-                        <template #prefix><icon-at /></template>
-                      </AInput>
-                    <template #extra>
-                      <div class="flex items-center gap-1 mt-1 text-xs opacity-70">
-                        <icon-info-circle /> 邮箱暂不支持修改
-                      </div>
-                    </template>
-                  </AFormItem>
-                </AForm>
-              </ACard>
-            </ACol>
-            
-            <!-- 右侧列：界面布局配置 -->
-            <ACol :span="24" :lg="12">
-              <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden h-full">
-                <template #title>
-                  <ASpace>
-                    <icon-code class="text-primary" />
-                    <span class="font-bold">界面布局配置</span>
-                  </ASpace>
-                </template>
-                
-                 <AForm :model="form" layout="vertical">
-                     <!-- 1. 筛选区与功能区融合 -->
-                    <AFormItem label="筛选区与功能区融合">
-                        <div class="flex items-center justify-between p-3 border rounded-lg bg-[var(--color-bg-1)] w-full">
-                            <span class="text-[13px] font-medium text-[var(--color-text-2)]">开启融合</span>
-                            <ASwitch
-                                :model-value="configStore.filterActionFusion"
-                                @update:model-value="(val: any) => configStore.setFilterActionFusion(val)"
-                            />
-                        </div>
+                  <ARow :gutter="24">
+                    <ACol :span="24" :lg="12">
+                      <AFormItem label="显示名称" help="修改后自动保存">
+                          <AInput v-model="form.userName" placeholder="请输入您的名字">
+                            <template #prefix><icon-edit /></template>
+                          </AInput>
+                      </AFormItem>
+                    </ACol>
+                    
+                    <ACol :span="24" :lg="12">
+                      <AFormItem label="关联邮箱" disabled>
+                          <AInput :model-value="authStore.userEmail" disabled>
+                            <template #prefix><icon-at /></template>
+                          </AInput>
                         <template #extra>
-                            <div class="mt-1 text-xs text-[var(--color-text-3)]">
-                                功能区按钮将显示在筛选区右侧
-                            </div>
+                          <div class="flex items-center gap-1 mt-1 text-xs opacity-70">
+                            <icon-info-circle /> 邮箱暂不支持修改
+                          </div>
                         </template>
-                    </AFormItem>
-
-                    <!-- 2. 导航风格 -->
-                    <AFormItem label="导航风格">
-                      <ASelect 
-                        :model-value="configStore.navigationStyle"
-                        @change="(val: any) => configStore.setNavigationStyle(val)"
-                        placeholder="请选择导航风格"
-                      >
-                        <AOption value="shadcn">Shadcn UI</AOption>
-                        <AOption value="arco">Arco Design</AOption>
-                      </ASelect>
-                    </AFormItem>
-
-                    <!-- 3. 菜单栏配置 -->
-                    <AFormItem label="菜单栏配置">
-                      <div class="w-full flex flex-col gap-3">
-                          <div class="flex items-center justify-between">
-                              <span class="text-xs text-[var(--color-text-3)]">支持拖拽排序</span>
-                              <AButton type="outline" size="mini" @click="openAddMenuDialog">
-                                  <template #icon><icon-plus /></template>
-                                  新增
-                              </AButton>
-                          </div>
-                          
-                          <div class="border rounded-lg bg-[var(--color-bg-1)] overflow-hidden">
-                              <div v-if="form.menuConfig.length === 0" class="p-4 text-center text-[var(--color-text-3)] text-xs">
-                                  暂无配置
-                              </div>
-                              <draggable 
-                                  v-else 
-                                  v-model="form.menuConfig" 
-                                  item-key="label" 
-                                  handle=".drag-handle"
-                                  @end="onMenuReorder"
-                                  class="divide-y divide-[var(--color-border-1)]"
-                              >
-                                  <template #item="{ element, index }">
-                                      <div class="p-2 pl-3 flex items-center justify-between text-sm hover:bg-[var(--color-fill-2)] group">
-                                          <div class="flex items-center gap-2 overflow-hidden">
-                                              <icon-drag-dot-vertical class="drag-handle text-[var(--color-text-4)] cursor-move hover:text-[var(--color-text-2)] flex-shrink-0" />
-                                              <div class="flex flex-col truncate">
-                                                  <span class="font-medium text-[var(--color-text-1)] truncate">{{ element.label }}</span>
-                                                  <span class="text-[10px] text-[var(--color-text-3)] truncate">
-                                                      {{ element.type === 'text-button' ? '按钮' : '下拉' }}
-                                                      <span v-if="element.type === 'dropdown' && element.options">
-                                                          ({{ element.options.length }})
-                                                      </span>
-                                                  </span>
-                                              </div>
-                                          </div>
-                                          <div class="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                                              <AButton type="text" size="mini" @click="openEditMenuDialog(index)">
-                                                  <template #icon><icon-edit /></template>
-                                              </AButton>
-                                              <AButton type="text" status="danger" size="mini" @click="removeMenuItem(index)">
-                                                  <template #icon><icon-delete /></template>
-                                              </AButton>
-                                          </div>
-                                      </div>
-                                  </template>
-                              </draggable>
-                          </div>
-                      </div>
-                    </AFormItem>
-                 </AForm>
+                      </AFormItem>
+                    </ACol>
+                  </ARow>
+                </AForm>
               </ACard>
             </ACol>
           </ARow>

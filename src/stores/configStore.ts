@@ -131,7 +131,7 @@ export const useConfigStore = defineStore('config', () => {
     // 导航样式偏好: 'shadcn' | 'arco'
     const navigationStyle = ref<'shadcn' | 'arco'>('arco')
     // 筛选区与功能区融合设置
-    const filterActionFusion = ref(false)
+    const filterActionFusion = ref(true)
 
     // 加载状态
     const isConfigLoaded = ref(false)

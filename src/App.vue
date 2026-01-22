@@ -2,7 +2,6 @@
 import { computed, onMounted, onUnmounted, watch } from 'vue'
 // 导入页面模板
 import Page1 from '@/views/Page1.vue'
-import Settings from '@/views/Settings.vue'
 import AuthPage from '@/views/AuthPage.vue'
 import Profile from '@/views/Profile.vue'
 import SkeletonLoading from '@/views/SkeletonLoading.vue'
@@ -40,7 +39,6 @@ const { startOnboarding, showAnnouncement } = useOnboarding()
 // 页面模板映射
 const pageComponents: Record<string, any> = {
   Page1,
-  Settings,
   profile: Profile,
   // Page2, // 后续添加更多模板时，在此注册...
 }
