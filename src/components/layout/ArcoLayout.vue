@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, markRaw, reactive } from 'vue'
+import { ref, computed, watch, reactive } from 'vue'
 import {
   Layout as ALayout,
   LayoutHeader as ALayoutHeader,
@@ -38,16 +38,13 @@ import {
   IconCalendar,
   IconSafe,
   IconFire,
-  IconMosaic
+
 } from '@arco-design/web-vue/es/icon'
 import {
     ChevronRight,
     ChevronsUpDown,
     LogOut,
     Plus,
-    GalleryVerticalEnd,
-    AudioWaveform,
-    Command,
     Pencil,
     Eye,
     Trash2,
@@ -56,7 +53,8 @@ import {
 import { useConfigStore, type NavMainItem, type NavSubItem } from '@/stores/configStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNavigation } from '@/composables/useNavigation'
-import type { TeamItem, TeamPermissions } from '@/types'
+// import { defaultSidebarConfig } from '@/config/schema' // Removed
+import type { TeamItem } from '@/types'
 import { AIChatButton, AIChatWindow } from '@/components/ai'
 import draggable from 'vuedraggable'
 import { Modal as AModal, Input as AInput, Form as AForm, FormItem as AFormItem, Message, Popconfirm as APopconfirm } from '@arco-design/web-vue'
@@ -70,27 +68,10 @@ const collapsed = ref(false)
 const activeTeam = ref<TeamItem | null>(null)
 
 // --- 团队逻辑 ---
-const TEAM_ICONS = [markRaw(GalleryVerticalEnd), markRaw(AudioWaveform), markRaw(Command)]
+
 
 const effectiveTeams = computed<TeamItem[]>(() => {
-  const cloudTeams = authStore.teamsConfig
-  if (Array.isArray(cloudTeams) && cloudTeams.length > 0) {
-    return cloudTeams.map((t: any, index: number) => {
-      const perms = t.permissions || []
-      const isFullAccess = perms.includes('admin') || perms.includes('all') || perms.includes('write') || true
-      const mappedPermissions: TeamPermissions = {
-         navMain: isFullAccess ? 'all' : [],
-         projects: isFullAccess ? 'all' : []
-      }
-      return {
-        name: t.name || 'Unnamed Team',
-        logo: t.logo === 'IconMosaic' ? markRaw(IconMosaic) : (t.logo || TEAM_ICONS[index % TEAM_ICONS.length]),
-        plan: t.role || 'Member',
-        permissions: mappedPermissions
-      }
-    })
-  }
-  return [] 
+  return configStore.teams
 })
 
 watch(effectiveTeams, (newTeams) => {
@@ -111,8 +92,22 @@ const handleTeamSelect = (value: any) => {
 const filteredNavGroups = computed(() => {
   const team = activeTeam.value
   const navGroups = configStore.effectiveNavGroups
-  if (!team || !team.permissions) return navGroups
-  const { navMain, navItems } = team.permissions
+  
+  // 如果没有导航组数据，直接返回空数组
+  if (!navGroups || navGroups.length === 0) return []
+  
+  // 如果没有团队配置，直接返回所有导航
+  if (!team) return navGroups
+  
+  // 检查 permissions 是否为有效的对象格式 (防止 Supabase 数据格式异常)
+  const permissions = team.permissions
+  if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) {
+    return navGroups
+  }
+  
+  const { navMain, navItems } = permissions
+  
+  // 如果是全部权限且没有细粒度控制，直接返回
   if (navMain === 'all' && !navItems) return navGroups
 
   return navGroups.map(group => {
@@ -230,57 +225,51 @@ const editForm = reactive({
     icon: ''
 })
 
-const getGroupIndex = (label: string) => {
-    return configStore.navGroups.findIndex(g => g.label === label)
-}
+// 编辑模式函数直接使用 groupIdx，不需要 getGroupIndex
 
-const openAddMainDialog = (groupLabel: string) => {
-    const idx = getGroupIndex(groupLabel)
-    if (idx === -1) {
+const openAddMainDialog = (groupIdx: number) => {
+    if (groupIdx < 0 || groupIdx >= configStore.navGroups.length) {
         Message.error('无法找到对应的导航组')
         return
     }
     editDialogMode.value = 'add-main'
     editDialogTitle.value = '添加一级导航'
-    editForm.groupIdx = idx
+    editForm.groupIdx = groupIdx
     editForm.title = ''
     editForm.icon = 'IconSettings'
     editDialogVisible.value = true
 }
 
-const openEditMainDialog = (groupLabel: string, item: NavMainItem) => {
-    const idx = getGroupIndex(groupLabel)
-    if (idx === -1) return
+const openEditMainDialog = (groupIdx: number, item: NavMainItem) => {
+    if (groupIdx < 0) return
 
     editDialogMode.value = 'edit-main'
     editDialogTitle.value = '编辑一级导航'
-    editForm.groupIdx = idx
+    editForm.groupIdx = groupIdx
     editForm.mainItemId = item.id
     editForm.title = item.title
     editForm.icon = typeof item.icon === 'string' ? item.icon : (item.icon?.name || 'IconSettings')
     editDialogVisible.value = true
 }
 
-const openAddSubDialog = (groupLabel: string, mainItemId: string) => {
-    const idx = getGroupIndex(groupLabel)
-    if (idx === -1) return
+const openAddSubDialog = (groupIdx: number, mainItemId: string) => {
+    if (groupIdx < 0) return
 
     editDialogMode.value = 'add-sub'
     editDialogTitle.value = '添加二级导航'
-    editForm.groupIdx = idx
+    editForm.groupIdx = groupIdx
     editForm.mainItemId = mainItemId
     editForm.title = ''
     editForm.url = '#'
     editDialogVisible.value = true
 }
 
-const openEditSubDialog = (groupLabel: string, mainItemId: string, subItem: NavSubItem) => {
-    const idx = getGroupIndex(groupLabel)
-    if (idx === -1) return
+const openEditSubDialog = (groupIdx: number, mainItemId: string, subItem: NavSubItem) => {
+    if (groupIdx < 0) return
 
     editDialogMode.value = 'edit-sub'
     editDialogTitle.value = '编辑二级导航'
-    editForm.groupIdx = idx
+    editForm.groupIdx = groupIdx
     editForm.mainItemId = mainItemId
     editForm.subItemId = subItem.id
     editForm.title = subItem.title
@@ -331,18 +320,16 @@ const handleEditSubmit = () => {
     editDialogVisible.value = false
 }
 
-const handleDeleteMain = (groupLabel: string, itemId: string) => {
-    const idx = getGroupIndex(groupLabel)
-    if (idx > -1) {
-        configStore.deleteNavMainItem(idx, itemId)
+const handleDeleteMain = (groupIdx: number, itemId: string) => {
+    if (groupIdx >= 0) {
+        configStore.deleteNavMainItem(groupIdx, itemId)
         Message.success('删除成功')
     }
 }
 
-const handleDeleteSub = (groupLabel: string, mainItemId: string, subItemId: string) => {
-    const idx = getGroupIndex(groupLabel)
-    if (idx > -1) {
-        configStore.deleteSubNavItem(idx, mainItemId, subItemId)
+const handleDeleteSub = (groupIdx: number, mainItemId: string, subItemId: string) => {
+    if (groupIdx >= 0) {
+        configStore.deleteSubNavItem(groupIdx, mainItemId, subItemId)
         Message.success('删除成功')
     }
 }
@@ -499,7 +486,8 @@ const headerMenuList = computed({
 
         <!-- 1.2 主导航 -->
         <div class="flex-1 overflow-y-auto py-4 px-2 custom-scrollbar">
-          <div v-for="group in filteredNavGroups" :key="group.label" class="mb-6">
+          <!-- 预览模式使用 filteredNavGroups，编辑模式使用 configStore.navGroups 以保证索引正确 -->
+          <div v-for="(group, groupIdx) in (configStore.isEditMode ? configStore.navGroups : filteredNavGroups)" :key="group.label || groupIdx" class="mb-6">
             <div v-if="!collapsed && (group.showLabel ?? true)" class="px-4 mb-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
               {{ group.label }}
             </div>
@@ -536,7 +524,7 @@ const headerMenuList = computed({
                   </a-menu-item>
                 </a-sub-menu>
                 <a-menu-item v-else :key="item.id" @click="handleNavClick(group.label, item.title, item.id)">
-                  <template #icon><component :is="item.icon" v-if="item.icon" class="w-4 h-4" /></template>
+                  <template #icon><component :is="resolveIcon(item.icon)" v-if="item.icon" class="w-4 h-4" /></template>
                   {{ item.title }}
                 </a-menu-item>
               </template>
@@ -546,7 +534,7 @@ const headerMenuList = computed({
             <div v-else class="flex flex-col gap-2 px-2">
                  <div class="flex items-center justify-between px-2 mb-1">
                      <span class="text-xs font-bold text-muted-foreground">{{ group.label }}</span>
-                     <a-button size="mini" type="text" @click="openAddMainDialog(group.label)">
+                     <a-button size="mini" type="text" @click="openAddMainDialog(groupIdx)">
                          <Plus class="w-3 h-3" />
                      </a-button>
                  </div>
@@ -559,13 +547,13 @@ const headerMenuList = computed({
                              <span class="text-sm font-medium">{{ item.title }}</span>
                          </div>
                          <div class="flex items-center gap-1 opacity-0 group-hover/main-edit:opacity-100 transition-opacity">
-                             <a-button size="mini" type="text" @click="openEditMainDialog(group.label, item)">
+                             <a-button size="mini" type="text" @click="openEditMainDialog(groupIdx, item)">
                                  <Pencil class="w-3 h-3" />
                              </a-button>
-                             <a-button size="mini" type="text" @click="openAddSubDialog(group.label, item.id)">
+                             <a-button size="mini" type="text" @click="openAddSubDialog(groupIdx, item.id)">
                                  <Plus class="w-3 h-3" />
                              </a-button>
-                              <a-popconfirm content="确定删除此一级导航及所有子项吗?" @ok="handleDeleteMain(group.label, item.id)">
+                              <a-popconfirm content="确定删除此一级导航及所有子项吗?" @ok="handleDeleteMain(groupIdx, item.id)">
                                  <a-button size="mini" type="text" status="danger">
                                      <Trash2 class="w-3 h-3" />
                                  </a-button>
@@ -592,10 +580,10 @@ const headerMenuList = computed({
                                     <span class="truncate">{{ sub.title }}</span>
                                 </div>
                                 <div class="flex items-center gap-0.5 opacity-0 group-hover/sub-edit:opacity-100 transition-opacity shrink-0" @click.stop>
-                                     <a-button size="mini" type="text" class="!px-1" @click="openEditSubDialog(group.label, item.id, sub)">
+                                     <a-button size="mini" type="text" class="!px-1" @click="openEditSubDialog(groupIdx, item.id, sub)">
                                          <Pencil class="w-3 h-3" />
                                      </a-button>
-                                     <a-popconfirm content="确定删除此子项吗?" @ok="handleDeleteSub(group.label, item.id, sub.id)">
+                                     <a-popconfirm content="确定删除此子项吗?" @ok="handleDeleteSub(groupIdx, item.id, sub.id)">
                                          <a-button size="mini" type="text" status="danger" class="!px-1">
                                              <Trash2 class="w-3 h-3" />
                                          </a-button>

@@ -10,6 +10,7 @@ import type {
     NavMainItem,
     NavSubItem,
     Page1Config,
+    Page1ConfigData,
     FilterAreaConfig,
     FilterConfig,
     TableAreaConfig,
@@ -18,12 +19,18 @@ import type {
     ActionsAreaConfig,
     TreeNode,
     CardAreaConfig,
-    CardItemConfig
+    CardItemConfig,
+    TeamItem
 } from '@/types'
 import { supabase } from '@/api/supabase'
-import { supabaseConfigService } from '@/api/supabase-config.service'
 import { toast } from 'vue-sonner'
-import { IconSettings } from '@arco-design/web-vue/es/icon'
+import { GalleryVerticalEnd } from 'lucide-vue-next'
+
+// ============================================
+// Supabase 配置类型定义 (从 supabase-config.service.ts 合并)
+// ============================================
+type ConfigCategory = 'navigation' | 'page' | 'app_settings' | 'team'
+type ResourceId = 'nav-main' | `page-${string}` | 'top-bar' | 'team-list' | 'user-preferences'
 
 export type {
     NavGroup,
@@ -121,6 +128,7 @@ function createDebouncedSync(delay = 1500) {
 export const useConfigStore = defineStore('config', () => {
     const navGroups = ref<NavGroup[]>([])
     const page1Configs = ref<Record<string, Page1Config>>({})
+
     const mockDataFunctions = ref<Record<string, () => any[]>>({})
 
     // 预览模式状态
@@ -133,6 +141,17 @@ export const useConfigStore = defineStore('config', () => {
     // 筛选区与功能区融合设置
     const filterActionFusion = ref(true)
 
+    // 团队与项目配置
+    const teams = ref<TeamItem[]>([{
+        name: 'AIGen UI',
+        logo: GalleryVerticalEnd,
+        plan: 'online',
+        permissions: { navMain: 'all', projects: 'all' }
+    }])
+
+    // 默认项目分组配置 (暂时硬编码，后续也可从云端加载)
+    const projectGroups = ref<any[]>([])
+
     // 加载状态
     const isConfigLoaded = ref(false)
     const isConfigLoading = ref(false)
@@ -144,6 +163,206 @@ export const useConfigStore = defineStore('config', () => {
         isEditMode.value = enabled
     }
 
+    // ============================================
+    // Supabase 配置存储功能 (从 supabase-config.service.ts 合并)
+    // ============================================
+    const supabaseUserId = ref<string | null>(null)
+
+    /**
+     * 初始化 Supabase 用户 ID
+     */
+    async function initSupabase(): Promise<boolean> {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+            supabaseUserId.value = user.id
+            return true
+        }
+        return false
+    }
+
+    /**
+     * 保存单个配置项到 Supabase
+     */
+    async function saveConfig(
+        category: ConfigCategory,
+        resourceId: ResourceId,
+        content: any
+    ): Promise<{ success: boolean; error?: string }> {
+        if (!supabaseUserId.value) {
+            return { success: false, error: '用户未登录' }
+        }
+
+        // 策略修改：Check-Update-Insert
+        // 显式检查记录是否存在，然后决定是更新还是插入
+        // 这规避了 upsert 的 onConflict 参数匹配问题以及 delete 失败问题
+
+        // 1. 检查是否存在
+        const { data: existingData, error: checkError } = await supabase
+            .from('user_configs')
+            .select('id')
+            .eq('user_id', supabaseUserId.value)
+            .eq('category', category)
+            .eq('resource_id', resourceId)
+            .maybeSingle()
+
+        if (checkError) {
+            console.error('检查配置失败:', checkError)
+            return { success: false, error: checkError.message }
+        }
+
+        let error: any
+
+        if (existingData) {
+            // 2. 更新现有记录
+            const { error: updateError } = await supabase
+                .from('user_configs')
+                .update({
+                    content,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', existingData.id)
+            error = updateError
+        } else {
+            // 3. 插入新记录
+            const { error: insertError } = await supabase
+                .from('user_configs')
+                .insert({
+                    user_id: supabaseUserId.value,
+                    category,
+                    resource_id: resourceId,
+                    content,
+                    updated_at: new Date().toISOString()
+                })
+            error = insertError
+        }
+
+        if (error) {
+            console.error('保存配置失败:', error)
+            return { success: false, error: error.message }
+        }
+
+        console.log(`[DEBUG] Supabase save success: ${category}/${resourceId} (${existingData ? 'updated' : 'inserted'})`)
+        return { success: true }
+    }
+
+    /**
+     * 加载单个配置项
+     */
+    async function loadConfig<T = any>(
+        category: ConfigCategory,
+        resourceId: ResourceId
+    ): Promise<{ data: T | null; error?: string }> {
+        if (!supabaseUserId.value) {
+            return { data: null, error: '用户未登录' }
+        }
+
+        const { data, error } = await supabase
+            .from('user_configs')
+            .select('content')
+            .eq('user_id', supabaseUserId.value)
+            .eq('category', category)
+            .eq('resource_id', resourceId)
+            .single()
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return { data: null } // 记录不存在
+            }
+            return { data: null, error: error.message }
+        }
+
+        return { data: data?.content as T }
+    }
+
+    /**
+     * 加载某个类别下的所有配置
+     */
+    async function loadCategoryConfigs<T = any>(
+        category: ConfigCategory
+    ): Promise<{ data: Record<string, T>; error?: string }> {
+        if (!supabaseUserId.value) {
+            return { data: {}, error: '用户未登录' }
+        }
+
+        const { data, error } = await supabase
+            .from('user_configs')
+            .select('resource_id, content')
+            .eq('user_id', supabaseUserId.value)
+            .eq('category', category)
+
+        if (error) {
+            return { data: {}, error: error.message }
+        }
+
+        const result: Record<string, T> = {}
+        for (const row of data || []) {
+            result[row.resource_id] = row.content as T
+        }
+
+        return { data: result }
+    }
+
+    // ============================================
+    // 业务层便捷方法
+    // ============================================
+
+    /** 保存导航配置 */
+    async function saveNavigation(navData: NavGroup[]): Promise<{ success: boolean; error?: string }> {
+        return saveConfig('navigation', 'nav-main', navData)
+    }
+
+    /** 加载导航配置 */
+    async function loadNavigation(): Promise<{ data: NavGroup[] | null; error?: string }> {
+        return loadConfig<NavGroup[]>('navigation', 'nav-main')
+    }
+
+    /** 保存页面配置 */
+    async function savePageConfig(pageId: string, config: Page1ConfigData): Promise<{ success: boolean; error?: string }> {
+        return saveConfig('page', `page-${pageId}` as ResourceId, config)
+    }
+
+    /** 加载单个页面配置 */
+    async function loadPageConfig(pageId: string): Promise<{ data: Page1ConfigData | null; error?: string }> {
+        return loadConfig<Page1ConfigData>('page', `page-${pageId}` as ResourceId)
+    }
+
+    /** 加载所有页面配置 */
+    async function loadAllPageConfigs(): Promise<{ data: Record<string, Page1ConfigData>; error?: string }> {
+        const result = await loadCategoryConfigs<Page1ConfigData>('page')
+
+        // 移除 resource_id 前缀 "page-"
+        const cleaned: Record<string, Page1ConfigData> = {}
+        for (const [key, value] of Object.entries(result.data)) {
+            const pageId = key.replace(/^page-/, '')
+            cleaned[pageId] = value
+        }
+
+        return { data: cleaned, error: result.error }
+    }
+
+    /** 保存团队列表 */
+    async function saveTeams(teamsData: TeamItem[]): Promise<{ success: boolean; error?: string }> {
+        return saveConfig('team', 'team-list', teamsData)
+    }
+
+    /** 加载团队列表 */
+    async function loadTeams(): Promise<{ data: TeamItem[] | null; error?: string }> {
+        return loadConfig<TeamItem[]>('team', 'team-list')
+    }
+
+    /** 保存应用设置 */
+    async function saveAppSettings(settings: Record<string, any>): Promise<{ success: boolean; error?: string }> {
+        return saveConfig('app_settings', 'top-bar', settings)
+    }
+
+    /** 加载应用设置 */
+    async function loadAppSettings(): Promise<{ data: Record<string, any> | null; error?: string }> {
+        return loadConfig('app_settings', 'top-bar')
+    }
+
+    // ============================================
+    // 同步状态
+    // ============================================
     const isSyncing = ref(false)
     const lastSyncTime = ref<Date | null>(null)
     const syncError = ref<string | null>(null)
@@ -159,16 +378,18 @@ export const useConfigStore = defineStore('config', () => {
     }, { deep: true })
 
     // 同步配置到导航系统（V2：分别同步结构和数据）
-    watch([navGroups, page1Configs], () => {
+    watch([navGroups, page1Configs, teams], () => {
         setNavGroupsRef(navGroups.value)
         setPageConfigsRef(page1Configs.value)
     }, { deep: true, immediate: true })
 
     watch(
-        [navGroups, page1Configs],
+        [navGroups, page1Configs, teams],
         () => {
             // 仅在配置已加载后才自动同步（避免初始化时触发）
             if (!isConfigLoaded.value) return
+            // 加载过程中不触发自动同步（避免覆盖云端数据）
+            if (isConfigLoading.value) return
             // 预览模式下不自动同步
             if (previewMode.value !== null) return
 
@@ -299,6 +520,28 @@ export const useConfigStore = defineStore('config', () => {
         console.log('Applying preview config is not fully implemented yet')
     }
 
+    // --- Team & Project Actions ---
+
+    function setTeams(newTeams: TeamItem[]) {
+        teams.value = newTeams
+    }
+
+    function updateTeam(index: number, updates: Partial<TeamItem>) {
+        if (teams.value[index]) {
+            Object.assign(teams.value[index], updates)
+        }
+    }
+
+    function setProjectGroups(groups: any[]) {
+        projectGroups.value = groups
+    }
+
+    function updateProjectGroup(index: number, updates: any) {
+        if (projectGroups.value[index]) {
+            Object.assign(projectGroups.value[index], updates)
+        }
+    }
+
     function addNavMainItem(groupIndex: number, item: Omit<NavMainItem, 'id'>): string | null {
         const group = navGroups.value[groupIndex]
         if (group) {
@@ -306,7 +549,7 @@ export const useConfigStore = defineStore('config', () => {
             group.items.push({
                 ...item,
                 id: newId,
-                icon: item.icon || IconSettings,
+                icon: item.icon || GalleryVerticalEnd,
                 items: []
             })
             // console.log('Action: addNavMainItem', { newId, navGroupsLen: navGroups.value.length })
@@ -628,8 +871,22 @@ export const useConfigStore = defineStore('config', () => {
             const navData = exportFullConfig()
             navData.pageConfigs = {}
 
+            // 诊断日志：检查导航配置中嵌入的页面配置
+            for (const group of navData.navGroups) {
+                for (const mainItem of (group as any).items || []) {
+                    for (const subItem of mainItem.items || []) {
+                        if (subItem.component?.filterArea?.filters) {
+                            console.log(`[DEBUG] Nav embedded config for ${subItem.id}:`, {
+                                filterCount: subItem.component.filterArea.filters.length,
+                                filterKeys: subItem.component.filterArea.filters.map((f: any) => f.key)
+                            })
+                        }
+                    }
+                }
+            }
+
             // 1. 保存导航配置
-            const { success: navSuccess, error: navError } = await supabaseConfigService.saveNavigation(navData.navGroups)
+            const { success: navSuccess, error: navError } = await saveNavigation(navData.navGroups)
 
             if (!navSuccess) {
                 console.error('保存导航配置失败:', navError)
@@ -639,11 +896,29 @@ export const useConfigStore = defineStore('config', () => {
             // 2. 保存每个页面配置
             for (const [navId, config] of Object.entries(page1Configs.value)) {
                 const { mockData, ...configData } = config
-                const { success: pageSuccess, error: pageError } = await supabaseConfigService.savePageConfig(navId, configData)
+
+                // 诊断日志：查看实际保存的filters数量
+                console.log(`[DEBUG] Saving page ${navId}:`, {
+                    filterCount: configData.filterArea?.filters?.length,
+                    filterKeys: configData.filterArea?.filters?.map((f: any) => f.key)
+                })
+
+                const { success: pageSuccess, error: pageError } = await savePageConfig(navId, configData)
 
                 if (!pageSuccess) {
                     console.error(`保存页面 ${navId} 失败:`, pageError)
                     errors.push(`页面 ${navId}: ${pageError}`)
+                } else {
+                    console.log(`[DEBUG] Page ${navId} saved successfully`)
+                }
+            }
+
+            // 3. 保存团队配置
+            if (teams.value.length > 0) {
+                const { success: teamSuccess, error: teamError } = await saveTeams(teams.value)
+                if (!teamSuccess) {
+                    console.error('保存团队配置失败:', teamError)
+                    errors.push(`团队: ${teamError}`)
                 }
             }
 
@@ -662,10 +937,12 @@ export const useConfigStore = defineStore('config', () => {
      * 保存配置到 Supabase (公开版本，显示 Toast 通知)
      */
     async function saveToSupabase(): Promise<{ success: boolean; message: string }> {
+        console.log('Action: saveToSupabase triggered')
         const result = await saveToSupabaseInternal()
         if (result.success) {
             toast.success('配置已保存到云端')
         } else {
+            console.error('Action: saveToSupabase failed', result.message)
             toast.error('保存失败', { description: result.message })
         }
         return result
@@ -689,13 +966,13 @@ export const useConfigStore = defineStore('config', () => {
 
 
             // ==========================================
-            // 优化：使用 supabaseConfigService 加载所有配置
+            // 使用内部方法加载所有配置
             // ==========================================
-            await supabaseConfigService.init()
+            await initSupabase()
 
             const [navResult, pagesResult] = await Promise.all([
-                supabaseConfigService.loadNavigation(),
-                supabaseConfigService.loadAllPageConfigs()
+                loadNavigation(),
+                loadAllPageConfigs()
             ])
 
             if (navResult.error) {
@@ -704,6 +981,12 @@ export const useConfigStore = defineStore('config', () => {
 
             if (pagesResult.error) {
                 console.error('Failed to load page configs:', pagesResult.error)
+            }
+
+            // 补充：加载团队配置
+            const teamsResult = await loadTeams()
+            if (teamsResult.error) {
+                console.error('Failed to load teams:', teamsResult.error)
             }
 
             // 先清除 localStorage，确保使用云端数据
@@ -722,18 +1005,29 @@ export const useConfigStore = defineStore('config', () => {
                 }
             }
 
-            // 2. 处理页面配置
+            // 2. 处理页面配置 - 独立页面配置优先级高于导航嵌入配置
             let hasPageConfig = false
             if (pagesResult.data && Object.keys(pagesResult.data).length > 0) {
                 hasPageConfig = true
                 for (const [navId, content] of Object.entries(pagesResult.data)) {
                     if (content) {
+                        // 诊断日志：对比加载前后的差异
+                        const oldConfig = page1Configs.value[navId]
+                        const oldFilterCount = (oldConfig as any)?.filterArea?.filters?.length ?? 'N/A'
+                        const newFilterCount = (content as any)?.filterArea?.filters?.length ?? 'N/A'
+                        console.log(`[DEBUG] Loading page config for ${navId}: ${oldFilterCount} filters (from nav) -> ${newFilterCount} filters (from cloud page config)`)
+
                         page1Configs.value[navId] = {
                             ...content,
                             mockData: mockDataFunctions.value[navId] || (() => [])
                         } as Page1Config
                     }
                 }
+            }
+
+            // 3. 处理团队配置
+            if (teamsResult.data && teamsResult.data.length > 0) {
+                teams.value = teamsResult.data
             }
 
             // 逻辑优化：只有在真正没有任何配置的情况下，才进行初始化并保存
@@ -786,8 +1080,15 @@ export const useConfigStore = defineStore('config', () => {
                 initNavigation(navGroups.value)
             }
 
+            // 设置配置已加载标志
             isConfigLoaded.value = true
+
+            // 使用延时确保所有加载期间的响应式更新都已稳定，防止触发不必要的自动保存
+            // nextTick 不够可靠，因为 watch 可能在多个微任务后才执行
+            await new Promise(resolve => setTimeout(resolve, 100))
             isConfigLoading.value = false
+
+            console.log('[DEBUG] loadFromSupabase complete, auto-save now enabled')
             return { success: true, message: '配置加载成功' }
         } catch (e) {
             console.error('Failed to load from Supabase:', e)
@@ -829,6 +1130,9 @@ export const useConfigStore = defineStore('config', () => {
         // 加载状态
         isConfigLoaded,
         isConfigLoading,
+        // State
+        teams,
+        projectGroups,
         // Getters
         isInPreviewMode,
         effectiveNavGroups,
@@ -838,6 +1142,12 @@ export const useConfigStore = defineStore('config', () => {
         setNavigationStyle,
         // Filter Actions
         setFilterActionFusion,
+        // Team Actions
+        setTeams,
+        updateTeam,
+        // Project Group Actions
+        setProjectGroups,
+        updateProjectGroup,
         // Preview Actions
         setPreviewConfig,
         clearPreviewConfig,
@@ -866,6 +1176,13 @@ export const useConfigStore = defineStore('config', () => {
         saveToSupabase,
         loadFromSupabase,
         importAndSyncToCloud,
+        // Supabase CRUD (供 authStore 等外部使用)
+        initSupabase,
+        saveTeams,
+        loadTeams,
+        saveAppSettings,
+        loadAppSettings,
+        loadPageConfig,
         // Auto-sync State
         isSyncing,
         lastSyncTime,

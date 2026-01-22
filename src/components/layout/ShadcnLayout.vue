@@ -93,7 +93,7 @@ import {
 import { useConfigStore } from '@/stores/configStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNavigation } from '@/composables/useNavigation'
-import { defaultSidebarConfig } from '@/config/schema'
+// import { defaultSidebarConfig } from '@/config/schema' // Removed
 import type { TeamItem, TeamPermissions } from '@/types'
 
 const configStore = useConfigStore()
@@ -101,7 +101,7 @@ const authStore = useAuthStore()
 const { breadcrumbs, currentSubNav, setNavigation, setDetailTitle } = useNavigation()
 
 // --- 状态与配置 ---
-const sidebarConfig = defaultSidebarConfig
+// const sidebarConfig = defaultSidebarConfig // Removed legacy config
 const TEAM_ICONS = [GalleryVerticalEnd, AudioWaveform, Command]
 const isLoggingOut = ref(false)
 const accountDialogOpen = ref(false)
@@ -125,10 +125,10 @@ const effectiveTeams = computed<TeamItem[]>(() => {
       }
     })
   }
-  return sidebarConfig.teams
+  return configStore.teams
 })
 
-const activeTeam = ref<TeamItem>(effectiveTeams.value[0])
+const activeTeam = ref(configStore.teams[0] || { name: 'AIGen', logo: 'icon', plan: 'free', permissions: {} }) // Default fallbackrticalEnd, AudioWaveform, Command]
 
 watch(effectiveTeams, (newTeams) => {
     if (newTeams.length > 0 && (!activeTeam.value || !newTeams.find(t => t.name === activeTeam.value?.name))) {
@@ -140,8 +140,22 @@ watch(effectiveTeams, (newTeams) => {
 const filteredNavGroups = computed(() => {
   const team = activeTeam.value
   const navGroups = configStore.effectiveNavGroups
-  if (!team || !team.permissions) return navGroups
-  const { navMain, navItems } = team.permissions
+  
+  // 如果没有导航组数据，直接返回空数组
+  if (!navGroups || navGroups.length === 0) return []
+  
+  // 如果没有团队配置，直接返回所有导航
+  if (!team) return navGroups
+  
+  // 检查 permissions 是否为有效的对象格式 (防止 Supabase 数据格式异常)
+  const permissions = team.permissions
+  if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) {
+    return navGroups
+  }
+  
+  const { navMain, navItems } = permissions
+  
+  // 如果是全部权限且没有细粒度控制，直接返回
   if (navMain === 'all' && !navItems) return navGroups
 
   return navGroups.map(group => {
@@ -167,12 +181,15 @@ const filteredNavGroups = computed(() => {
 
 const filteredProjectGroups = computed(() => {
     const team = activeTeam.value
-    if (!team || !team.permissions) return sidebarConfig.projectGroups
+    // 使用 optional chaining 并提供空数组作为后备
+    const currentProjectGroups = configStore.projectGroups || []
+    
+    if (!team || !team.permissions) return currentProjectGroups
     const { projects } = team.permissions
-    if (projects === 'all') return sidebarConfig.projectGroups
+    if (projects === 'all') return currentProjectGroups
 
-    return sidebarConfig.projectGroups.map(group => {
-        const filteredProjects = group.projects.filter(project => Array.isArray(projects) && projects.includes(project.id))
+    return currentProjectGroups.map(group => {
+        const filteredProjects = group.projects.filter((project: any) => Array.isArray(projects) && projects.includes(project.id))
         return { ...group, projects: filteredProjects }
     }).filter(group => group.projects.length > 0)
 })
@@ -203,9 +220,9 @@ const isInPreviewMode = computed(() => configStore.isInPreviewMode)
 const previewMode = computed(() => configStore.previewMode)
 
 // 用户信息
-const userDisplayName = computed(() => authStore.userDisplayName || sidebarConfig.user.name)
-const userEmail = computed(() => authStore.userEmail || sidebarConfig.user.email)
-const userAvatar = computed(() => authStore.userAvatar || sidebarConfig.user.avatar)
+const userDisplayName = computed(() => authStore.userDisplayName || 'User') // Fallback to 'User' since schema is removed
+const userEmail = computed(() => authStore.userEmail || 'user@example.com')
+const userAvatar = computed(() => authStore.userAvatar || '')
 const initials = computed(() => userDisplayName.value.slice(0, 2).toUpperCase())
 
 // --- 编辑模式逻辑 (从 ArcoLayout 移植) ---
@@ -445,18 +462,20 @@ const headerMenuList = computed({
               </DropdownMenuTrigger>
               <DropdownMenuContent class="w-[--reka-dropdown-menu-trigger-width] min-w-56 rounded-lg" align="start" side="right" :side-offset="4">
                 <DropdownMenuLabel class="text-xs text-muted-foreground">Teams</DropdownMenuLabel>
-                <DropdownMenuItem v-for="(team, index) in effectiveTeams" :key="team.name" class="gap-2 p-2" @click="activeTeam = team">
-                  <div class="flex size-6 items-center justify-center rounded-sm border">
-                    <component :is="team.logo" class="size-3.5 shrink-0" />
-                  </div>
-                  {{ team.name }}
-                  <DropdownMenuShortcut>⌘{{ index + 1 }}</DropdownMenuShortcut>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem class="gap-2 p-2">
-                  <div class="flex size-6 items-center justify-center rounded-md border bg-transparent"><Plus class="size-4" /></div>
-                  <div class="font-medium text-muted-foreground">Add team</div>
-                </DropdownMenuItem>
+                            <DropdownMenuItem v-for="team in configStore.teams" :key="team.name" @click="activeTeam = team" class="gap-2 p-2">
+                                <div class="flex size-6 items-center justify-center rounded-sm border">
+                                    <component :is="team.logo" class="size-4 shrink-0" />
+                                </div>
+                                {{ team.name }}
+                                <DropdownMenuShortcut>⌘{{ configStore.teams.indexOf(team) + 1 }}</DropdownMenuShortcut>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem class="gap-2 p-2" @click="handleNavClick('Account', 'Profile', 'profile')">
+                                <div class="flex size-6 items-center justify-center rounded-md border bg-background">
+                                    <Plus class="size-4" />
+                                </div>
+                                <div class="font-medium text-muted-foreground">Add team</div>
+                            </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarMenuItem>

@@ -2,7 +2,6 @@
 import { ref, onMounted, watch, reactive } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 import { 
-  Message, 
   Button as AButton, 
   Input as AInput, 
   Card as ACard, 
@@ -12,7 +11,6 @@ import {
   Space as ASpace, 
   Grid as AGrid,
   Alert as AAlert,
-  Typography as ATypography,
   Divider as ADivider,
   Tooltip as ATooltip,
   Scrollbar as AScrollbar,
@@ -45,7 +43,7 @@ const form = reactive({
   teams: [] as any[]
 })
 
-// Debounce timer
+
 // 防抖定时器
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -56,11 +54,13 @@ const getArray = (data: any) => {
     return []
 }
 
-// Initialize form data from store
+
 // 从 store 初始化表单数据
 const initForm = () => {
-  form.userName = authStore.customUserName || authStore.userDisplayName
-  form.teams = JSON.parse(JSON.stringify(getArray(authStore.teamsConfig)))
+  form.userName = authStore.userDisplayName
+  // 以前是从 authStore 取，现在应该从 configStore 取，或者两者同步
+  // 这里暂时保持从 configStore 初始化，因为我们要迁移到 configStore 管理团队
+  form.teams = JSON.parse(JSON.stringify(configStore.teams))
 }
 
 onMounted(() => {
@@ -69,7 +69,7 @@ onMounted(() => {
   }
 })
 
-// Auto-save function with debouncing
+
 // 带防抖的自动保存函数
 const autoSave = () => {
   if (saveTimer) {
@@ -81,17 +81,18 @@ const autoSave = () => {
 
     isSaving.value = true
     try {
-      const result = await authStore.updateUserProfile(
-        form.userName,
-        form.teams,
-        configStore.navigationStyle
-      )
-
-      if (result.success) {
-        // success feedback usually skipped for auto-save unless specific requirement
-      } else {
-         Message.error('保存失败: ' + (result.error || 'Unknown error'))
+      // 1. Update User Profile (Name)
+      if (form.userName !== authStore.userDisplayName) {
+        await authStore.updateUserProfile(form.userName, [], configStore.navigationStyle)
       }
+      
+      // 2. Update Teams (via ConfigStore -> Supabase)
+      configStore.setTeams(form.teams)
+      // Trigger save (debounced in store, but we can force or just let store handle it)
+      // The store watcher will pick up changes to `teams` and save automatically if configured
+      // But we might need to explicit save if deep watch isn't fully robust for nested objects without direct assignment
+      // configStore.teams = form.teams // This triggers the watch
+
     } catch (e) {
       console.error(e)
     } finally {
@@ -100,51 +101,46 @@ const autoSave = () => {
   }, 1000) // 1 秒防抖
 }
 
-// Watch for changes and auto-save
 // 监听变化并自动保存
 watch(() => form.teams, () => {
   autoSave()
 }, { deep: true })
 
-// Watch for store changes
+
 // 监听 store 变化
-watch(() => authStore.customUserName, (newVal) => {
-    if (newVal && !form.userName) {
-        form.userName = newVal
+watch(() => configStore.teams, (newVal) => {
+    if (newVal && newVal.length > 0 && JSON.stringify(newVal) !== JSON.stringify(form.teams)) {
+        form.teams = JSON.parse(JSON.stringify(newVal))
     }
-})
+}, { deep: true })
 
 watch(() => authStore.teamsConfig, (newVal) => {
-    // Only update if local form is empty or needs sync (be careful not to overwrite user edits)
-    // But for initial load sync it is important
+
     const newTeams = getArray(newVal)
     if (newTeams.length > 0 && form.teams.length === 0) {
         form.teams = JSON.parse(JSON.stringify(newTeams))
     }
 })
 
-// Team Management Actions
 // 团队管理操作
 const addTeam = () => {
   form.teams.push({
-    id: `team-${Date.now()}`,
     name: '新团队',
-    role: 'member',
-    permissions: ['read']
+    logo: IconUser, // Default logo
+    plan: 'free',
+    permissions: { navMain: [], projects: [] } 
   })
 }
 
-const removeTeam = (id: string) => {
-  const index = form.teams.findIndex(t => t.id === id)
+const removeTeam = (name: string) => {
+  const index = form.teams.findIndex(t => t.name === name)
   if (index !== -1) {
     form.teams.splice(index, 1)
   }
 }
 
-// Columns definition for table
 // 表格列定义
 const columns = [
-  { title: 'ID', dataIndex: 'id', slotName: 'id', width: 100 },
   { title: '团队名称', dataIndex: 'name', slotName: 'name' },
   { title: '角色 (Role)', dataIndex: 'role', slotName: 'role', width: 150 },
   { title: '权限 (Permissions)', dataIndex: 'permissions', slotName: 'permissions' },
@@ -226,31 +222,23 @@ const columns = [
               :bordered="{ wrapper: true, cell: false }"
               class="rounded-lg overflow-hidden border-none"
             >
-              <template #id="{ record }">
-                <ATypography.Text code class="text-[10px]">{{ record.id.replace('team-', '#') }}</ATypography.Text>
-              </template>
+
               <template #name="{ record }">
                 <AInput v-model="record.name" size="small" class="border-transparent hover:border-gray-300" />
               </template>
               <template #role="{ record }">
-                <ASelect v-model="record.role" size="small">
-                  <AOption value="admin">管理员 (Admin)</AOption>
-                  <AOption value="member">成员 (Member)</AOption>
-                  <AOption value="viewer">访客 (Viewer)</AOption>
+                <ASelect v-model="record.plan" size="small">
+                  <AOption value="online">在线 (Online)</AOption>
+                  <AOption value="enterprise">企业 (Enterprise)</AOption>
+                  <AOption value="free">免费 (Free)</AOption>
                 </ASelect>
               </template>
-              <template #permissions="{ record }">
-                <AInput 
-                  :model-value="record.permissions?.join(', ')" 
-                  @update:model-value="(val: string | number) => record.permissions = String(val).split(',').map((s: string) => s.trim()).filter(Boolean)" 
-                  size="small" 
-                  placeholder="如: admin, read, write"
-                  class="border-transparent hover:border-gray-300"
-                />
+              <template #permissions>
+                 <div class="text-xs text-gray-500">Todo: Permission Editor</div>
               </template>
               <template #actions="{ record }">
                 <ATooltip content="删除团队">
-                  <AButton type="text" status="danger" size="small" @click="removeTeam(record.id)">
+                  <AButton type="text" status="danger" size="small" @click="removeTeam(record.name)">
                     <template #icon><icon-delete /></template>
                   </AButton>
                 </ATooltip>

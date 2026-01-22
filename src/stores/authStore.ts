@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '@/api/supabase'
-import { supabaseConfigService } from '@/api/supabase-config.service'
+import { useConfigStore } from '@/stores/configStore'
 
 export const useAuthStore = defineStore('auth', () => {
     // State
@@ -53,10 +53,12 @@ export const useAuthStore = defineStore('auth', () => {
     // 配置现在由 configStore 的分类存储管理
     const fetchUserConfigs = async () => {
         try {
+            const configStore = useConfigStore()
+
             // 1. 并行获取团队配置和菜单配置
             const [teamsResult, appSettingsResult] = await Promise.all([
-                supabaseConfigService.loadTeams(),
-                supabaseConfigService.loadAppSettings()
+                configStore.loadTeams(),
+                configStore.loadAppSettings()
             ])
 
             const { data: teamsData, error: teamsError } = teamsResult
@@ -108,15 +110,17 @@ export const useAuthStore = defineStore('auth', () => {
         if (!user.value) return { success: false, error: 'Not authenticated' }
 
         try {
+            const configStore = useConfigStore()
+
             // 更新团队配置
-            const { error: teamsError } = await supabaseConfigService.saveTeams(teams)
+            const { error: teamsError } = await configStore.saveTeams(teams)
             if (teamsError) throw new Error(teamsError)
 
             // 更新菜单配置 (app_settings)
             // 如果传入了 menu，则保存；否则保存当前的 menuConfig
             const menuToSave = menu || menuConfig.value
             // 包装在 items 属性中以匹配预期结构
-            const { error: menuError } = await supabaseConfigService.saveAppSettings({ items: menuToSave })
+            const { error: menuError } = await configStore.saveAppSettings({ items: menuToSave })
             if (menuError) throw new Error(menuError)
 
 
@@ -168,7 +172,8 @@ export const useAuthStore = defineStore('auth', () => {
 
                 // Fetch user configs if logged in
                 if (user.value) {
-                    await supabaseConfigService.init()
+                    const configStore = useConfigStore()
+                    await configStore.initSupabase()
                     // Refactor: We moved fetchUserConfigs to App.vue for parallel executio
                     // await fetchUserConfigs()
                 }
@@ -186,7 +191,8 @@ export const useAuthStore = defineStore('auth', () => {
                     user.value = newSession?.user ?? null
 
                     if (event === 'SIGNED_IN' && user.value) {
-                        await supabaseConfigService.init()
+                        const configStore = useConfigStore()
+                        await configStore.initSupabase()
                         await fetchUserConfigs()
                     } else if (event === 'SIGNED_OUT') {
                         error.value = null

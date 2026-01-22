@@ -12,10 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { FilterInput, FilterSelect, FilterDateRange, FilterTreeSelect, FilterCard, ArcoTable } from '@/components/ui/filter'
-import ConfigFilterForm from '@/components/config/ConfigFilterForm.vue'
-import ConfigColumnForm from '@/components/config/ConfigColumnForm.vue'
-import ConfigActionForm from '@/components/config/ConfigActionForm.vue'
-import ConfigCardForm from '@/components/config/ConfigCardForm.vue'
+import ConfigForm from '@/views/ConfigForm.vue'
 import { useNavigation } from '@/composables/useNavigation'
 import { useConfigStore, type Page1Config, type FilterConfig, type TableColumn, type ActionButtonConfig , type CardItemConfig } from '@/stores/configStore'
 import { useConfigCrud } from '@/composables/useConfigCrud'
@@ -141,10 +138,20 @@ const filterCrud = useConfigCrud({
     } else {
       config.filterArea.filters.push(newFilter)
     }
+    configStore.saveToSupabase()
   },
   doDelete: (index) => {
-    const config = configStore.page1Configs[currentNavId.value]
-    config?.filterArea.filters.splice(index, 1)
+    const navId = currentNavId.value
+    console.log('[DEBUG] filterCrud.doDelete:', { navId, index, configExists: !!configStore.page1Configs[navId] })
+    const config = configStore.page1Configs[navId]
+    if (!config) {
+      console.error('[DEBUG] doDelete: Config not found for navId:', navId)
+      return
+    }
+    console.log('[DEBUG] Before delete, filters count:', config.filterArea.filters.length)
+    config.filterArea.filters.splice(index, 1)
+    console.log('[DEBUG] After delete, filters count:', config.filterArea.filters.length)
+    configStore.saveToSupabase()
   }
 })
 
@@ -178,10 +185,12 @@ const columnCrud = useConfigCrud({
     } else {
       config.tableArea.columns.push(newColumn)
     }
+    configStore.saveToSupabase()
   },
   doDelete: (index) => {
     const config = configStore.page1Configs[currentNavId.value]
     config?.tableArea.columns.splice(index, 1)
+    configStore.saveToSupabase()
   }
 })
 
@@ -214,10 +223,12 @@ const actionCrud = useConfigCrud({
       config.actionsArea.buttons.push(newAction)
     }
     config.actionsArea.show = true
+    configStore.saveToSupabase()
   },
   doDelete: (index) => {
     const config = configStore.page1Configs[currentNavId.value]
     config?.actionsArea?.buttons?.splice(index, 1)
+    configStore.saveToSupabase()
   }
 })
 
@@ -240,10 +251,12 @@ const cardCrud = useConfigCrud({
     } else {
       config.cardArea.cards.push(newCard)
     }
+    configStore.saveToSupabase()
   },
   doDelete: (index) => {
     const config = configStore.page1Configs[currentNavId.value]
     config?.cardArea?.cards?.splice(index, 1)
+    configStore.saveToSupabase()
   }
 })
 
@@ -355,6 +368,7 @@ function saveAreaConfig() {
   }
   
   areaConfigDialogOpen.value = false
+  configStore.saveToSupabase()
   Message.success('配置已更新')
 }
 
@@ -393,7 +407,7 @@ function handleDrop(type: 'filter' | 'action' | 'column', targetIndex: number) {
   
   dragIndex.value = -1
   dragOverIndex.value = -1
-}
+  configStore.saveToSupabase()}
 
 function handleDragEnd() {
   dragIndex.value = -1
@@ -1068,22 +1082,22 @@ const handleEffectModalOk = () => {
     >
       <!-- 筛选项编辑表单 -->
       <div v-if="editDialogType === 'filter'" class="space-y-4">
-        <ConfigFilterForm v-model="filterEditForm" />
+        <ConfigForm type="filter" v-model="filterEditForm" />
       </div>
 
       <!-- 列编辑表单 -->
       <div v-else-if="editDialogType === 'column'" class="space-y-4">
-        <ConfigColumnForm v-model="columnEditForm" />
+        <ConfigForm type="column" v-model="columnEditForm" />
       </div>
 
       <!-- 操作按钮编辑表单 -->
       <div v-else-if="editDialogType === 'action'" class="space-y-4">
-        <ConfigActionForm v-model="actionEditForm" />
+        <ConfigForm type="action" v-model="actionEditForm" />
       </div>
 
       <!-- 卡片编辑表单 -->
       <div v-else-if="editDialogType === 'card'" class="space-y-4">
-        <ConfigCardForm v-model="cardEditForm" />
+        <ConfigForm type="card" v-model="cardEditForm" />
       </div>
     </AModal>
 
