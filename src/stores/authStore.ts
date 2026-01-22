@@ -2,21 +2,18 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '@/api/supabase'
-import { useConfigStore } from '@/stores/configStore'
+// import { useConfigStore } from '@/stores/configStore'
 import { useConfigTeamStore } from '@/stores/config_team_Store'
 import { useConfigMenuStore } from '@/stores/config_menu_Store'
 import { useConfigPageStore } from '@/stores/config_page_Store'
 
 export const useAuthStore = defineStore('auth', () => {
-    // State
+    // 状态
     const user = ref<User | null>(null)
     const session = ref<Session | null>(null)
     const isLoading = ref(true)
     const error = ref<string | null>(null)
 
-    // Custom user config state
-    // 注意: user_name 和 style 字段已从 user_configs 表移除
-    // user_name 改用 Users 表的 display_name
     // style 默认使用 'arco'
     const customUserName = ref('')
     const teamsConfig = ref<any>(null)
@@ -25,7 +22,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     let authSubscription: { unsubscribe: () => void } | null = null
 
-    // Getters
+    // 计算属性 (Getters)
     const isAuthenticated = computed(() => !!user.value)
 
     const userDisplayName = computed(() => {
@@ -51,9 +48,7 @@ export const useAuthStore = defineStore('auth', () => {
         { type: 'dropdown', label: '语言', options: ['中文', 'English'] }
     ]
 
-    // Helper to fetch user configs
-    // 注意: user_name, style, menu_config 字段已从 user_configs 表移除
-    // 配置现在由 configStore 的分类存储管理
+    // 获取用户配置的辅助函数
     const fetchUserConfigs = async () => {
         try {
             const teamStore = useConfigTeamStore()
@@ -72,7 +67,7 @@ export const useAuthStore = defineStore('auth', () => {
             const { success: pageSuccess, message: pageError } = pageResult
 
             if (!teamsSuccess) {
-                console.error('Error fetching teams config:', teamsError)
+                console.error('获取团队配置失败:', teamsError)
             }
 
             if (teamStore.teams.length > 0) {
@@ -89,11 +84,11 @@ export const useAuthStore = defineStore('auth', () => {
             }
 
             if (!menuSuccess) {
-                console.error('Error fetching app settings:', menuError)
+                console.error('获取应用设置失败:', menuError)
             }
 
             if (!pageSuccess) {
-                console.error('Error fetching page configs:', pageError)
+                console.error('获取页面配置失败:', pageError)
             }
 
             if (menuStore.menuConfig && menuStore.menuConfig.items) {
@@ -102,23 +97,17 @@ export const useAuthStore = defineStore('auth', () => {
                 // 使用默认菜单配置
                 menuConfig.value = JSON.parse(JSON.stringify(DEFAULT_MENU_CONFIG))
             }
-
-            // 注意: display_name 通过 userDisplayName computed 从 user_metadata 获取
         } catch (e) {
-            console.error('Failed to fetch user configs:', e)
+            console.error('获取用户配置失败:', e)
         }
     }
 
-    // Actions
-    // ... (rest of actions unchanged until update)
 
     /**
-     * Update user profile configuration
-     * 注意: user_name, style 已从 user_configs 移除
-     * 使用 supabaseConfigService 的分类存储
+     * 更新用户个人资料配置
      */
     const updateUserProfile = async (name: string, teams: any, style?: 'shadcn' | 'arco', menu?: any[]) => {
-        if (!user.value) return { success: false, error: 'Not authenticated' }
+        if (!user.value) return { success: false, error: '未登录' }
 
         try {
             const teamStore = useConfigTeamStore()
@@ -128,8 +117,6 @@ export const useAuthStore = defineStore('auth', () => {
             const { success: teamsSuccess, message: teamsError } = await teamStore.saveTeams()
             if (!teamsSuccess) throw new Error(teamsError)
 
-            // 更新菜单配置 (app_settings)
-            // 如果传入了 menu，则保存；否则保存当前的 menuConfig
             const menuToSave = menu || menuConfig.value
             const { success: menuSuccess, message: menuError } = await menuStore.updateMenu({ items: menuToSave })
             if (!menuSuccess) throw new Error(menuError)
@@ -144,13 +131,13 @@ export const useAuthStore = defineStore('auth', () => {
 
             return { success: true }
         } catch (err: any) {
-            console.error('Error updating profile:', err)
+            console.error('更新个人资料失败:', err)
             return { success: false, error: err.message }
         }
     }
 
     /**
-     * Update only menu configuration
+     * 仅更新菜单配置
      */
     const updateMenuConfig = async (menu: any[]) => {
         return updateUserProfile(
@@ -164,46 +151,40 @@ export const useAuthStore = defineStore('auth', () => {
     // Actions
 
     /**
-     * Initialize auth state and set up listener
+     * 初始化认证状态并设置监听器
      */
     const initialize = async () => {
         isLoading.value = true
         error.value = null
 
         try {
-            // Get current session
+            // 获取当前会话
             const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
 
             if (sessionError) {
-                console.error('Error getting session:', sessionError)
+                console.error('获取会话失败:', sessionError)
                 error.value = sessionError.message
             } else {
                 session.value = currentSession
                 user.value = currentSession?.user ?? null
 
-                // Fetch user configs if logged in
+                // 如果已登录，获取用户配置
                 if (user.value) {
-                    const configStore = useConfigStore()
-                    await configStore.initSupabase()
-                    // Refactor: We moved fetchUserConfigs to App.vue for parallel executio
-                    // await fetchUserConfigs()
                 }
             }
 
-            // Set up auth state change listener
+            // 设置认证状态变更监听器
             if (authSubscription) {
                 authSubscription.unsubscribe()
             }
 
             const { data: { subscription } } = supabase.auth.onAuthStateChange(
                 async (event: AuthChangeEvent, newSession: Session | null) => {
-                    console.log('Auth state changed:', event)
+                    console.log('认证状态变更:', event)
                     session.value = newSession
                     user.value = newSession?.user ?? null
 
                     if (event === 'SIGNED_IN' && user.value) {
-                        const configStore = useConfigStore()
-                        await configStore.initSupabase()
                         await fetchUserConfigs()
                     } else if (event === 'SIGNED_OUT') {
                         error.value = null
@@ -215,15 +196,15 @@ export const useAuthStore = defineStore('auth', () => {
             authSubscription = subscription
 
         } catch (err: any) {
-            console.error('Error initializing auth:', err)
-            error.value = err.message || 'Failed to initialize authentication'
+            console.error('初始化认证失败:', err)
+            error.value = err.message || '初始化认证失败'
         } finally {
             isLoading.value = false
         }
     }
 
     /**
-     * Sign in with email and password
+     * 使用邮箱和密码登录
      */
     const signInWithPassword = async (email: string, password: string) => {
         isLoading.value = true
@@ -242,7 +223,7 @@ export const useAuthStore = defineStore('auth', () => {
 
             return { success: true, data }
         } catch (err: any) {
-            error.value = err.message || 'Sign in failed'
+            error.value = err.message || '登录失败'
             return { success: false, error: error.value }
         } finally {
             isLoading.value = false
@@ -250,7 +231,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     /**
-     * Sign up with email and password
+     * 使用邮箱和密码注册
      */
     const signUp = async (email: string, password: string, metadata?: { full_name?: string }) => {
         isLoading.value = true
@@ -280,7 +261,7 @@ export const useAuthStore = defineStore('auth', () => {
 
             return { success: true, data }
         } catch (err: any) {
-            error.value = err.message || 'Sign up failed'
+            error.value = err.message || '注册失败'
             return { success: false, error: error.value }
         } finally {
             isLoading.value = false
@@ -288,7 +269,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     /**
-     * Sign out the current user
+     * 退出登录
      */
     const signOut = async () => {
         isLoading.value = true
@@ -306,7 +287,7 @@ export const useAuthStore = defineStore('auth', () => {
             session.value = null
             return { success: true }
         } catch (err: any) {
-            error.value = err.message || 'Sign out failed'
+            error.value = err.message || '退出失败'
             return { success: false, error: error.value }
         } finally {
             isLoading.value = false
@@ -314,7 +295,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     /**
-     * Reset password - sends reset email
+     * 重置密码 - 发送重置邮件
      */
     const resetPassword = async (email: string) => {
         isLoading.value = true
@@ -332,7 +313,7 @@ export const useAuthStore = defineStore('auth', () => {
 
             return { success: true, message: '密码重置邮件已发送，请检查您的邮箱。' }
         } catch (err: any) {
-            error.value = err.message || 'Password reset failed'
+            error.value = err.message || '密码重置失败'
             return { success: false, error: error.value }
         } finally {
             isLoading.value = false
@@ -340,7 +321,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     /**
-     * Cleanup subscriptions
+     * 清理订阅
      */
     const cleanup = () => {
         if (authSubscription) {
@@ -376,4 +357,3 @@ export const useAuthStore = defineStore('auth', () => {
         cleanup
     }
 })
-

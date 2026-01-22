@@ -58,7 +58,7 @@ onMounted(async () => {
     
     await Promise.all([
         authStore.fetchUserConfigs(),
-        configStore.loadFromSupabase()
+        // configStore.loadFromSupabase() // Removed: handled by authStore.fetchUserConfigs
     ])
     
     console.log(`App: Parallel bootstrap finished in ${(performance.now() - startTime).toFixed(2)}ms`)
@@ -100,7 +100,7 @@ onUnmounted(() => {
 // 监听认证状态变化，登录后加载配置
 watch(() => authStore.isAuthenticated, async (isAuth) => {
   if (isAuth) {
-    await configStore.loadFromSupabase()
+    // await configStore.loadFromSupabase() // Removed: handled by authStore.fetchUserConfigs
     
     // For test accounts, always force Arco style
     if (authStore.userEmail.toLowerCase().includes('test')) {
@@ -126,7 +126,7 @@ useNetworkStatus()
 
 <template>
   <!-- Loading state: show skeleton while auth or config is loading -->
-  <SkeletonLoading v-if="authStore.isLoading || configStore.isConfigLoading" />
+  <SkeletonLoading v-if="authStore.isLoading" />
 
   <!-- Not authenticated: show login page -->
   <AuthPage v-else-if="!authStore.isAuthenticated" />

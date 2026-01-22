@@ -14,7 +14,8 @@ import {
 import { FilterInput, FilterSelect, FilterDateRange, FilterTreeSelect, FilterCard, ArcoTable } from '@/components/ui/filter'
 import ConfigForm from '@/views/ConfigForm.vue'
 import { useNavigation } from '@/composables/useNavigation'
-import { useConfigStore, type Page1Config, type FilterConfig, type TableColumn, type ActionButtonConfig , type CardItemConfig } from '@/stores/configStore'
+import { useConfigStore } from '@/stores/configStore'
+import type { Page1Config, FilterConfig, TableColumn, ActionButtonConfig, CardItemConfig } from '@/types'
 import { useConfigPageStore } from '@/stores/config_page_Store'
 import { useConfigCrud } from '@/composables/useConfigCrud'
 

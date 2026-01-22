@@ -2,19 +2,19 @@ import { ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 
 interface ConfigCrudOptions<T> {
-    // Returns the default 'empty' form state for adding a new item
+    // 返回用于添加新项的默认'空'表单状态
     defaultForm: () => T
 
-    // Callback to perform the actual save (update store)
-    // modifying: true if editing an existing item, false if adding new
-    // index: index of the item being edited (or null if adding)
-    // form: the current form data
+    // 执行实际保存的回调函数 (更新 store)
+    // modifying: 如果正在编辑现有项则为 true，如果添加新项则为 false
+    // index: 正在编辑的项的索引 (如果是添加则为 null)
+    // form: 当前表单数据
     doSave: (modifying: boolean, index: number | null, form: T) => void
 
-    // Callback to perform delete (update store)
+    // 执行删除的回调函数 (更新 store)
     doDelete?: (index: number) => void
 
-    // Optional translation for success messages
+    // 成功消息的可选翻译名称
     name?: string
 }
 
@@ -23,25 +23,25 @@ export function useConfigCrud<T extends Record<string, any>>(options: ConfigCrud
     const editingIndex = ref<number | null>(null)
     const mode = ref<'add' | 'edit'>('add')
 
-    // Reactive form data
+    // 响应式表单数据
     const formData = ref<T>(options.defaultForm())
 
     /**
-     * Open the dialog in 'Add' mode
+     * 以'添加'模式打开弹窗
      */
     const openAdd = () => {
         mode.value = 'add'
         editingIndex.value = null
-        // Reset form to default
+        // 重置表单为默认值
         formData.value = options.defaultForm()
         dialogVisible.value = true
     }
 
     /**
-     * Open the dialog in 'Edit' mode
-     * @param index Index of the item in the list
-     * @param item Current item data (will be copied to form)
-     * @param transform Optional function to transform item data before setting it to form (e.g. formatting arrays to strings)
+     * 以'编辑'模式打开弹窗
+     * @param index 列表中的项索引
+     * @param item 当前项数据 (将被复制到表单)
+     * @param transform 可选函数，用于在设置到表单前转换项数据 (例如将数组格式化为字符串)
      */
     const openEdit = (index: number, item: any, transform?: (item: any) => T) => {
         mode.value = 'edit'
@@ -50,7 +50,7 @@ export function useConfigCrud<T extends Record<string, any>>(options: ConfigCrud
         if (transform) {
             formData.value = transform(item)
         } else {
-            // Deep copy to break reference
+            // 深拷贝以断开引用
             formData.value = JSON.parse(JSON.stringify(item))
         }
 
@@ -58,7 +58,7 @@ export function useConfigCrud<T extends Record<string, any>>(options: ConfigCrud
     }
 
     /**
-     * Handle the save action
+     * 处理保存操作
      */
     const handleSave = () => {
         // 先缓存当前模式，防止关闭弹窗后 mode 被重置
@@ -72,9 +72,9 @@ export function useConfigCrud<T extends Record<string, any>>(options: ConfigCrud
     }
 
     /**
-     * Handle delete action with confirmation
-     * @param index Index of the item to delete
-     * @param confirmMessage Custom confirmation message
+     * 处理带确认的删除操作
+     * @param index 要删除的项的索引
+     * @param confirmMessage 自定义确认消息
      */
     const handleDelete = (index: number, _confirmMessage?: string) => {
         if (options.doDelete) {
@@ -84,7 +84,7 @@ export function useConfigCrud<T extends Record<string, any>>(options: ConfigCrud
     }
 
     /**
-     * Close the dialog manually
+     * 手动关闭弹窗
      */
     const closeDialog = () => {
         dialogVisible.value = false

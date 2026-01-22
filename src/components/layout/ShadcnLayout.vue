@@ -77,7 +77,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { AIChatButton, AIChatWindow } from '@/components/ai'
+import AIChatAssistant from '@/views/AIChatAssistant.vue'
 import { Message } from '@arco-design/web-vue'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -299,14 +299,14 @@ const handleEditSubmit = () => {
     editDialogVisible.value = false
 }
 
-const handleDeleteMain = (groupIdx: number, itemId: string) => {
+const handleDeleteMain = (_groupIdx: number, itemId: string) => {
     // 简单确认，因为 Popconfirm 不在 shadcn 默认组件中，或者需要额外引入
     if(!confirm('确定删除此一级导航及所有子项吗?')) return
     pageStore.deleteNavMainItem(itemId)
     Message.success('删除成功')
 }
 
-const handleDeleteSub = (groupIdx: number, mainItemId: string, subItemId: string) => {
+const handleDeleteSub = (_groupIdx: number, mainItemId: string, subItemId: string) => {
     if(!confirm('确定删除此子项吗?')) return
     pageStore.deleteSubPage(mainItemId, subItemId)
     Message.success('删除成功')
@@ -743,8 +743,7 @@ const headerMenuList = computed({
     </SidebarInset>
     
     <!-- AI 悬浮组件 -->
-    <AIChatButton />
-    <AIChatWindow />
+    <AIChatAssistant />
 
     <!-- 账户信息弹窗 -->
     <Dialog v-model:open="accountDialogOpen">

@@ -2,8 +2,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
 
 /**
- * Network status composable
- * Monitors online/offline status and shows toast notifications
+ * 网络状态 Composable
+ * 监控在线/离线状态并显示 Toast 通知
  */
 export function useNetworkStatus() {
     const isOnline = ref(navigator.onLine)

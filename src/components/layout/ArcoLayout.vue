@@ -50,7 +50,8 @@ import {
     Trash2,
     GripVertical
 } from 'lucide-vue-next'
-import { useConfigStore, type NavMainItem, type NavSubItem } from '@/stores/configStore'
+import { useConfigStore } from '@/stores/configStore'
+import { type NavMainItem, type NavSubItem } from '@/types'
 import { useConfigPageStore } from '@/stores/config_page_Store'
 import { useConfigTeamStore } from '@/stores/config_team_Store'
 import { useConfigMenuStore } from '@/stores/config_menu_Store'
@@ -58,7 +59,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useNavigation } from '@/composables/useNavigation'
 // import { defaultSidebarConfig } from '@/config/schema' // Removed
 import type { TeamItem } from '@/types'
-import { AIChatButton, AIChatWindow } from '@/components/ai'
+import AIChatAssistant from '@/views/AIChatAssistant.vue'
 import draggable from 'vuedraggable'
 import { Modal as AModal, Input as AInput, Form as AForm, FormItem as AFormItem, Message, Popconfirm as APopconfirm } from '@arco-design/web-vue'
 
@@ -238,7 +239,7 @@ const editForm = reactive({
 // 编辑模式函数直接使用 groupIdx，不需要 getGroupIndex
 
 const openAddMainDialog = (groupIdx: number) => {
-    if (groupIdx < 0 || groupIdx >= configStore.navGroups.length) {
+    if (groupIdx < 0 || groupIdx >= pageStore.navGroups.length) {
         Message.error('无法找到对应的导航组')
         return
     }
@@ -322,13 +323,13 @@ const handleEditSubmit = () => {
     editDialogVisible.value = false
 }
 
-const handleDeleteMain = (groupIdx: number, itemId: string) => {
+const handleDeleteMain = (_groupIdx: number, itemId: string) => {
     // 忽略 groupIdx
     pageStore.deleteNavMainItem(itemId)
     Message.success('删除成功')
 }
 
-const handleDeleteSub = (groupIdx: number, mainItemId: string, subItemId: string) => {
+const handleDeleteSub = (_groupIdx: number, mainItemId: string, subItemId: string) => {
     // 忽略 groupIdx
     pageStore.deleteSubPage(mainItemId, subItemId)
     Message.success('删除成功')
@@ -738,8 +739,7 @@ const headerMenuList = computed({
     </a-layout>
 
     <!-- AI 悬浮组件 -->
-    <AIChatButton />
-    <AIChatWindow />
+    <AIChatAssistant />
 
     <!-- 编辑/添加导航弹窗 -->
     <a-modal v-model:visible="editDialogVisible" :title="editDialogTitle" @ok="handleEditSubmit">
