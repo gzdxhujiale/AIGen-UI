@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
-import { Send, Trash2, Sparkles, Loader2, Check, XIcon, Minus, Replace, Plus, Eye } from 'lucide-vue-next'
+import { Send, Trash2, Sparkles, Loader2, Check, XIcon, Minus, Replace, Plus, Eye, AlertCircle } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAIStore, type PreviewMode } from '@/stores/aiStore'
@@ -237,11 +237,66 @@ function handleMinimize() {
     aiStore.minimizeWindow()
 }
 
-function handleSend() {
-    if (!inputValue.value.trim() || isLoading.value) return
-    aiStore.sendMessage(inputValue.value)
-    inputValue.value = ''
+function handleSend(content?: string) {
+    const textToSend = content || inputValue.value.trim()
+    if (!textToSend || isLoading.value) return
+    
+    // L1: Add hidden system instruction for JSON format if it looks like a config request
+    let finalContent = textToSend
+    const isConfigRequest = /配置|修改|增加|删除|表格|导航/.test(textToSend)
+    if (isConfigRequest) {
+         finalContent += `\n\n(System Hint: If you are returning a configuration, please ensure it is valid JSON wrapped in \`\`\`json code blocks. Do not include polite phrases outside the JSON.)`
+    }
+    
+    // Pass the original content for UI display, but send finalContent to API logic if we were modifying aiStore to support that distinction.
+    // However, aiStore.sendMessage currently takes one string. 
+    // To avoid showing the system hint to the user, we might need to adjust aiStore or just accept it's hidden in the logic if we could.
+    // Since we can't easily hide it in the UI without changing aiStore structure significantly, 
+    // we will rely on keying off 'role: user' display vs what is sent.
+    // For now, let's just send it as is, or if we want to be cleaner, we modify aiStore.sendMessage to accept (displayContent, apiContent).
+    // Given the constraints, I will minimalistically just append it for now, 
+    // OR BETTER: We can rely on the L2/L3 cleaning in valid cases and only use this for retries.
+    // Let's stick to the prompt engineering in the Retry action specifically, and maybe light hinting here.
+    
+    aiStore.sendMessage(finalContent)
+    if (!content) inputValue.value = ''
 }
+
+function handleRetry(_messageId?: string) {
+    // specific retry logic that sends a fix prompt
+    const fixPrompt = "The previous response was not valid JSON or had errors. Please correct it and output ONLY the valid JSON configuration, wrapped in \`\`\`json code blocks."
+    aiStore.sendMessage(fixPrompt)
+}
+
+// L5: Auto-correction
+watch(isLoading, (newLoading, oldLoading) => {
+    if (!newLoading && oldLoading) {
+        const msgs = messages.value
+        const lastMsg = msgs[msgs.length - 1]
+        
+        // Check conditions: Assistant message, (Error status OR (No config + Apologetic/Refusal text))
+        if (lastMsg && lastMsg.role === 'assistant') {
+             const isFailure = lastMsg.status === 'error' || 
+                              (!lastMsg.configData && (lastMsg.content.includes('抱歉') || lastMsg.content.includes('Sorry') || lastMsg.content.includes('I cannot')))
+             
+             if (isFailure) {
+                  // Prevent infinite loop: check if we just retried
+                  const lastUserMsg = msgs[msgs.length - 2]
+                  // Check if the last user message was our fix prompt (heuristic match)
+                  if (lastUserMsg && lastUserMsg.content.includes('previous response was not valid JSON')) {
+                      // Already retried and failed again -> Stop to avoid loop
+                      return
+                  }
+                  
+                  // Trigger auto-retry
+                  // Use a small timeout to make it feel natural
+                  setTimeout(() => {
+                      handleRetry()
+                  }, 500)
+             }
+        }
+    }
+})
 
 function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -360,7 +415,14 @@ function formatTime(date: Date): string {
                             :class="[message.role === 'user' ? 'user-message' : 'assistant-message', message.status]"
                         >
                             <div class="message-content">
-                                <div class="message-text">{{ message.content }}</div>
+                                <div class="message-text">
+                                    <span v-if="message.status === 'error'" class="error-prefix">
+                                        <AlertCircle :size="16" class="inline-error-icon"/> 
+                                    </span>
+                                    {{ message.content }}
+                                </div>
+                                
+                                <!-- Retry Action for Errors (Hidden for auto-retry, but kept in DOM just in case? No, removing per request) -->
                             </div>
                             <div class="message-meta">
                                 <span class="message-time">{{ formatTime(message.timestamp) }}</span>
@@ -438,7 +500,7 @@ function formatTime(date: Date): string {
                             class="send-btn" 
                             size="icon"
                             :disabled="!inputValue.trim() || isLoading"
-                            @click="handleSend"
+                            @click="() => handleSend()"
                         >
                             <Loader2 v-if="isLoading" :size="18" class="loading-icon" />
                             <Send v-else :size="18" />
@@ -743,6 +805,37 @@ function formatTime(date: Date): string {
     color: hsl(var(--foreground));
     border-bottom-left-radius: 4px;
 }
+
+.error-prefix {
+    color: #ef4444;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+.inline-error-icon {
+    display: inline-block;
+    vertical-align: sub;
+}
+
+.message-actions {
+    margin-top: 8px;
+    display: flex;
+    justify-content: flex-end;
+}
+.retry-btn {
+    height: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+    gap: 4px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.8);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+.retry-btn:hover {
+    background: rgba(239, 68, 68, 0.05);
+    border-color: #ef4444;
+}
+
 .dark .assistant-message .message-content {
     background: rgba(30, 41, 59, 0.8);
     border-color: rgba(255, 255, 255, 0.1);

@@ -1,3 +1,5 @@
+import { jsonrepair } from 'jsonrepair'
+
 /**
  * Coze API Client
  * 
@@ -157,58 +159,63 @@ export async function streamChat(
 }
 
 /**
- * Extract config_json from message content
- * Detects config in the following formats:
- * 1. JSON code blocks marked with ```json ... ```
- * 2. JSON objects containing config-related keys
+ * 从消息内容中提取 config_json
+ * 检测以下格式的配置：
+ * 1. 标记为 ```json ... ``` 的 JSON 代码块
+ * 2. 包含配置相关键的 JSON 对象
  * 
- * Config indicators:
- * - navGroups / pageConfigs / version (full export format)
- * - filterArea / tableArea / cardArea / actionsArea (page config)
- * - filters / columns / buttons (partial config updates)
+ * 配置标识符：
+ * - navGroups / pageConfigs / version (完整导出格式)
+ * - filterArea / tableArea / cardArea / actionsArea (页面配置)
+ * - filters / columns / buttons (部分配置更新)
  */
 function extractConfigJson(content: string): any {
-    // Config indicator keys - presence of any of these suggests a config object
+    // 配置标识符键 - 出现任何这些键都暗示这是一个配置对象
     const configIndicators = [
-        'navGroups', 'pageConfigs', 'version',  // Full config
-        'filterArea', 'tableArea', 'cardArea', 'actionsArea',  // Page sections
-        'filters', 'columns', 'buttons', 'cards',  // Section contents
-        'navId', 'template', 'subItems'  // Navigation
+        'navGroups', 'pageConfigs', 'version',  // 完整配置
+        'filterArea', 'tableArea', 'cardArea', 'actionsArea',  // 页面部分
+        'filters', 'columns', 'buttons', 'cards',  // 内容部分
+        'navId', 'template', 'subItems',  // 导航
+        'mockFormat', 'mockList', 'conditionRules' // 特定 mock 标识
     ]
 
-    // Try to find JSON code blocks first (most reliable)
+    // 验证对象是否像配置的辅助函数
+    const isValidConfig = (parsed: any): boolean => {
+        if (typeof parsed !== 'object' || parsed === null) return false
+
+        // 转换为字符串以递归检查键（简单检查）
+        const jsonStr = JSON.stringify(parsed)
+        return configIndicators.some(key => key in parsed || jsonStr.includes(`"${key}"`))
+    }
+
+    // 辅助函数：尝试修复并解析 JSON
+    const tryParse = (str: string): any | null => {
+        try {
+            // 简单预处理：移除 markdown 标记
+            const cleaned = str.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '')
+            // 使用 jsonrepair 修复
+            const repaired = jsonrepair(cleaned)
+            return JSON.parse(repaired)
+        } catch {
+            return null
+        }
+    }
+
+    // 1. 首先尝试查找 JSON 代码块（最可靠）
     const jsonBlockMatch = content.match(/```json\s*([\s\S]*?)```/i)
     if (jsonBlockMatch) {
-        try {
-            const parsed = JSON.parse(jsonBlockMatch[1].trim())
-            // Check if it looks like a config object
-            if (typeof parsed === 'object' && parsed !== null) {
-                const hasConfigKey = configIndicators.some(key =>
-                    key in parsed || JSON.stringify(parsed).includes(`"${key}"`)
-                )
-                if (hasConfigKey) {
-                    return parsed
-                }
-            }
-        } catch {
-            // Invalid JSON in code block
-        }
+        const parsed = tryParse(jsonBlockMatch[1])
+        if (parsed && isValidConfig(parsed)) return parsed
     }
 
-    // Try to find any JSON code block (less strict)
+    // 2. 尝试查找任何 JSON 代码块（较不严格）
     const anyJsonBlock = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i)
     if (anyJsonBlock) {
-        try {
-            const parsed = JSON.parse(anyJsonBlock[1].trim())
-            if (typeof parsed === 'object' && parsed !== null) {
-                return parsed
-            }
-        } catch {
-            // Invalid JSON
-        }
+        const parsed = tryParse(anyJsonBlock[1])
+        if (parsed && isValidConfig(parsed)) return parsed
     }
 
-    // Try to find raw JSON object that looks like config
+    // 3. 尝试查找看起来像配置的原始 JSON 对象
     const configPatterns = [
         /\{[\s\S]*"navGroups"[\s\S]*\}/,
         /\{[\s\S]*"pageConfigs"[\s\S]*\}/,
@@ -221,27 +228,30 @@ function extractConfigJson(content: string): any {
     for (const pattern of configPatterns) {
         const match = content.match(pattern)
         if (match) {
-            try {
-                return JSON.parse(match[0])
-            } catch {
-                // Not valid JSON - try to balance brackets
-                const extracted = extractBalancedJson(match[0])
-                if (extracted) {
-                    try {
-                        return JSON.parse(extracted)
-                    } catch {
-                        // Still not valid
-                    }
-                }
+            const parsed = tryParse(match[0])
+            if (parsed) return parsed
+
+            // JSON 无效 - 尝试平衡括号
+            const extracted = extractBalancedJson(match[0])
+            if (extracted) {
+                const parsedExt = tryParse(extracted)
+                if (parsedExt) return parsedExt
             }
         }
+    }
+
+    // 4. 兜底方案：搜索最大的平衡 { ... } 块
+    const allJsonCandidates = extractAllBalancedJsons(content)
+    for (const candidate of allJsonCandidates) {
+        const parsed = tryParse(candidate)
+        if (parsed && isValidConfig(parsed)) return parsed
     }
 
     return null
 }
 
 /**
- * Try to extract a balanced JSON object from a string
+ * 尝试从字符串中提取平衡的 JSON 对象
  */
 function extractBalancedJson(str: string): string | null {
     let depth = 0
@@ -260,6 +270,33 @@ function extractBalancedJson(str: string): string | null {
     }
 
     return null
+}
+
+/**
+ * 提取所有可能的平衡 JSON 对象以找到正确的那个
+ */
+function extractAllBalancedJsons(str: string): string[] {
+    const results: string[] = []
+    let depth = 0
+    let start = -1
+
+    for (let i = 0; i < str.length; i++) {
+        if (str[i] === '{') {
+            if (depth === 0) start = i
+            depth++
+        } else if (str[i] === '}') {
+            depth--
+            if (depth === 0 && start !== -1) {
+                results.push(str.substring(start, i + 1))
+                // Reset to search for next object (assuming they are not nested for the main config we care about)
+                // If we want nested, we shouldn't reset, but Coze output usually gives one main block
+                start = -1
+            }
+        }
+    }
+
+    // returning longest first as it's likely the full config
+    return results.sort((a, b) => b.length - a.length)
 }
 
 /**
