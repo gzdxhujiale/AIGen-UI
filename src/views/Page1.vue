@@ -95,6 +95,7 @@ const effectTableVisible = ref(false)
 const effectTableTitle = ref('')
 const effectTableColumns = ref<any[]>([])
 const effectTableData = ref<any[]>([])
+const effectTableShowCheckbox = ref(false)
 
 // ============================================
 // 编辑模式 - useConfigCrud 集成
@@ -757,12 +758,14 @@ const handleActionClick = (actionKey: string, record: any) => {
         if (targetColumns.length === 0) {
            Message.warning(`页面 "${targetConfig?.name || targetNavId}" 未配置表格列`)
         }
+        effectTableShowCheckbox.value = targetConfig?.component?.tableArea?.showCheckbox ?? false
       } else {
          Message.warning('未找到关联页面的配置')
       }
     } else {
       // 兼容旧配置
       targetColumns = actionConfig.effectConfig?.tableArea?.columns || []
+      effectTableShowCheckbox.value = actionConfig.effectConfig?.tableArea?.showCheckbox ?? false
     }
     
     effectTableColumns.value = targetColumns
@@ -1292,6 +1295,7 @@ const handleEffectModalOk = () => {
         <ArcoTable
           :columns="effectTableColumns"
           :data="effectTableData"
+          :show-checkbox="effectTableShowCheckbox"
           :page-size="5"
           height="100%"
           :bordered="{ wrapper: true, cell: true }"
