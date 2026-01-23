@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 // 导入页面模板
 import Page1 from '@/views/Page1.vue'
 import AuthPage from '@/views/AuthPage.vue'
 import Profile from '@/views/Profile.vue'
 import SkeletonLoading from '@/views/SkeletonLoading.vue'
-import UpdateAnnouncement from '@/components/common/UpdateAnnouncement.vue'
 
 
 
@@ -25,7 +24,7 @@ import { useConfigPageStore } from '@/stores/config_page_Store'
 import ArcoLayout from '@/components/layout/ArcoLayout.vue'
 import ShadcnLayout from '@/components/layout/ShadcnLayout.vue'
 
-import { useNavigation } from '@/composables/useNavigation'
+import { useNavigation, initNavigation } from '@/composables/useNavigation'
 
 const { currentPage } = useNavigation() 
 const authStore = useAuthStore()
@@ -33,7 +32,8 @@ const configStore = useConfigStore()
 const teamStore = useConfigTeamStore()
 const menuStore = useConfigMenuStore()
 const pageStore = useConfigPageStore()
-const { startOnboarding, showAnnouncement } = useOnboarding()
+const { startOnboarding } = useOnboarding()
+const isConfigLoading = ref(true)
 
 // 页面模板映射
 const pageComponents: Record<string, any> = {
@@ -66,16 +66,23 @@ onMounted(async () => {
     menuStore.loadFromCache()
     pageStore.loadFromCache()
     
+    // 尝试初始化导航 (如果有缓存)
+    if (pageStore.navGroups.length > 0) {
+      initNavigation(pageStore.navGroups)
+      isConfigLoading.value = false
+    }
+
     console.log(`App: Cache loaded in ${(performance.now() - startTime).toFixed(2)}ms`)
 
     // 2. 后台并行同步最新配置
-    // 我们不等待这个 Promise 完成就允许交互，但为了日志记录仍保留 await (或者移除 await 让其完全后台运行)
-    // 但鉴于 Promise.all 本身非阻塞 UI 渲染 (Vue 是响应式的), 这里 await 只是阻塞 onMounted 函数的结束
     Promise.all([
         teamStore.loadTeams(),
         menuStore.loadMenu(),
         pageStore.loadPageConfigs()
     ]).then(() => {
+        // 数据更新后再次初始化导航 (确保没有缓存时也能选中)
+        initNavigation(pageStore.navGroups)
+        isConfigLoading.value = false
         console.log(`App: Background sync finished in ${(performance.now() - startTime).toFixed(2)}ms`)
     })
 
@@ -100,13 +107,15 @@ watch(() => authStore.isAuthenticated, async (isAuth) => {
     }
 
     // Load configs
-
-    
+    isConfigLoading.value = true
     await Promise.all([
         teamStore.loadTeams(),
         menuStore.loadMenu(),
         pageStore.loadPageConfigs()
     ])
+    
+    initNavigation(pageStore.navGroups)
+    isConfigLoading.value = false
     
     // 启动用户引导
     startOnboarding(authStore.userEmail)
@@ -124,7 +133,7 @@ useNetworkStatus()
 
 <template>
   <!-- Loading state: show skeleton while auth or config is loading -->
-  <SkeletonLoading v-if="authStore.isLoading" />
+  <SkeletonLoading v-if="authStore.isLoading || isConfigLoading" />
 
   <!-- Not authenticated: show login page -->
   <AuthPage v-else-if="!authStore.isAuthenticated" />
@@ -143,8 +152,6 @@ useNetworkStatus()
           </Transition>
       </ShadcnLayout>
 
-      <!-- Update Announcement Modal -->
-      <UpdateAnnouncement v-model:open="showAnnouncement" />
   </template>
 </template>
 

@@ -70,8 +70,9 @@ export interface TableColumn {
     ellipsis?: boolean                // 是否显示省略号
     tooltip?: boolean                 // 是否显示提示
     visible?: boolean
-    mockFormat?: 'text' | 'datetime' | 'number' | 'list' // 虚拟数据格式
-    mockList?: string[] // 当格式为 'list' 时的候选数据
+    mockFormat?: 'text' | 'datetime' | 'number' | 'list' | 'list-order' | 'conditional' // 虚拟数据格式
+    mockList?: string[] // 当格式为 'list' 或 'list-order' 时的候选数据
+    conditionRules?: Array<{ sourceColumn: string; operator: string; compareValue: string; displayValue: string; color?: string }> // 条件格式规则（基于其他列的值）
     buttons?: string[] // 文字按钮列表
 }
 
@@ -99,11 +100,13 @@ export interface ActionButtonConfig {
     variant?: 'primary' | 'outline' | 'text' | 'shadcn-outline'
     className?: string       // 自定义样式类
     visible?: boolean
-    effectType?: 'none' | 'modal'
+    effectType?: 'none' | 'modal' | 'table'
     effectConfig?: {
         title?: string
         content?: string
         formItems?: FilterConfig[]
+        tableArea?: TableAreaConfig // 用于 'table' 效果的表格配置 (Deprecated: prefer targetNavId)
+        targetNavId?: string        // 关联的目标页面 ID (用于 'table' 效果)
     }
 }
 

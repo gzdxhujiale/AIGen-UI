@@ -211,7 +211,7 @@ const previewMode = computed(() => configStore.previewMode)
 const userDisplayName = computed(() => authStore.userDisplayName || 'User') // Fallback to 'User' since schema is removed
 const userEmail = computed(() => authStore.userEmail || 'user@example.com')
 const userAvatar = computed(() => authStore.userAvatar || '')
-const initials = computed(() => userDisplayName.value.slice(0, 2).toUpperCase())
+const initials = computed(() => userDisplayName.value.slice(-1).toUpperCase())
 
 // --- 编辑模式逻辑 (从 ArcoLayout 移植) ---
 const editDialogVisible = ref(false)
@@ -621,7 +621,7 @@ const headerMenuList = computed({
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem @click="configStore.setEditMode(!configStore.isEditMode)">
+                  <DropdownMenuItem @click="configStore.setEditMode(!configStore.isEditMode)" id="nav-edit-mode">
                     <Pencil v-if="!configStore.isEditMode" />
                     <Eye v-else />
                     {{ configStore.isEditMode ? '预览模式' : '编辑模式' }}

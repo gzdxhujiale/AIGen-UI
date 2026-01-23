@@ -690,12 +690,12 @@ const headerMenuList = computed({
                             class="shadow-sm text-white"
                         >
                             <img v-if="authStore.userAvatar" :src="authStore.userAvatar" :alt="authStore.userDisplayName" />
-                            <IconUser v-else />
+                            <span v-else>{{ authStore.userDisplayName ? authStore.userDisplayName.slice(-1).toUpperCase() : 'U' }}</span>
                         </a-avatar>
                     </div>
                     <template #content>
                         <div class="py-1 min-w-[150px]">
-                            <a-doption value="toggle-edit" class="py-2.5">
+                            <a-doption value="toggle-edit" class="py-2.5" id="nav-edit-mode">
                                 <template #icon>
                                     <Pencil v-if="!configStore.isEditMode" class="size-4 opacity-70"/>
                                     <Eye v-else class="size-4 opacity-70"/>

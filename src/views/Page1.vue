@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm } from '@arco-design/web-vue'
 import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { safeJsonParseWithError } from '@/utils/error'
+import { generateMockValue, evaluateConditionalValue } from '@/utils/mock-data'
 import {
   Select,
   SelectContent,
@@ -46,21 +47,21 @@ const pageStore = useConfigPageStore()
 // 编辑模式状态
 const isEditMode = computed(() => configStore.isEditMode)
 
-// --- V9: 获取当前 subId 所属的一级导航标题 ---
+// --- 获取当前 subId 所属的一级导航标题 ---
 const currentNavTitle = computed(() => pageStore.findNavTitleBySubId(currentNavId.value))
 
-// --- V9: 获取当前页面配置 (纯 V9) ---
+// --- 获取当前页面配置  ---
 const pageConfig = computed<Page1Config | undefined>(() => {
   const navId = currentNavId.value
   
-  // V9: 从 pageStore 获取组件配置 (Strict V9 Pattern)
+  // 从 pageStore 获取组件配置 
   const navTitle = currentNavTitle.value
   if (navTitle) {
       const subItem = pageStore.getSubPageConfig(navTitle, navId)
       if (subItem?.component) {
         return {
           ...subItem.component,
-          mockData: () => []  // V9 不存储 mockData
+          mockData: () => []  //  不存储 mockData
         } as Page1Config
       }
   }
@@ -88,6 +89,12 @@ const effectModalTitle = ref('')
 const effectModalContent = ref('')
 const effectModalFormItems = ref<any[]>([])
 const effectModalFormData = reactive<Record<string, any>>({})
+ 
+// 列表弹窗状态 (Effect Type: table)
+const effectTableVisible = ref(false)
+const effectTableTitle = ref('')
+const effectTableColumns = ref<any[]>([])
+const effectTableData = ref<any[]>([])
 
 // ============================================
 // 编辑模式 - useConfigCrud 集成
@@ -109,6 +116,7 @@ const transformColumn = (item: any) => ({
   width: item.width || '120px',
   mockFormat: item.mockFormat || 'text',
   mockList: item.mockList ? item.mockList.join(',') : '',
+  conditionRules: item.conditionRules ? JSON.stringify(item.conditionRules) : '',
   buttons: item.buttons ? item.buttons.join(',') : '',
   visible: item.visible ?? true,
   fixed: item.fixed || 'none',
@@ -125,6 +133,11 @@ const transformAction = (item: any) => ({
   effectTitle: item.effectConfig?.title || '',
   effectContent: item.effectConfig?.content || '',
   effectFormItems: item.effectConfig?.formItems || [],
+  effectTableColumns: (item.effectConfig?.tableArea?.columns || []).map((col: any) => ({
+    ...col,
+    mockListStr: Array.isArray(col.mockList) ? col.mockList.join(',') : String(col.mockList || ''),
+    conditionRulesJson: col.conditionRules ? JSON.stringify(col.conditionRules) : '[]'
+  })),
   visible: item.visible ?? true
 })
 
@@ -195,7 +208,7 @@ const columnCrud = useConfigCrud({
   name: '表格列',
   defaultForm: () => ({
     key: '', label: '', width: '120px',
-    type: 'text' as const, mockFormat: 'none' as const, mockList: '', buttons: '',
+    type: 'text' as const, mockFormat: 'none' as const, mockList: '', conditionRules: '', buttons: '',
     fixed: 'none' as const, align: 'left' as const, ellipsis: false, tooltip: false, visible: true
   }),
   doSave: async (modifying, index, form) => {
@@ -211,8 +224,9 @@ const columnCrud = useConfigCrud({
       width: form.width,
       type: form.type === 'text' ? undefined : form.type,
       visible: form.visible,
-      mockFormat: (form.mockFormat as string) === 'none' ? undefined : form.mockFormat as 'text' | 'datetime' | 'number' | 'list' | undefined,
-      mockList: (form.mockFormat as string) === 'list' ? form.mockList.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined,
+      mockFormat: (form.mockFormat as string) === 'none' ? undefined : form.mockFormat as 'text' | 'datetime' | 'number' | 'list' | 'list-order' | 'conditional' | undefined,
+      mockList: ((form.mockFormat as string) === 'list' || (form.mockFormat as string) === 'list-order') ? form.mockList.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined,
+      conditionRules: (form.mockFormat as string) === 'conditional' && form.conditionRules ? safeJsonParseWithError(form.conditionRules, '条件格式规则') ?? undefined : undefined,
       buttons: (form.type as string) === 'text-button' && form.buttons ? form.buttons.split(/[，,]/).map((s: string) => s.trim()).filter((s: string) => s) : undefined,
       fixed: form.fixed === 'none' ? undefined : form.fixed,
       align: form.align === 'left' ? undefined : form.align,
@@ -257,7 +271,8 @@ const actionCrud = useConfigCrud({
   name: '操作按钮',
   defaultForm: () => ({
     key: '', label: '', variant: 'outline' as const, className: '',
-    effectType: 'none' as const, effectTitle: '', effectContent: '', effectFormItems: [] as any[], visible: true
+    effectType: 'none' as const, effectTitle: '', effectContent: '', effectFormItems: [] as any[], 
+    effectTableColumns: [] as any[], visible: true
   }),
   doSave: async (modifying, index, form) => {
     const navTitle = currentNavTitle.value
@@ -286,6 +301,10 @@ const actionCrud = useConfigCrud({
       effectType: (form.effectType as string) === 'none' ? undefined : form.effectType,
       effectConfig: (form.effectType as string) === 'modal' ? {
         title: form.effectTitle, content: form.effectContent, formItems: form.effectFormItems
+      } : (form.effectType as string) === 'table' ? {
+        title: form.effectTitle, 
+        tableArea: { columns: form.effectTableColumns },
+        targetNavId: (form as any).effectConfig?.targetNavId
       } : undefined
     }
     
@@ -583,46 +602,7 @@ function deleteItem(type: 'filter' | 'column' | 'action' | 'card', index: number
   else if (type === 'card') cardCrud.handleDelete(index)
 }
 
-// 根据 mockFormat 生成虚拟数据
-function generateMockValue(col: any, index: number): string | number {
-  const format = col.mockFormat
-  const label = col.label
-  const mockList = col.mockList
-  
-  // 如果 mockFormat 未定义或为 'none'，返回空字符串
-  if (!format || format === 'none') {
-    return ''
-  }
-  
-  switch (format) {
-    case 'list':
-      if (mockList && mockList.length > 0) {
-        const randomIndex = Math.floor(Math.random() * mockList.length)
-        return mockList[randomIndex]
-      }
-      return `${label}${index + 1}`
-    case 'text':
-      return `${label}${index + 1}`
-    case 'datetime':
-      const now = new Date()
-      const randomDays = Math.floor(Math.random() * 30)
-      const randomHours = Math.floor(Math.random() * 24)
-      const randomMinutes = Math.floor(Math.random() * 60)
-      const randomSeconds = Math.floor(Math.random() * 60)
-      const date = new Date(now.getTime() - randomDays * 24 * 60 * 60 * 1000)
-      const year = date.getFullYear()
-      const month = date.getMonth() + 1
-      const day = date.getDate()
-      const h = String(randomHours).padStart(2, '0')
-      const m = String(randomMinutes).padStart(2, '0')
-      const s = String(randomSeconds).padStart(2, '0')
-      return `${year}-${month}-${day} ${h}:${m}:${s}`
-    case 'number':
-      return Math.floor(10000 + Math.random() * 90000)
-    default:
-      return ''
-  }
-}
+// 评估条件格式规则 逻辑已移至 @/utils/mock-data
 
 // 根据配置生成模拟数据
 function generateMockData(): any[] {
@@ -634,11 +614,25 @@ function generateMockData(): any[] {
   const rowCount = 20
   const data: any[] = []
   
+  // 分离条件格式列和普通列
+  const normalColumns = columns.filter(col => col.mockFormat !== 'conditional')
+  const conditionalColumns = columns.filter(col => col.mockFormat === 'conditional')
+  
   for (let i = 0; i < rowCount; i++) {
     const row: Record<string, any> = { id: i + 1 }
     
-    columns.forEach(col => {
+    // 先生成普通列的值
+    normalColumns.forEach(col => {
       row[col.key] = generateMockValue(col, i)
+    })
+    
+    // 再根据普通列的值生成条件格式列的值
+    conditionalColumns.forEach(col => {
+      if (col.conditionRules && col.conditionRules.length > 0) {
+        row[col.key] = evaluateConditionalValue(row, col.conditionRules)
+      } else {
+        row[col.key] = ''
+      }
     })
     
     data.push(row)
@@ -696,6 +690,11 @@ const visibleColumns = computed(() => {
   return pageConfig.value?.tableArea.columns.filter(c => c.visible !== false) || []
 })
 
+// 所有可用列（用于条件格式选择）
+const availableColumns = computed(() => {
+  return pageConfig.value?.tableArea.columns.map(c => ({ key: c.key, label: c.label || c.key })) || []
+})
+
 // 可见的操作按钮
 const visibleActions = computed(() => {
   return pageConfig.value?.actionsArea?.buttons?.filter((a: { visible?: boolean }) => a.visible !== false) || []
@@ -740,6 +739,58 @@ const handleActionClick = (actionKey: string, record: any) => {
     })
     
     effectModalVisible.value = true
+  } else if (actionConfig?.effectType === 'table') {
+    effectTableTitle.value = actionConfig.effectConfig?.title || '数据列表'
+    
+    let targetColumns: any[] = []
+    
+    // 如果配置了关联页面 ID，则尝试获取该页面的表格配置
+    if (actionConfig.effectConfig?.targetNavId) {
+      const targetNavId = actionConfig.effectConfig.targetNavId
+      const targetNavTitle = pageStore.findNavTitleBySubId(targetNavId)
+      
+      if (targetNavTitle) {
+        const targetConfig = pageStore.getSubPageConfig(targetNavTitle, targetNavId)
+        // 注意：这里我们需要确保引用的是 tableArea.columns
+        targetColumns = targetConfig?.component?.tableArea?.columns || []
+        
+        if (targetColumns.length === 0) {
+           Message.warning(`页面 "${targetConfig?.name || targetNavId}" 未配置表格列`)
+        }
+      } else {
+         Message.warning('未找到关联页面的配置')
+      }
+    } else {
+      // 兼容旧配置
+      targetColumns = actionConfig.effectConfig?.tableArea?.columns || []
+    }
+    
+    effectTableColumns.value = targetColumns
+    
+    // 生成弹窗表格的 Mock 数据
+    const mockData: any[] = []
+    const columns = effectTableColumns.value
+    const normalColumns = columns.filter(col => col.mockFormat !== 'conditional')
+    const conditionalColumns = columns.filter(col => col.mockFormat === 'conditional')
+
+    for (let i = 0; i < 10; i++) {
+        const row: any = { id: i + 1 }
+        // 先生成普通列
+        normalColumns.forEach(col => {
+            row[col.key] = generateMockValue(col, i)
+        })
+        // 再生成条件列
+        conditionalColumns.forEach(col => {
+          if (col.conditionRules && col.conditionRules.length > 0) {
+            row[col.key] = evaluateConditionalValue(row, col.conditionRules)
+          } else {
+            row[col.key] = ''
+          }
+        })
+        mockData.push(row)
+    }
+    effectTableData.value = mockData
+    effectTableVisible.value = true
   }
 }
 
@@ -1215,7 +1266,7 @@ const handleEffectModalOk = () => {
 
       <!-- 列编辑表单 -->
       <div v-else-if="editDialogType === 'column'" class="space-y-4">
-        <ConfigForm type="column" v-model="columnEditForm" />
+        <ConfigForm type="column" v-model="columnEditForm" :available-columns="availableColumns" />
       </div>
 
       <!-- 操作按钮编辑表单 -->
@@ -1228,8 +1279,26 @@ const handleEffectModalOk = () => {
         <ConfigForm type="card" v-model="cardEditForm" />
       </div>
     </AModal>
-
-    <!-- 区域配置弹窗 -->
+ 
+    <!-- 表格弹窗 (Effect Type: table) -->
+    <AModal
+      v-model:visible="effectTableVisible"
+      :title="effectTableTitle"
+      @ok="effectTableVisible = false"
+      :width="800"
+      :footer="false"
+    >
+      <div class="h-[400px]">
+        <ArcoTable
+          :columns="effectTableColumns"
+          :data="effectTableData"
+          :page-size="5"
+          height="100%"
+          :bordered="{ wrapper: true, cell: true }"
+        />
+      </div>
+    </AModal>
+     <!-- 区域配置弹窗 -->
     <AModal
       v-model:visible="areaConfigDialogOpen"
       :title="areaConfigType === 'filter' ? '筛选区配置' : areaConfigType === 'card' ? '卡片区配置' : '表格区配置'"

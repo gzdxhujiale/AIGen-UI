@@ -1,4 +1,3 @@
-import { ref } from 'vue'
 import { driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 
@@ -8,8 +7,7 @@ import 'driver.js/dist/driver.css'
  */
 export function useOnboarding() {
     const STORAGE_KEY = 'onboarding_completed'
-    // 是否显示更新公告
-    const showAnnouncement = ref(false)
+
 
     /**
      * 检查是否应该显示引导
@@ -65,12 +63,6 @@ export function useOnboarding() {
                         markOnboardingCompleted()
                     }
 
-                    // 测试账号在引导结束后显示更新公告
-                    if (userEmail.toLowerCase().includes('test')) {
-                        setTimeout(() => {
-                            showAnnouncement.value = true
-                        }, 500)
-                    }
                 },
                 steps: [
                     {
@@ -99,11 +91,20 @@ export function useOnboarding() {
                         element: '#nav-profile',
                         popover: {
                             title: '👤 用户中心',
-                            description: '用户中心包含三个核心功能：\n\n• 基本信息配置 - 设置您的显示名称\n• 界面布局配置 - 选择导航风格和菜单栏配置\n• 团队管理配置 - 管理您的团队信息和权限',
+                            description: '用户中心包含三个核心功能：\n\n• 基本信息配置\n• 界面布局配置 - 选择导航风格\n• 团队管理配置 - 管理您的团队信息和权限',
                             side: 'left',
                             align: 'start'
                         }
                     },
+                    {
+                        element: '#nav-edit-mode',
+                        popover: {
+                            title: '✏️ 布局编辑',
+                            description: '您可以在用户头像菜单中找到此选项。\n\n开启编辑模式后，您可以：\n• 添加/修改/删除导航项\n• 添加/修改/删除页面布局配置\n• 实时预览配置效果',
+                            side: 'bottom',
+                            align: 'end'
+                        }
+                    }
 
                 ]
             })
@@ -122,7 +123,6 @@ export function useOnboarding() {
     return {
         startOnboarding,
         resetOnboarding,
-        shouldShowOnboarding,
-        showAnnouncement
+        shouldShowOnboarding
     }
 }
