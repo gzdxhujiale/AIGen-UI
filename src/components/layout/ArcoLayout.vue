@@ -227,6 +227,7 @@ watch(currentNavId, (newId) => {
 })
 
 const handleNavClick = (mainNav: string, subNav: string, navId?: string) => {
+    // 强制传递 ID 以确保 pageConfig 能找到
     setNavigation(mainNav, subNav, navId)
     setDetailTitle(null)
 }

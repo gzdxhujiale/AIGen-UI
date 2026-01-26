@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
-import { Send, Trash2, Sparkles, Loader2, Check, XIcon, Minus, Replace, Plus, Eye, AlertCircle } from 'lucide-vue-next'
+import { Send, Trash2, Sparkles, Loader2, Check, XIcon, Minus, AlertCircle } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useAIStore, type PreviewMode } from '@/stores/aiStore'
+import { useAIStore } from '@/stores/aiStore'
 import { useConfigStore } from '@/stores/configStore'
 import JsonViewer from 'vue-json-viewer'
 import 'vue-json-viewer/style.css'
@@ -295,9 +295,7 @@ function handleClear() {
     configStore.clearPreviewConfig()
 }
 
-function handleSetPreviewMode(mode: PreviewMode) {
-    aiStore.setPreviewMode(mode)
-}
+
 
 function handleConfirmPreview() {
     configStore.applyPreviewConfig()
@@ -448,22 +446,8 @@ function formatTime(date: Date): string {
                             <span class="preview-hint">← 在左侧实时查看效果</span>
                         </div>
 
-                        <div class="preview-tabs">
-                            <button class="preview-tab" :class="{ active: previewMode === 'initial' }" @click="handleSetPreviewMode('initial')">
-                                <Eye :size="16" /><span>当前</span>
-                            </button>
-                            <button class="preview-tab" :class="{ active: previewMode === 'override' }" @click="handleSetPreviewMode('override')">
-                                <Replace :size="16" /><span>覆盖</span>
-                            </button>
-                            <button class="preview-tab" :class="{ active: previewMode === 'append' }" @click="handleSetPreviewMode('append')">
-                                <Plus :size="16" /><span>追加</span>
-                            </button>
-                        </div>
-
                         <div class="mode-description">
-                            <p v-if="previewMode === 'initial'">👁️ 当前配置 - 查看现有配置作为对比</p>
-                            <p v-else-if="previewMode === 'override'">⚠️ 覆盖模式 - 完全替换现有配置</p>
-                            <p v-else-if="previewMode === 'append'">➕ 追加模式 - 合并到现有配置</p>
+                            <p>➕ 追加模式 - 合并到现有配置</p>
                         </div>
 
                         <div v-if="changeSummary && previewMode !== 'initial'" class="change-summary">

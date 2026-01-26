@@ -58,18 +58,30 @@ const pageConfig = computed<Page1Config | undefined>(() => {
   if (configStore.isInPreviewMode) {
       // 优先从预览的完整导航结构中查找（支持多页面预览）
       if (configStore.previewNavGroups) {
+          console.log('[Page1] Searching previewNavGroups for ID:', navId)
           for (const group of configStore.previewNavGroups) {
               for (const item of group.items || []) {
                   for (const sub of item.items || []) {
-                      if (sub.id === navId && sub.component) {
-                          return {
-                              ...sub.component,
-                              mockData: () => []
-                          } as Page1Config
+                      if (sub.id === navId) {
+                          console.log('[Page1] Found ID match:', sub.id)
+                          console.log('[Page1] Has component?', !!sub.component)
+                          if (sub.component) {
+                              // Basic validation
+                              if (!sub.component.filterArea && !sub.component.tableArea) {
+                                  console.warn('[Page1] Component found but appears empty (no filter/table area)', sub.component)
+                              }
+                              return {
+                                  ...sub.component,
+                                  mockData: () => []
+                              } as Page1Config
+                          } else {
+                               console.warn('[Page1] ID matched but component is missing!', sub)
+                          }
                       }
                   }
               }
           }
+          console.log('[Page1] ID not found in previewNavGroups')
       }
       
       // 如果没找到具体 ID（比如 ID 变了）或者只是单页面预览，使用全局预览配置
@@ -851,15 +863,7 @@ const handleEffectModalOk = () => {
   <div class="page1-container h-full w-full">
     <div v-if="pageConfig" class="h-full flex flex-col overflow-hidden">
       <!-- 临时调试面板 -->
-      <div v-if="configStore.isInPreviewMode" class="bg-blue-50 border-b p-2 text-xs text-blue-800 font-mono overflow-auto max-h-32 shrink-0">
-          <strong>Preview Debug:</strong> <br/>
-          NavID: {{ currentNavId }} <br/>
-          Filters: {{ pageConfig.filterArea?.filters?.length || 0 }} (Show: {{ pageConfig.filterArea?.show }}) <br/>
-          Columns: {{ pageConfig.tableArea?.columns?.length || 0 }} (Show: {{ pageConfig.tableArea?.show }}) <br/>
-          Cards: {{ pageConfig.cardArea?.cards?.length || 0 }} (Show: {{ pageConfig.cardArea?.show }}) <br/>
-          Actions: {{ pageConfig.actionsArea?.buttons?.length || 0 }} (Show: {{ pageConfig.actionsArea?.show }}) <br/>
-          Raw Config Keys: {{ Object.keys(pageConfig).join(', ') }}
-      </div>
+
       <!-- 顶部操作栏 Teleport -->
       <Teleport to="#breadcrumb-actions" defer>
         <div class="flex items-center gap-4">
@@ -1250,53 +1254,9 @@ const handleEffectModalOk = () => {
 
     <!-- 无配置时显示占位 -->
     <div v-else class="flex flex-col items-center justify-center h-full text-muted-foreground space-y-2">
-        <div class="p-4 bg-slate-50 border rounded-lg max-w-md w-full">
-            <h3 class="font-medium text-lg text-slate-800 mb-2">⚠ 页面配置未找到 (Page Config Not Found)</h3>
-            
-            <div class="grid grid-cols-[100px_1fr] gap-x-2 gap-y-1 text-sm text-left">
-                <span class="text-slate-500">Current NavID:</span>
-                <span class="font-mono bg-slate-200 px-1 rounded">{{ currentNavId || '(empty)' }}</span>
-                
-                <span class="text-slate-500">Preview Mode:</span>
-                <span class="font-medium" :class="configStore.isInPreviewMode ? 'text-blue-600' : 'text-slate-400'">
-                    {{ configStore.isInPreviewMode ? 'Active' : 'Inactive' }}
-                </span>
-
-                <template v-if="configStore.isInPreviewMode">
-                    <span class="text-slate-500">Preview Type:</span>
-                    <span>{{ configStore.previewMode || '-' }}</span>
-
-                    <span class="text-slate-500">Preview Data:</span>
-                    <span>
-                       {{ configStore.previewNavGroups ? `NavGroups(${configStore.previewNavGroups.length})` : 'No NavGroups' }}
-                       / 
-                       {{ configStore.previewConfig ? 'Has Single Config' : 'No Single Config' }}
-                    </span>
-
-                    <template v-if="configStore.previewNavGroups">
-                        <span class="text-slate-500 self-start mt-1">Available IDs:</span>
-                        <div class="h-24 overflow-y-auto text-xs border rounded bg-slate-100 p-1 mt-1">
-                            <div v-for="g in configStore.previewNavGroups" :key="g.label">
-                                <template v-for="i in g.items" :key="i.id">
-                                    <div v-for="sub in i.items" :key="sub.id" class="px-1" :class="sub.id === currentNavId ? 'bg-yellow-200 font-bold' : ''">
-                                        {{ sub.id }} ({{ sub.title || sub.name }})
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-                    </template>
-                </template>
-            </div>
-            
-            <div class="mt-4 pt-4 border-t text-xs text-slate-400">
-                <p>Possible causes:</p>
-                <ul class="list-disc list-inside mt-1 space-y-0.5">
-                    <li>The requested NavID does not match any ID in the configuration.</li>
-                    <li>The AI generated config might have different IDs than expected.</li>
-                    <li>Try clicking on a menu item in the sidebar to refresh navigation state.</li>
-                </ul>
-            </div>
-        </div>
+        <IconFile class="w-12 h-12 opacity-20" />
+        <span class="text-xs">暂无页面配置</span>
+        <span v-if="configStore.isInPreviewMode" class="text-[10px] opacity-50">Current ID: {{ currentNavId }}</span>
     </div>
 
     <!-- 效果弹窗 -->

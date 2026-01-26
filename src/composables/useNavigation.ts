@@ -89,18 +89,21 @@ export function useNavigation() {
         const navId = _currentNavId.value
         if (!navId) return undefined
 
-        if (!navId) return undefined
-
         // 回退到导航树中查找显式指定的 template
         if (_navGroupsRef.value) {
             for (const group of _navGroupsRef.value) {
-                for (const mainItem of group.items) {
-                    const subItem = mainItem.items?.find((item: NavSubItem) => item.id === navId)
-                    if (subItem) {
-                        if (subItem.template) return subItem.template
-                        // 旧版本兼容：如果 navGroups 中仍然带有 component，则返回 Page1
-                        if (subItem.component) return 'Page1'
-                    }
+                // Flatten items search
+                const allSubItems = group.items.flatMap(m => m.items || [])
+                const subItem = allSubItems.find(item => item.id === navId)
+
+                if (subItem) {
+                    if (subItem.template) return subItem.template
+                    // 只要有 component 配置，或者它是 AI 生成的（通常带有 component），就应该渲染 Page1
+                    if (subItem.component) return 'Page1'
+
+                    // 兜底：如果它是一个标准的导航项且没有指定特殊模板，默认也应该视作 Page1
+                    // 除非它是 settings/profile 等特殊页面
+                    return 'Page1'
                 }
             }
         }

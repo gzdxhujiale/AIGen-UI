@@ -327,7 +327,7 @@ export const useAIStore = defineStore('ai', () => {
             // Try to append to the first existing group to keep UI clean, or use default 'Application'
             const defaultGroupName = currentExport.navGroups?.[0]?.label || 'Application'
 
-            // Ensure Sub Items have IDs
+            // Ensure Sub Items have IDs (Only if missing)
             config.items.forEach((item: any, index: number) => {
                 if (!item.id) {
                     item.id = `page_gen_${Date.now()}_${index}`
@@ -356,7 +356,7 @@ export const useAIStore = defineStore('ai', () => {
             }
         }
 
-        // Ensure all items in navGroups have IDs (Sanity Check for all formats)
+        // Ensure all items in navGroups have IDs (Sanity Check - Only if REALLY missing)
         if (config.navGroups) {
             config.navGroups.forEach((group: any) => {
                 group.items?.forEach((item: any) => {
@@ -381,25 +381,25 @@ export const useAIStore = defineStore('ai', () => {
         // Calculate change summary
         changeSummary.value = calculateChangeSummary(currentExport, config)
 
-        // Default to override mode and set in configStore for live preview
-        previewMode.value = 'override'
+        // Default to append mode and set in configStore for live preview
+        previewMode.value = 'append'
 
         // Trigger live preview in the app
         // Note: AI returns 'pageConfigs' which maps to 'page1Configs' in the store
         let componentConfig = null
 
         // 1. Try to get from pageConfigs (Standard Full Config)
-        if (previewOverrideConfig.value?.pageConfigs) {
-            componentConfig = Object.values(previewOverrideConfig.value.pageConfigs)[0]
+        if (previewAppendConfig.value?.pageConfigs) {
+            componentConfig = Object.values(previewAppendConfig.value.pageConfigs)[0]
         }
         // 2. Try to use the config itself if it looks like a Page Config (Partial/Direct Config)
-        else if (previewOverrideConfig.value?.filterArea || previewOverrideConfig.value?.tableArea) {
+        else if (previewAppendConfig.value?.filterArea || previewAppendConfig.value?.tableArea) {
             console.log('⚡ [AIStore] Detected direct Page Config structure')
-            componentConfig = previewOverrideConfig.value
+            componentConfig = previewAppendConfig.value
         }
         // 3. Try to get from navGroups (Legacy/Nested)
-        else if (previewOverrideConfig.value?.navGroups) {
-            const navGroups = previewOverrideConfig.value.navGroups
+        else if (previewAppendConfig.value?.navGroups) {
+            const navGroups = previewAppendConfig.value.navGroups
             const firstItem = navGroups[0]?.items?.[0]
             const subItem = firstItem?.items?.[0]
             if (subItem?.component) {
@@ -408,12 +408,12 @@ export const useAIStore = defineStore('ai', () => {
         }
 
         if (componentConfig) {
-            configStore.setPreviewConfig(componentConfig as any, 'override')
+            configStore.setPreviewConfig(componentConfig as any, 'append')
         }
 
         // Sync Nav Groups for preview if available
-        if (previewOverrideConfig.value?.navGroups) {
-            configStore.setPreviewNav(previewOverrideConfig.value.navGroups)
+        if (previewAppendConfig.value?.navGroups) {
+            configStore.setPreviewNav(previewAppendConfig.value.navGroups)
         }
     }
 
