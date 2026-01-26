@@ -9,7 +9,6 @@ import {
 } from '@arco-design/web-vue'
 import { Button as ShadcnButton } from '@/components/ui/button'
 import { FormInput, Plus, Trash2 } from 'lucide-vue-next'
-import { Message } from '@arco-design/web-vue'
 import { useConfigPageStore } from '@/stores/config_page_Store'
 
 interface ConditionRule {
