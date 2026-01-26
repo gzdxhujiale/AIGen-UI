@@ -8,6 +8,7 @@ export const useConfigStore = defineStore('config', () => {
     // 预览模式状态
     const previewMode = ref<'append' | 'override' | null>(null)
     const previewConfig = ref<Page1Config | null>(null)
+    const previewNavGroups = ref<any[] | null>(null)
     // const previewNavId = ref('preview-temp-id')
 
     // 导航样式偏好: 'shadcn' | 'arco'
@@ -58,9 +59,14 @@ export const useConfigStore = defineStore('config', () => {
         previewMode.value = mode
     }
 
+    function setPreviewNav(groups: any[]) {
+        previewNavGroups.value = groups
+    }
+
     function clearPreviewConfig() {
         previewMode.value = null
         previewConfig.value = null
+        previewNavGroups.value = null
     }
 
     function applyPreviewConfig() {
@@ -203,6 +209,7 @@ export const useConfigStore = defineStore('config', () => {
         // 预览状态
         previewMode,
         previewConfig,
+        previewNavGroups,
         // 项目分组状态
         projectGroups,
         // 编辑模式
@@ -216,6 +223,7 @@ export const useConfigStore = defineStore('config', () => {
         setNavigationStyle,
         setFilterActionFusion,
         setPreviewConfig,
+        setPreviewNav,
         clearPreviewConfig,
         applyPreviewConfig,
         setProjectGroups,

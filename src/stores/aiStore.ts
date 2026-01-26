@@ -270,10 +270,19 @@ export const useAIStore = defineStore('ai', () => {
         }
 
         // Extract component config logic (shared with processResponse)
-        const firstPageConfig = Object.values(configToUse?.pageConfigs || {})[0]
-        let componentConfig = firstPageConfig
+        // Extract component config logic
+        let componentConfig = null
 
-        if (!componentConfig && configToUse?.navGroups) {
+        // 1. Try to get from pageConfigs
+        if (configToUse?.pageConfigs) {
+            componentConfig = Object.values(configToUse.pageConfigs)[0]
+        }
+        // 2. Try to use as direct Page Config
+        else if (configToUse?.filterArea || configToUse?.tableArea) {
+            componentConfig = configToUse
+        }
+        // 3. Try to get from navGroups
+        else if (configToUse?.navGroups) {
             const navGroups = configToUse.navGroups
             const firstItem = navGroups[0]?.items?.[0]
             const subItem = firstItem?.items?.[0]
@@ -284,6 +293,11 @@ export const useAIStore = defineStore('ai', () => {
 
         if (componentConfig) {
             configStore.setPreviewConfig(componentConfig as any, mode as 'append' | 'override')
+        }
+
+        // Sync Nav Groups for preview if available
+        if (configToUse?.navGroups) {
+            configStore.setPreviewNav(configToUse.navGroups)
         }
     }
 
@@ -298,8 +312,61 @@ export const useAIStore = defineStore('ai', () => {
      * Generate preview configurations for both modes
      * @param config - The raw config from AI
      */
+    /**
+     * Generate preview configurations for both modes
+     * @param config - The raw config from AI
+     */
     function generatePreviewConfigs(config: any) {
         const configStore = useConfigStore()
+        const currentExport = configStore.exportFullConfig()
+
+        // Normalize V9 Root to NavGroups if needed
+        // V9 structure: { title, items: [ { component... } ] } -> needs to be wrapped in NavGroup -> NavMainItem
+        if (!config.navGroups && config.title && Array.isArray(config.items) && config.items[0]?.component) {
+            console.log('⚡ [AIStore] V9 Root detected, wrapping into navGroups')
+            // Try to append to the first existing group to keep UI clean, or use default 'Application'
+            const defaultGroupName = currentExport.navGroups?.[0]?.label || 'Application'
+
+            // Ensure Sub Items have IDs
+            config.items.forEach((item: any, index: number) => {
+                if (!item.id) {
+                    item.id = `page_gen_${Date.now()}_${index}`
+                }
+            })
+
+            // Construct the L1 Navigation Item
+            const navMainItem = {
+                id: config.id || `nav_main_${Date.now()}`,
+                title: config.title,
+                icon: config.icon || 'IconSettings',
+                visible: true,
+                isOpen: config.isOpen !== false,
+                items: config.items // L2 Items (Pages)
+            }
+
+            // Wrap in config object
+            config = {
+                ...config,
+                navGroups: [
+                    {
+                        label: defaultGroupName,
+                        items: [navMainItem]
+                    }
+                ]
+            }
+        }
+
+        // Ensure all items in navGroups have IDs (Sanity Check for all formats)
+        if (config.navGroups) {
+            config.navGroups.forEach((group: any) => {
+                group.items?.forEach((item: any) => {
+                    if (!item.id) item.id = `nav_main_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+                    item.items?.forEach((sub: any) => {
+                        if (!sub.id) sub.id = `nav_sub_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+                    })
+                })
+            })
+        }
 
         // Store the original pending config
         pendingConfig.value = config
@@ -308,7 +375,6 @@ export const useAIStore = defineStore('ai', () => {
         previewOverrideConfig.value = config
 
         // Generate append preview (merge with existing)
-        const currentExport = configStore.exportFullConfig()
         const appendedConfig = mergeConfigs(currentExport, config)
         previewAppendConfig.value = appendedConfig
 
@@ -320,11 +386,19 @@ export const useAIStore = defineStore('ai', () => {
 
         // Trigger live preview in the app
         // Note: AI returns 'pageConfigs' which maps to 'page1Configs' in the store
-        const firstPageConfig = Object.values(previewOverrideConfig.value?.pageConfigs || {})[0]
-        // 也尝试从 navItems 内嵌的 component 中获取
-        let componentConfig = firstPageConfig
+        let componentConfig = null
 
-        if (!componentConfig && previewOverrideConfig.value?.navGroups) {
+        // 1. Try to get from pageConfigs (Standard Full Config)
+        if (previewOverrideConfig.value?.pageConfigs) {
+            componentConfig = Object.values(previewOverrideConfig.value.pageConfigs)[0]
+        }
+        // 2. Try to use the config itself if it looks like a Page Config (Partial/Direct Config)
+        else if (previewOverrideConfig.value?.filterArea || previewOverrideConfig.value?.tableArea) {
+            console.log('⚡ [AIStore] Detected direct Page Config structure')
+            componentConfig = previewOverrideConfig.value
+        }
+        // 3. Try to get from navGroups (Legacy/Nested)
+        else if (previewOverrideConfig.value?.navGroups) {
             const navGroups = previewOverrideConfig.value.navGroups
             const firstItem = navGroups[0]?.items?.[0]
             const subItem = firstItem?.items?.[0]
@@ -335,6 +409,11 @@ export const useAIStore = defineStore('ai', () => {
 
         if (componentConfig) {
             configStore.setPreviewConfig(componentConfig as any, 'override')
+        }
+
+        // Sync Nav Groups for preview if available
+        if (previewOverrideConfig.value?.navGroups) {
+            configStore.setPreviewNav(previewOverrideConfig.value.navGroups)
         }
     }
 

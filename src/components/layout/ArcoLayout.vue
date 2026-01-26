@@ -109,12 +109,15 @@ const handleTeamSelect = (value: any) => {
 // --- 导航过滤 ---
 const filteredNavGroups = computed(() => {
   const team = activeTeam.value
-  const navGroups = pageStore.navGroups.flat()
   
-  // 如果没有导航组数据，直接返回空数组
-  if (!navGroups || navGroups.length === 0) return []
+  // 1. Determine source: Preview vs Store
+  let rawNavGroups = pageStore.navGroups
+  if (configStore.isInPreviewMode && configStore.previewNavGroups) {
+      rawNavGroups = configStore.previewNavGroups
+  }
+  const navGroups = rawNavGroups.flat()
   
-  // 基础过滤辅助函数：过滤掉 visible 为 false 的导航
+  // Helper to filter visible:false items
   const applyVisibleFilter = (groups: NavGroup[]) => {
     return groups.map(group => ({
       ...group,
@@ -122,7 +125,16 @@ const filteredNavGroups = computed(() => {
     })).filter(group => group.items.length > 0)
   }
 
-  // 如果没有团队配置，直接返回所有可见导航
+  // If no data, return empty
+  if (!navGroups || navGroups.length === 0) return []
+
+  // 2. In Preview Mode, showing ALL visible items (Bypass Team Permissions)
+  // This ensures AI generated items (which are not in team permissions yet) are visible.
+  if (configStore.isInPreviewMode) {
+      return applyVisibleFilter(navGroups)
+  }
+  
+  // 3. Normal Mode: Filter by Team Permissions
   if (!team) return applyVisibleFilter(navGroups)
   
   // 检查 permissions 是否为有效的对象格式
@@ -555,9 +567,9 @@ const headerMenuList = computed({
                     v-for="sub in item.items" 
                     :key="sub.id" 
                     class="secondary-nav-item"
-                    @click="handleNavClick(item.title, sub.title, sub.id)"
+                    @click="handleNavClick(item.title, sub.title || sub.name || '', sub.id)"
                   >
-                    {{ sub.title }}
+                    {{ sub.title || sub.name }}
                   </a-menu-item>
                 </a-sub-menu>
                 <a-menu-item v-else :key="item.id" @click="handleNavClick(group.label, item.title, item.id)">
@@ -610,11 +622,11 @@ const headerMenuList = computed({
                         <template #item="{ element: sub }">
                             <div 
                                 class="flex items-center justify-between p-1.5 bg-[var(--color-bg-2)] rounded border border-[var(--color-border-2)] group/sub-edit text-xs cursor-pointer hover:bg-[var(--color-fill-2)] transition-colors"
-                                @click="handleNavClick(item.title, sub.title, sub.id)"
+                                @click="handleNavClick(item.title, sub.title || sub.name || '', sub.id)"
                             >
                                 <div class="flex items-center gap-2 overflow-hidden">
                                     <GripVertical class="w-3 h-3 text-[var(--color-text-4)] cursor-move drag-handle shrink-0" />
-                                    <span class="truncate">{{ sub.title }}</span>
+                                    <span class="truncate">{{ sub.title || sub.name }}</span>
                                 </div>
                                 <div class="flex items-center gap-0.5 opacity-0 group-hover/sub-edit:opacity-100 transition-opacity shrink-0" @click.stop>
                                      <a-button size="mini" type="text" class="!px-1" @click="openEditSubDialog(groupIdx, item.id, sub)">

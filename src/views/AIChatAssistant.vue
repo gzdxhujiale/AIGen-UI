@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAIStore, type PreviewMode } from '@/stores/aiStore'
 import { useConfigStore } from '@/stores/configStore'
+import JsonViewer from 'vue-json-viewer'
+import 'vue-json-viewer/style.css'
 
 const aiStore = useAIStore()
 const configStore = useConfigStore()
@@ -398,18 +400,42 @@ function formatTime(date: Date): string {
                             :class="[message.role === 'user' ? 'user-message' : 'assistant-message', message.status]"
                         >
                             <div class="message-content">
-                                <div class="message-text">
+                                <div class="message-text" v-if="message.content || message.status === 'error'">
                                     <span v-if="message.status === 'error'" class="error-prefix">
                                         <AlertCircle :size="16" class="inline-error-icon"/> 
                                     </span>
                                     {{ message.content }}
                                 </div>
+
+                                <!-- Thinking/Streaming Indicator -->
+                                <div v-if="message.status === 'streaming'" class="streaming-indicator">
+                                    <template v-if="!message.content">
+                                        <Sparkles class="animate-pulse text-violet-500" :size="18" />
+                                        <span class="text-xs text-muted-foreground ml-2">正在思考配置方案...</span>
+                                    </template>
+                                    <template v-else>
+                                        <span class="typing-cursor">▋</span>
+                                    </template>
+                                </div>
                                 
-                                <!-- Retry Action for Errors (Hidden for auto-retry, but kept in DOM just in case? No, removing per request) -->
+                                <!-- JSON Config Viewer -->
+                                <div v-if="message.configData" class="config-viewer mt-3">
+                                    <div class="viewer-header">
+                                        <span class="text-xs font-medium text-muted-foreground">配置详情</span>
+                                    </div>
+                                    <JsonViewer
+                                        :value="message.configData"
+                                        :expand-depth="0"
+                                        boxed
+                                        copyable
+                                        sort
+                                        theme="jv-light"
+                                        class="custom-json-viewer"
+                                    />
+                                </div>
                             </div>
                             <div class="message-meta">
                                 <span class="message-time">{{ formatTime(message.timestamp) }}</span>
-                                <Loader2 v-if="message.status === 'streaming'" :size="14" class="loading-icon" />
                             </div>
                         </div>
                     </div>
@@ -797,6 +823,69 @@ function formatTime(date: Date): string {
 .inline-error-icon {
     display: inline-block;
     vertical-align: sub;
+}
+
+/* Streaming & Thinking Styles */
+.streaming-indicator {
+    display: flex;
+    align-items: center;
+    padding: 8px 0 4px 0;
+    min-height: 24px;
+}
+.typing-cursor {
+    display: inline-block;
+    width: 6px;
+    height: 14px;
+    background-color: currentColor;
+    animation: blink 1s step-end infinite;
+    vertical-align: middle;
+    margin-left: 4px;
+    opacity: 0.7;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* JsonViewer Customizations */
+.config-viewer {
+    background: #ffffff;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.06);
+    margin-top: 12px;
+}
+.dark .config-viewer {
+    background: #1e293b;
+    border-color: rgba(255,255,255,0.1);
+}
+
+.viewer-header {
+    padding: 6px 12px;
+    background: rgba(0,0,0,0.02);
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    display: flex;
+    align-items: center;
+}
+.dark .viewer-header {
+    background: rgba(255,255,255,0.05);
+    border-bottom-color: rgba(255,255,255,0.1);
+}
+
+/* Deep selector to override vue-json-viewer styles if needed */
+:deep(.jv-container) {
+    background: transparent !important;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+:deep(.jv-container .jv-code) {
+    padding: 10px;
+}
+:deep(.jv-container.jv-light) {
+    background: transparent !important;
+    white-space: nowrap;
+    color: #525252;
+}
+:deep(.jv-container.jv-light .jv-key) {
+    color: #404040;
+    font-weight: 600;
 }
 
 .message-actions {

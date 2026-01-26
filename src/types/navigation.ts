@@ -7,6 +7,7 @@ import type { Page1ConfigData } from './page-config'
 export interface NavSubItem {
     id: string
     title: string
+    name?: string // V9 兼容
     url?: string
     badge?: string // 可选徽章
     template?: string // 显式指定的模板名称 (例如: 'Page1', 'Settings')
