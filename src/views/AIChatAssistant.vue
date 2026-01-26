@@ -15,7 +15,6 @@ const configStore = useConfigStore()
 const isOpen = computed(() => aiStore.isOpen)
 const isMinimized = computed(() => aiStore.isMinimized)
 const isLoading = computed(() => aiStore.isLoading)
-const hasMessages = computed(() => aiStore.hasMessages)
 const hasPreviewConfig = computed(() => aiStore.hasPreviewConfig)
 const position = computed(() => aiStore.buttonPosition)
 const messages = computed(() => aiStore.messages)
@@ -314,30 +313,36 @@ function formatTime(date: Date): string {
 
 <template>
     <!-- Floating Button -->
-    <Button
-        class="ai-chat-button"
-        :class="{ 
-            'is-open': isOpen,
-            'is-loading': isLoading,
-            'is-dragging': isDragging,
-            'is-docked': isDocked && !isOpen,
-            'has-pending': hasPreviewConfig && !isOpen
-        }"
+    <!-- Floating Button -->
+    <div 
+        class="fixed z-[2000] touch-none select-none"
         :style="buttonStyle"
-        size="icon"
-        @click="handleButtonClick"
-        @mousedown="handleMouseDown"
-        @touchstart="handleTouchStart"
     >
-        <Loader2 v-if="isLoading && !isOpen" class="ai-icon loading" :size="24" />
-        <Sparkles v-else class="ai-icon" :size="24" />
-        
-        <span 
-            v-if="(hasPreviewConfig || hasMessages) && !isOpen" 
-            class="notification-dot"
-            :class="{ 'pending': hasPreviewConfig }"
-        />
-    </Button>
+        <button
+            class="ai-trigger-btn group"
+            :class="{ 
+                'is-open': isOpen,
+                'is-dragging': isDragging,
+                'is-docked': isDocked && !isOpen,
+                'has-pending': hasPreviewConfig && !isOpen
+            }"
+            @click="handleButtonClick"
+            @mousedown="handleMouseDown"
+            @touchstart="handleTouchStart"
+        >
+            <div class="ai-trigger-content">
+                <XIcon v-if="isOpen" class="w-6 h-6 text-white transition-transform duration-300" />
+                <Loader2 v-else-if="isLoading" class="w-6 h-6 animate-spin text-white" />
+                <Sparkles v-else class="w-6 h-6 text-white group-hover:scale-110 transition-transform duration-300" />
+            </div>
+            
+            <!-- Pulse ring effect when pending -->
+            <span v-if="hasPreviewConfig && !isOpen" class="absolute -top-1 -right-1 flex h-4 w-4">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white"></span>
+            </span>
+        </button>
+    </div>
 
     <!-- Chat Window -->
     <Transition name="slide-up">
@@ -349,18 +354,23 @@ function formatTime(date: Date): string {
         >
             <!-- Header -->
             <div class="chat-header">
-                <div class="header-title">
-                    <Sparkles :size="20" class="header-icon" />
-                    <span>AI 配置助手</span>
-                    <span v-if="isLoading" class="processing-dot" />
+                <div class="header-left">
+                    <div class="header-icon-box">
+                        <Sparkles :size="16" />
+                    </div>
+                    <div class="header-info">
+                        <div class="header-title">AI 助手</div>
+                        <div class="header-subtitle">INTELLIGENT ASSISTANT</div>
+                    </div>
                 </div>
+                
                 <div class="header-actions">
-                    <Button variant="ghost" size="icon" @click="handleClear" :disabled="messages.length === 0" title="清空消息">
-                        <Trash2 :size="18" />
-                    </Button>
-                    <Button variant="ghost" size="icon" @click="handleMinimize" title="最小化">
-                        <Minus :size="18" />
-                    </Button>
+                    <button class="header-action-btn" @click="handleClear" :disabled="messages.length === 0" title="清空消息">
+                        <Trash2 :size="15" />
+                    </button>
+                    <button class="header-action-btn" @click="handleMinimize" title="最小化">
+                        <Minus :size="16" />
+                    </button>
                 </div>
             </div>
 
@@ -507,118 +517,66 @@ function formatTime(date: Date): string {
 
 <style scoped>
 /* --- Button Styles --- */
-.ai-chat-button {
-    position: fixed;
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: rgba(139, 92, 246, 0.4);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15), inset 0 0 20px rgba(255, 255, 255, 0.2);
-    z-index: 1000;
-    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s, border 0.3s;
-    cursor: grab;
+/* --- Trigger Button --- */
+.ai-trigger-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 30px;
+    background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    box-shadow: 
+        0 4px 6px -1px rgba(124, 58, 237, 0.3),
+        0 10px 15px -3px rgba(124, 58, 237, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
     overflow: hidden;
-    touch-action: none;
 }
 
-.ai-chat-button:not(.is-dragging) {
-    transition: left 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), 
-                top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
-                transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), 
-                background 0.3s, border 0.3s;
-}
-
-.ai-chat-button:active { cursor: grabbing; }
-
-.ai-chat-button.is-docked {
-    opacity: 0.6;
-    border-radius: 40px;
-}
-.ai-chat-button.is-docked:hover {
-    opacity: 1;
-    transform: scale(1.05);
-}
-
-.ai-chat-button::after {
+.ai-trigger-btn::before {
     content: '';
     position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, #a78bfa 0%, #6366f1 100%);
-    opacity: 0.8;
-    z-index: -1;
-    transition: opacity 0.3s ease;
-}
-
-.ai-chat-button:not(.is-loading):not(.is-open):not(.is-dragging):not(.is-docked) {
-    animation: float 6s ease-in-out infinite;
-}
-
-.ai-chat-button:hover:not(.is-dragging) {
-    transform: scale(1.05);
-    box-shadow: 0 12px 40px rgba(139, 92, 246, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.4), inset 0 0 30px rgba(255, 255, 255, 0.3);
-}
-.ai-chat-button:hover::after { opacity: 1; }
-
-.ai-chat-button.is-open {
-    background: rgba(15, 23, 42, 0.6);
-    border-color: rgba(255, 255, 255, 0.1);
-    transform: rotate(90deg);
-}
-.ai-chat-button.is-open::after { opacity: 0; }
-.ai-chat-button.is-open:hover {
-    background: rgba(15, 23, 42, 0.8);
-    transform: rotate(90deg) scale(1.05);
-}
-
-.ai-icon {
-    color: white;
-    transition: all 0.4s ease;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-}
-.ai-chat-button.is-open .ai-icon {
-    color: rgba(255, 255, 255, 0.9);
-    transform: rotate(-90deg);
-}
-.ai-icon.loading {
-    animation: spin 1.5s cubic-bezier(0.17, 0.67, 0.83, 0.67) infinite;
-}
-
-.ai-chat-button.is-loading:not(.is-open) {
-    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.5), 0 0 0 2px rgba(139, 92, 246, 0.3);
-}
-
-.notification-dot {
-    position: absolute;
-    top: 14px;
-    right: 14px;
-    width: 10px;
-    height: 10px;
-    background: #ef4444;
-    border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.8);
-    box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
-    z-index: 10;
-}
-.notification-dot.pending {
-    background: #f59e0b;
-    box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
-}
-
-.ai-chat-button::before {
-    content: '';
-    position: absolute;
-    inset: -20px;
-    background: radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%);
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.2), transparent);
     opacity: 0;
-    z-index: -2;
     transition: opacity 0.3s;
-    pointer-events: none;
 }
-.ai-chat-button:not(.is-open):hover::before {
+
+.ai-trigger-btn:hover {
+    transform: scale(1.05) translateY(-2px);
+    box-shadow: 
+        0 10px 25px -5px rgba(124, 58, 237, 0.4),
+        0 8px 10px -6px rgba(124, 58, 237, 0.2);
+}
+.ai-trigger-btn:hover::before {
     opacity: 1;
-    animation: pulse-ring 2s infinite;
+}
+
+.ai-trigger-btn:active {
+    transform: scale(0.95);
+}
+
+.ai-trigger-btn.is-open {
+    transform: rotate(90deg);
+    background: #475569;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.ai-trigger-btn.is-dragging {
+    cursor: grabbing;
+    transition: none;
+    transform: scale(1.02);
+    box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+}
+
+.ai-trigger-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* --- Window Styles --- */
@@ -632,29 +590,29 @@ function formatTime(date: Date): string {
     flex-direction: column;
     z-index: 999;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: #ffffff;
     border-radius: 24px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.2);
+    box-shadow: 
+        0 20px 25px -5px rgba(0, 0, 0, 0.1), 
+        0 8px 10px -6px rgba(0, 0, 0, 0.1),
+        0 0 0 1px rgba(0,0,0,0.05);
     pointer-events: auto;
     transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: bottom right;
 }
 
 :root.dark .ai-chat-window, .dark .ai-chat-window {
-    background: rgba(15, 23, 42, 0.6);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: #1e293b;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .ai-chat-window.is-minimized {
     height: auto;
     max-height: 80px;
-    bottom: 160px;
-    transform-origin: bottom right;
-    background: rgba(255, 255, 255, 0.9);
+    bottom: 160px; /* Adjust based on button pos roughly if needed, or rely on style binding */
+    background: #ffffff;
 }
-.dark .ai-chat-window.is-minimized { background: rgba(30, 41, 59, 0.9); }
+.dark .ai-chat-window.is-minimized { background: #1e293b; }
 
 .minimized-content {
     display: flex;
@@ -666,36 +624,90 @@ function formatTime(date: Date): string {
     color: hsl(var(--foreground));
 }
 
+/* --- Header --- */
 .chat-header {
+    height: 64px;
+    padding: 0 20px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
-    background: transparent; 
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    background: #ffffff;
+    border-bottom: 1px solid #f1f5f9;
+    flex-shrink: 0;
 }
-.dark .chat-header { border-bottom-color: rgba(255, 255, 255, 0.05); }
+.dark .chat-header { 
+    background: #1e293b;
+    border-bottom-color: rgba(255, 255, 255, 0.05);
+}
 
-.header-title {
+.header-left {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-weight: 600;
-    font-size: 1rem;
-    color: hsl(var(--foreground));
-}
-.header-icon {
-    color: #8B5CF6;
-    filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.4));
+    gap: 10px;
 }
 
-.processing-dot {
-    width: 6px;
-    height: 6px;
-    background: #8B5CF6;
-    border-radius: 50%;
-    box-shadow: 0 0 8px #8B5CF6;
-    animation: pulse 1.5s infinite;
+.header-icon-box {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background-color: #f5f3ff; /* violet-100 */
+    color: #7c3aed; /* violet-600 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.dark .header-icon-box {
+    background-color: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+}
+
+.header-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.header-title {
+    font-weight: 700;
+    color: #1e293b;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+.dark .header-title { color: #f8fafc; }
+
+.header-subtitle {
+    font-size: 10px;
+    color: #64748b;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+.dark .header-subtitle { color: #94a3b8; }
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.header-action-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    color: #64748b;
+    transition: all 0.2s;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+.header-action-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+.dark .header-action-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: white;
 }
 
 .content-area {
@@ -704,7 +716,10 @@ function formatTime(date: Date): string {
     min-height: 0;
     display: flex;
     flex-direction: column;
+    background: #ffffff; /* Explicit white background for content */
 }
+.dark .content-area { background: #1e293b; }
+
 .content-area::-webkit-scrollbar { width: 4px; }
 .content-area::-webkit-scrollbar-thumb {
     background: rgba(0, 0, 0, 0.1);
@@ -745,22 +760,23 @@ function formatTime(date: Date): string {
 }
 .suggestion-chip {
     padding: 8px 16px;
-    background: rgba(255, 255, 255, 0.5);
-    border: 1px solid rgba(0, 0, 0, 0.05);
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     border-radius: 20px;
     font-size: 0.8rem;
-    color: hsl(var(--foreground));
+    color: #334155;
     cursor: pointer;
     transition: all 0.2s;
 }
 .dark .suggestion-chip {
     background: rgba(255, 255, 255, 0.05);
     border-color: rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
 }
 .suggestion-chip:hover {
-    background: rgba(139, 92, 246, 0.1);
-    border-color: rgba(139, 92, 246, 0.3);
-    color: #8B5CF6;
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+    color: #7c3aed;
     transform: translateY(-1px);
 }
 
@@ -780,23 +796,27 @@ function formatTime(date: Date): string {
 .assistant-message { align-self: flex-start; }
 
 .message-content {
-    padding: 12px 18px;
-    border-radius: 18px;
+    padding: 10px 14px; /* More compact for chat feel */
+    border-radius: 16px;
     font-size: 0.95rem;
-    line-height: 1.6;
+    line-height: 1.5;
     position: relative;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Softer shadow */
 }
 .user-message .message-content {
-    background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+    background: #8b5cf6; /* Solid violet */
     color: white;
-    border-bottom-right-radius: 4px;
+    border-radius: 16px 16px 4px 16px;
 }
 .assistant-message .message-content {
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    color: hsl(var(--foreground));
-    border-bottom-left-radius: 4px;
+    background: #f1f5f9; /* Slate 100 for contrast on white */
+    border: none;
+    color: #334155; /* Slate 700 */
+    border-radius: 16px 16px 16px 4px;
+}
+.dark .assistant-message .message-content {
+    background: #334155;
+    color: #f1f5f9;
 }
 
 .error-prefix {
