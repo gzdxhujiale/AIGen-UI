@@ -51,12 +51,13 @@ import {
     GripVertical
 } from 'lucide-vue-next'
 import { useConfigStore } from '@/stores/configStore'
-import { type NavMainItem, type NavSubItem } from '@/types'
+import { type NavMainItem, type NavSubItem, type NavGroup } from '@/types'
 import { useConfigPageStore } from '@/stores/config_page_Store'
 import { useConfigTeamStore } from '@/stores/config_team_Store'
 import { useConfigMenuStore } from '@/stores/config_menu_Store'
 import { useAuthStore } from '@/stores/authStore'
 import { useNavigation } from '@/composables/useNavigation'
+import { supabase } from '@/api/supabase'
 import type { TeamItem } from '@/types'
 import AIChatAssistant from '@/views/AIChatAssistant.vue'
 import draggable from 'vuedraggable'
@@ -72,6 +73,17 @@ const { breadcrumbs, currentNavId, setNavigation, setDetailTitle } = useNavigati
 // --- 状态管理 ---
 const collapsed = ref(false)
 const activeTeam = ref<TeamItem | null>(null)
+
+const teamLogoUrl = computed(() => {
+    // 方案 1: 基于用户邮箱或特定条件切换 Logo
+    // 你可以在这里添加更多账号和对应的图标文件名
+    const logoMap: Record<string, string> = {
+        '2063994160@qq.com': 'black.jpeg', 
+    }
+
+    const fileName = logoMap[authStore.userEmail] || 'ai.svg'
+    return supabase.storage.from('team_avatars').getPublicUrl(fileName).data.publicUrl
+})
 
 // --- 团队逻辑 ---
 
@@ -102,39 +114,51 @@ const filteredNavGroups = computed(() => {
   // 如果没有导航组数据，直接返回空数组
   if (!navGroups || navGroups.length === 0) return []
   
-  // 如果没有团队配置，直接返回所有导航
-  if (!team) return navGroups
+  // 基础过滤辅助函数：过滤掉 visible 为 false 的导航
+  const applyVisibleFilter = (groups: NavGroup[]) => {
+    return groups.map(group => ({
+      ...group,
+      items: group.items.filter((item: NavMainItem) => item.visible !== false)
+    })).filter(group => group.items.length > 0)
+  }
+
+  // 如果没有团队配置，直接返回所有可见导航
+  if (!team) return applyVisibleFilter(navGroups)
   
-  // 检查 permissions 是否为有效的对象格式 (防止 Supabase 数据格式异常)
+  // 检查 permissions 是否为有效的对象格式
   const permissions = team.permissions
   if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) {
-    return navGroups
+    return applyVisibleFilter(navGroups)
   }
   
   const { navMain, navItems } = permissions
   
-  // 如果是全部权限且没有细粒度控制，直接返回
-  if (navMain === 'all' && !navItems) return navGroups
+  // 如果是全部权限且没有细粒度控制，返回所有可见导航
+  if (navMain === 'all' && !navItems) return applyVisibleFilter(navGroups)
 
   return navGroups.map(group => {
-    const filteredItems = group.items.filter(item => {
+    const filteredItems = group.items.filter((item: NavMainItem) => {
+      // 基础可见性检查
+      if (item.visible === false) return false
+      
       const isMainVisible = navMain === 'all' || (Array.isArray(navMain) && navMain.includes(item.id))
       if (!isMainVisible) return false
+      
       if (navItems && navItems[item.id]) {
         if (!item.items) return true
         const visibleSubItemIds = navItems[item.id] ?? []
-        return item.items.filter(subItem => visibleSubItemIds.includes(subItem.id)).length > 0
+        return item.items.filter((sub: NavSubItem) => visibleSubItemIds.includes(sub.id)).length > 0
       }
       return true
-    }).map(item => {
+    }).map((item: NavMainItem) => {
         if (navItems && navItems[item.id] && item.items) {
              const visibleSubItemIds = navItems[item.id] ?? []
-             return { ...item, items: item.items.filter(subItem => visibleSubItemIds.includes(subItem.id)) }
+             return { ...item, items: item.items.filter((sub: NavSubItem) => visibleSubItemIds.includes(sub.id)) }
         }
         return item
     })
     return { ...group, items: filteredItems }
-  }).filter(group => group.items.length > 0)
+  }).filter((group: NavGroup) => group.items.length > 0)
 })
 
 // --- 菜单处理 ---
@@ -163,13 +187,6 @@ const initDefaultOpenKeys = () => {
     openKeys.value = keys
 }
 
-// 仅在初始结构就绪时执行一次默认展开
-watch(filteredNavGroups, (newGroups) => {
-    if (!isNavInitialized.value && newGroups.length > 0 && newGroups.some(g => g.items.length > 0)) {
-        initDefaultOpenKeys()
-        isNavInitialized.value = true
-    }
-}, { immediate: true })
 
 const resolveIcon = (icon: any) => {
     if (!icon) return null
@@ -202,6 +219,35 @@ const handleNavClick = (mainNav: string, subNav: string, navId?: string) => {
     setDetailTitle(null)
 }
 
+// 仅在初始结构就绪时执行一次默认展开和默认选中
+watch(filteredNavGroups, (newGroups) => {
+    if (newGroups.length > 0 && newGroups.some(g => g.items.length > 0)) {
+        // 1. 初始化展开状态
+        if (!isNavInitialized.value) {
+            initDefaultOpenKeys()
+            isNavInitialized.value = true
+        }
+
+        // 2. 默认选中逻辑：如果没有选中项，或者当前选中项已不可见
+        const allVisibleSubIds = newGroups.flatMap(g => g.items.flatMap(m => m.items?.map(s => s.id) || []))
+        const isCurrentVisible = currentNavId.value && allVisibleSubIds.includes(currentNavId.value)
+
+        if (!currentNavId.value || (!isCurrentVisible && !['settings', 'profile', 'billing'].includes(currentNavId.value))) {
+            const firstGroup = newGroups[0]
+            const firstMain = firstGroup.items[0]
+            if (firstMain) {
+                const firstSub = firstMain.items?.[0]
+                if (firstSub) {
+                    handleNavClick(firstMain.title, firstSub.title, firstSub.id)
+                } else {
+                    // 如果没有二级菜单，则尝试直接跳转一级（目前 V9 架构通常都有二级）
+                    handleNavClick(firstGroup.label, firstMain.title, firstMain.id)
+                }
+            }
+        }
+    }
+}, { immediate: true })
+
 const handleUserAction = async (value: any) => {
     switch (value) {
         case 'logout': await authStore.signOut(); break
@@ -228,7 +274,8 @@ const editForm = reactive({
     subItemId: '',
     title: '',
     url: '',
-    icon: ''
+    icon: '',
+    visible: true
 })
 
 const openAddMainDialog = (groupIdx: number) => {
@@ -241,6 +288,7 @@ const openAddMainDialog = (groupIdx: number) => {
     editForm.groupIdx = groupIdx
     editForm.title = ''
     editForm.icon = 'IconSettings'
+    editForm.visible = true
     editDialogVisible.value = true
 }
 
@@ -253,6 +301,7 @@ const openEditMainDialog = (groupIdx: number, item: NavMainItem) => {
     editForm.mainItemId = item.id
     editForm.title = item.title
     editForm.icon = typeof item.icon === 'string' ? item.icon : (item.icon?.name || 'IconSettings')
+    editForm.visible = item.visible ?? true
     editDialogVisible.value = true
 }
 
@@ -290,13 +339,15 @@ const handleEditSubmit = () => {
     if (editDialogMode.value === 'add-main') {
         pageStore.addNavMainItem({
             title: editForm.title,
-            icon: editForm.icon
+            icon: editForm.icon,
+            visible: editForm.visible
         })
         Message.success('添加成功')
     } else if (editDialogMode.value === 'edit-main') {
         pageStore.updateNavMainItem(editForm.mainItemId, {
             title: editForm.title,
-            icon: editForm.icon
+            icon: editForm.icon,
+            visible: editForm.visible
         })
         Message.success('更新成功')
     } else if (editDialogMode.value === 'add-sub') {
@@ -440,8 +491,8 @@ const headerMenuList = computed({
         <div class="h-14 flex items-center px-2 border-b border-[var(--color-border-2)] shrink-0">
           <a-dropdown @select="handleTeamSelect" trigger="click" position="br" v-if="!collapsed">
             <div class="flex items-center gap-2 p-2 rounded-lg hover:bg-[var(--color-fill-2)] cursor-pointer transition-colors w-full overflow-hidden">
-                <div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-[rgb(var(--primary-6))] text-white shrink-0">
-                    <component :is="activeTeam?.logo" class="size-4" />
+                <div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-white border border-[var(--color-border-2)] shrink-0 overflow-hidden">
+                    <img :src="teamLogoUrl" class="size-full object-cover" alt="team logo" />
                 </div>
                 <div class="grid flex-1 text-left text-sm leading-tight overflow-hidden">
                     <span class="truncate font-medium text-[var(--color-text-1)]">{{ activeTeam?.name }}</span>
@@ -453,8 +504,7 @@ const headerMenuList = computed({
                 <a-dgroup key="teams_list" title="Teams">
                     <a-doption v-for="team in effectiveTeams" :key="team.name" :value="team.name">
                         <template #icon>
-                          <img v-if="typeof team.logo === 'string'" :src="team.logo" class="size-3.5" alt="team logo" />
-                          <component v-else :is="team.logo" class="size-3.5" />
+                          <img :src="teamLogoUrl" class="size-3.5" alt="team logo" />
                         </template>
                         {{ team.name }}
                     </a-doption>
@@ -466,7 +516,9 @@ const headerMenuList = computed({
             </template>
           </a-dropdown>
           <div v-else class="flex items-center justify-center w-full">
-              <component :is="activeTeam?.logo" class="size-6 text-[rgb(var(--primary-6))]" />
+              <div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-white border border-[var(--color-border-2)] shrink-0 overflow-hidden">
+                  <img :src="teamLogoUrl" class="size-full object-cover" alt="team logo" />
+              </div>
           </div>
         </div>
 
@@ -686,25 +738,25 @@ const headerMenuList = computed({
                     <div id="user-avatar-trigger" class="p-0.5 rounded-full hover:bg-[var(--color-fill-2)] cursor-pointer transition-colors border border-[var(--color-border-2)] flex items-center justify-center">
                         <a-avatar 
                             :size="32" 
-                            :style="{ backgroundColor: 'rgb(var(--primary-6))' }"
-                            class="shadow-sm text-white"
+                            :image-url="authStore.userAvatar"
+                            :style="{ backgroundColor: '#fff' }"
+                            class="shadow-sm font-bold text-[rgb(var(--primary-6))]"
                         >
-                            <img v-if="authStore.userAvatar" :src="authStore.userAvatar" :alt="authStore.userDisplayName" />
-                            <span v-else>{{ authStore.userDisplayName ? authStore.userDisplayName.slice(-1).toUpperCase() : 'U' }}</span>
+                            <span v-if="!authStore.userAvatar">{{ authStore.userDisplayName ? authStore.userDisplayName.slice(-1).toUpperCase() : 'U' }}</span>
                         </a-avatar>
                     </div>
                     <template #content>
                         <div class="py-1 min-w-[150px]">
+                            <a-doption value="profile" class="py-2.5" id="nav-profile">
+                                <template #icon><IconUser class="size-4 opacity-70"/></template>
+                                <span class="ml-1">用户中心</span>
+                            </a-doption>
                             <a-doption value="toggle-edit" class="py-2.5" id="nav-edit-mode">
                                 <template #icon>
                                     <Pencil v-if="!configStore.isEditMode" class="size-4 opacity-70"/>
                                     <Eye v-else class="size-4 opacity-70"/>
                                 </template>
                                 <span class="ml-1">{{ configStore.isEditMode ? '预览模式' : '编辑模式' }}</span>
-                            </a-doption>
-                            <a-doption value="profile" class="py-2.5" id="nav-profile">
-                                <template #icon><IconUser class="size-4 opacity-70"/></template>
-                                <span class="ml-1">用户中心</span>
                             </a-doption>
 
                             <a-doption value="logout" class="text-red-500 py-2.5 font-medium">
@@ -741,6 +793,12 @@ const headerMenuList = computed({
                 <a-select v-model="editForm.icon" placeholder="选择图标">
                     <a-option v-for="icon in iconOptions" :key="icon.value" :value="icon.value">{{ icon.label }}</a-option>
                 </a-select>
+            </a-form-item>
+            <a-form-item v-if="editDialogMode.includes('main')" field="visible" label="菜单可见性">
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="nav-visible" v-model="editForm.visible" class="rounded" />
+                    <label for="nav-visible" class="text-sm">侧边栏可见</label>
+                </div>
             </a-form-item>
             <a-form-item v-if="editDialogMode.includes('sub')" field="url" label="URL (仅展示)">
                  <a-input v-model="editForm.url" placeholder="#" />

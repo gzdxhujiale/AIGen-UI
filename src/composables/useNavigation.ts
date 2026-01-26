@@ -26,15 +26,26 @@ export function setNavGroupsRef(navGroups: NavGroup[]) {
 export function initNavigation(navGroups: NavGroup[]) {
     if (!navGroups || navGroups.length === 0) return
 
-    const firstNavGroup = navGroups[0]
-    const firstMainNav = firstNavGroup?.items[0]
-    const firstSubNav = firstMainNav?.items?.[0]
+    // 找到第一个可见的一级导航
+    let firstMainNav: any = null
+    let firstSubNav: any = null
+
+    for (const group of navGroups) {
+        firstMainNav = group.items.find(item => item.visible !== false)
+        if (firstMainNav) {
+            firstSubNav = firstMainNav.items?.[0]
+            break
+        }
+    }
 
     if (firstMainNav) {
         currentMainNav.value = firstMainNav.title
         if (firstSubNav) {
             currentSubNav.value = firstSubNav.title
             _currentNavId.value = firstSubNav.id
+        } else {
+            // 如果一级菜单没有子项，则使用一级菜单自己的 ID (V9 通常有子项)
+            _currentNavId.value = firstMainNav.id
         }
     }
 }

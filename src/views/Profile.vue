@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, reactive } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 import { 
   Button as AButton, 
@@ -12,9 +12,10 @@ import {
   Grid as AGrid,
   Alert as AAlert,
   Tooltip as ATooltip,
-  Scrollbar as AScrollbar,
   Select as ASelect,
-  Option as AOption
+  Option as AOption,
+  Upload as AUpload,
+  Message
 } from '@arco-design/web-vue'
 import { 
   IconUser, 
@@ -24,7 +25,8 @@ import {
   IconSafe, 
   IconAt,
   IconInfoCircle,
-  IconRefresh
+  IconRefresh,
+  IconCamera
 } from '@arco-design/web-vue/es/icon'
 
 import { useConfigTeamStore } from '@/stores/config_team_Store'
@@ -39,6 +41,7 @@ const isSaving = ref(false)
 // 表单状态
 const form = reactive({
   userName: '',
+  avatarUrl: '',
   teams: [] as any[]
 })
 
@@ -49,6 +52,7 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 // 从 store 初始化表单数据
 const initForm = () => {
   form.userName = authStore.userDisplayName
+  form.avatarUrl = authStore.userAvatar
   form.teams = JSON.parse(JSON.stringify(teamStore.teams))
 }
 
@@ -68,39 +72,33 @@ const autoSave = () => {
   saveTimer = setTimeout(async () => {
     if (!authStore.user) return
 
+    // 检查是否有真正的数据变动，避免无意义的并发请求
+    const isNameChanged = form.userName !== authStore.userDisplayName
+    const isTeamsChanged = JSON.stringify(form.teams) !== JSON.stringify(teamStore.teams)
+    
+    if (!isNameChanged && !isTeamsChanged) return
+
     isSaving.value = true
     try {
       // 1. 更新用户信息（显示名称）
-      // Note: customUserName logic in authStore is legacy and not persisted. 
-      // If we want to support name updates, we should use supabase.auth.updateUser() in a future task.
+      if (isNameChanged) {
+        await authStore.updateUserMetadata({ full_name: form.userName })
+      }
       
       // 2. 更新团队信息
-      teamStore.teams = JSON.parse(JSON.stringify(form.teams))
-      await teamStore.saveTeams()
-      // 这里的 store watcher 会捕获 teams 的变更并自动保存
-      // 但对于深层嵌套对象的修改，显式调用 saveTeams 更加稳健
-
-
+      if (isTeamsChanged) {
+        teamStore.teams = JSON.parse(JSON.stringify(form.teams))
+        await teamStore.saveTeams()
+      }
     } catch (e) {
-      console.error(e)
+      console.error('自动保存失败:', e)
     } finally {
       isSaving.value = false
     }
   }, 1000) // 1 秒防抖
 }
 
-// 监听变化并自动保存
-watch(() => form.teams, () => {
-  autoSave()
-}, { deep: true })
-
-
-// 监听 store 变化
-watch(() => teamStore.teams, (newVal) => {
-    if (newVal && newVal.length > 0 && JSON.stringify(newVal) !== JSON.stringify(form.teams)) {
-        form.teams = JSON.parse(JSON.stringify(newVal))
-    }
-}, { deep: true })
+// 移除这里的 watch 监听，转为使用事件触发
 
 
 
@@ -112,6 +110,7 @@ const addTeam = () => {
     plan: 'free',
     permissions: { navMain: [], projects: [] } 
   })
+  autoSave() // 显式操作立即触发保存（带防抖）
 }
 
 
@@ -119,6 +118,7 @@ const removeTeam = (name: string) => {
   const index = form.teams.findIndex(t => t.name === name)
   if (index !== -1) {
     form.teams.splice(index, 1)
+    autoSave() // 显式操作立即触发保存
   }
 }
 
@@ -129,116 +129,172 @@ const columns = [
   { title: '权限', dataIndex: 'permissions', slotName: 'permissions' },
   { title: '操作', slotName: 'actions', width: 80, align: 'center' }
 ]
+
+// 头像上传处理
+const handleAvatarUpload = async (fileList: any[]) => {
+  const file = fileList[0]?.file
+  if (!file) return
+
+  isSaving.value = true
+  try {
+    const result = await authStore.uploadAvatar(file)
+    if (result.success) {
+      form.avatarUrl = authStore.userAvatar
+      Message.success('头像更新成功')
+    } else {
+      Message.error(result.error || '头像上传失败')
+    }
+  } catch (err) {
+    Message.error('头像上传出错')
+  } finally {
+    isSaving.value = false
+  }
+}
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[var(--color-fill-2)] overflow-hidden">
-    <AScrollbar style="height: 100%; overflow: auto;">
-      <div class="p-4 max-w-[1400px] mx-auto">
-        <ASpace direction="vertical" size="large" fill>
-          
-          <!-- 顶部区域：基本信息 -->
-          <ARow :gutter="24">
-            <!-- 基本信息（全宽） -->
-            <ACol :span="24">
-              <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden h-full">
-                <template #title>
-                  <ASpace>
-                    <icon-user class="text-primary" />
-                    <span class="font-bold">基本信息</span>
-                  </ASpace>
-                </template>
-                
+  <div class="p-4 max-w-[1400px] mx-auto">
+    <ASpace direction="vertical" size="large" fill>
+      
+      <!-- 顶部区域：基本信息 -->
+      <ARow :gutter="24">
+        <ACol :span="24">
+          <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden">
+            <template #title>
+              <ASpace>
+                <IconUser class="text-primary" />
+                <span class="font-bold">基本信息</span>
+              </ASpace>
+            </template>
+            
+            <div class="flex flex-col md:flex-row gap-8 items-start">
+              <!-- 左侧：头像上传 -->
+              <div class="flex flex-col items-center gap-4 shrink-0 px-4">
+                <!-- 统一头像容器：设置固定大小并强制圆角剪裁 -->
+                <div class="relative w-[100px] h-[100px] rounded-full overflow-hidden shadow-md border-2 border-white ring-4 ring-primary/5 group cursor-pointer">
+                  
+                  <!-- 1. 背景占位 (仅当没有头像时显示) -->
+                  <div v-if="!form.avatarUrl" class="absolute inset-0 bg-[var(--color-fill-3)] flex items-center justify-center">
+                    <IconUser class="text-5xl text-[var(--color-text-3)]" />
+                  </div>
+                  
+                  <!-- 2. 头像图片 -->
+                  <img v-if="form.avatarUrl" :src="form.avatarUrl" class="absolute inset-0 w-full h-full object-cover z-0" />
+                  
+                  <!-- 3. 交互遮罩层 -->
+                  <div class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                    <IconCamera class="text-white text-3xl mb-1" />
+                    <span class="text-[10px] text-white font-medium">更换头像</span>
+                  </div>
+
+                  <!-- 4. 真正的上传控制触点 (透明且覆盖最上层) -->
+                  <AUpload
+                    :show-file-list="false"
+                    @change="handleAvatarUpload"
+                    class="absolute inset-0 z-20 opacity-0 w-full h-full"
+                  >
+                    <template #upload-button>
+                      <div class="w-[100px] h-[100px] rounded-full"></div>
+                    </template>
+                  </AUpload>
+                </div>
+
+                <div class="text-center">
+                  <div class="text-sm font-bold text-[var(--color-text-1)]">{{ authStore.userDisplayName }}</div>
+                  <div class="mt-1.5 px-3 py-0.5 bg-[var(--color-primary-light-1)] text-[rgb(var(--primary-6))] text-[10px] font-medium rounded-full border border-[rgb(var(--primary-2))]">账号所有者</div>
+                </div>
+              </div>
+
+              <!-- 右侧：表单 -->
+              <div class="flex-1 w-full pt-2">
                 <AForm :model="form" layout="vertical">
                   <ARow :gutter="24">
                     <ACol :span="24" :lg="12">
                       <AFormItem label="显示名称" help="修改后自动保存">
-                          <AInput v-model="form.userName" placeholder="请输入您的名字">
-                            <template #prefix><icon-edit /></template>
-                          </AInput>
+                        <AInput v-model="form.userName" placeholder="请输入您的名字" size="large" @blur="autoSave">
+                          <template #prefix><IconEdit /></template>
+                        </AInput>
                       </AFormItem>
                     </ACol>
                     
                     <ACol :span="24" :lg="12">
                       <AFormItem label="关联邮箱" disabled>
-                          <AInput :model-value="authStore.userEmail" disabled>
-                            <template #prefix><icon-at /></template>
-                          </AInput>
+                        <AInput :model-value="authStore.userEmail" disabled>
+                          <template #prefix><IconAt /></template>
+                        </AInput>
                         <template #extra>
                           <div class="flex items-center gap-1 mt-1 text-xs opacity-70">
-                            <icon-info-circle /> 邮箱暂不支持修改
+                            <IconInfoCircle /> 邮箱暂不支持修改
                           </div>
                         </template>
                       </AFormItem>
                     </ACol>
                   </ARow>
                 </AForm>
-              </ACard>
-            </ACol>
-          </ARow>
-          
-          <!-- 团队管理 -->
-          <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden">
-            <template #title>
-              <ASpace>
-                <icon-safe class="text-primary" />
-                <span class="font-bold">团队管理</span>
-              </ASpace>
-            </template>
-            <template #extra>
-              <AButton type="primary" size="small" @click="addTeam">
-                <template #icon><icon-plus /></template>
-                新增团队
-              </AButton>
-            </template>
-            
-            <div class="mb-4">
-              <AAlert type="info" show-icon>
-                配置您在各个团队中的角色和操作权限。所有更改将自动保存。
-              </AAlert>
+              </div>
             </div>
-
-            <ATable 
-              :columns="columns" 
-              :data="form.teams" 
-              :pagination="false"
-              :bordered="{ wrapper: true, cell: false }"
-              class="rounded-lg overflow-hidden border-none"
-            >
-
-              <template #name="{ record }">
-                <AInput v-model="record.name" size="small" class="border-transparent hover:border-gray-300" />
-              </template>
-              <template #role="{ record }">
-                <ASelect v-model="record.plan" size="small">
-                  <AOption value="online">在线 (Online)</AOption>
-                  <AOption value="enterprise">企业 (Enterprise)</AOption>
-                  <AOption value="free">免费 (Free)</AOption>
-                </ASelect>
-              </template>
-              <template #permissions>
-                 <div class="text-xs text-gray-500">待办：权限编辑器</div>
-              </template>
-              <template #actions="{ record }">
-                <ATooltip content="删除团队">
-                  <AButton type="text" status="danger" size="small" @click="removeTeam(record.name)">
-                    <template #icon><icon-delete /></template>
-                  </AButton>
-                </ATooltip>
-              </template>
-            </ATable>
           </ACard>
+        </ACol>
+      </ARow>
+      
+      <!-- 团队管理 -->
+      <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden">
+        <template #title>
+          <ASpace>
+            <IconSafe class="text-primary" />
+            <span class="font-bold">团队管理</span>
+          </ASpace>
+        </template>
+        <template #extra>
+          <AButton type="primary" size="small" @click="addTeam">
+            <template #icon><IconPlus /></template>
+            新增团队
+          </AButton>
+        </template>
+        
+        <div class="mb-4">
+          <AAlert type="info" show-icon>
+            配置您在各个团队中的角色和操作权限。所有更改将自动保存。
+          </AAlert>
+        </div>
 
+        <ATable 
+          :columns="columns" 
+          :data="form.teams" 
+          :pagination="false"
+          :bordered="{ wrapper: true, cell: false }"
+          class="rounded-lg overflow-hidden border-none"
+        >
+          <template #name="{ record }">
+            <AInput v-model="record.name" size="small" class="border-transparent hover:border-gray-300" @blur="autoSave" />
+          </template>
+          <template #role="{ record }">
+            <ASelect v-model="record.plan" size="small" @change="autoSave">
+              <AOption value="online">在线 (Online)</AOption>
+              <AOption value="enterprise">企业 (Enterprise)</AOption>
+              <AOption value="free">免费 (Free)</AOption>
+            </ASelect>
+          </template>
+          <template #permissions>
+             <div class="text-xs text-secondary-foreground/60">权限细粒度编辑器 (Beta)</div>
+          </template>
+          <template #actions="{ record }">
+            <ATooltip content="删除团队">
+              <AButton type="text" status="danger" size="small" @click="removeTeam(record.name)">
+                <template #icon><IconDelete /></template>
+              </AButton>
+            </ATooltip>
+          </template>
+        </ATable>
+      </ACard>
 
-          <!-- 底部保存状态提示 -->
-          <div v-if="isSaving" class="fixed bottom-4 right-4 bg-white/80 backdrop-blur shadow-lg border rounded-full px-4 py-2 flex items-center gap-2 text-primary animate-fade-in z-50">
-            <icon-refresh class="animate-spin" />
-            <span class="text-xs font-medium">自动保存中...</span>
-          </div>
-          
-        </ASpace>
+      <!-- 底部保存状态提示 -->
+      <div v-if="isSaving" class="fixed bottom-4 right-4 bg-white/80 backdrop-blur shadow-lg border rounded-full px-4 py-2 flex items-center gap-2 text-primary animate-fade-in z-50">
+        <IconRefresh class="animate-spin" />
+        <span class="text-xs font-medium">自动保存中...</span>
       </div>
-    </AScrollbar>
+      
+    </ASpace>
   </div>
 </template>
 

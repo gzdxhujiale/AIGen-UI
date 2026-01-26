@@ -710,9 +710,29 @@ const actionButtonSpan = computed(() => {
   const cols = pageConfig.value.filterArea.columns
   const count = visibleFilters.value.length
   const remainder = count % cols
+  const buttonsCount = visibleActions.value.length
   
+  // 如果当前行已经满了，直接占满新的一行
   if (remainder === 0) return cols
-  return cols - remainder
+  
+  // 计算剩余可用列数
+  const availableCols = cols - remainder
+  
+  // 估算按钮所需的“栅格列宽”
+  // 一个典型的按钮加间距大约占 100-120px，栅格列宽通常在 200px 以上
+  // 这里的阈值设为：1个栅格列最多放 2 个按钮
+  const estimateNeededCols = Math.ceil(buttonsCount / 2)
+  
+  // 特殊情况：如果按钮超过 4 个，即使剩余 2 列也不建议挤在一起，直接换行
+  const needsWrap = estimateNeededCols > availableCols || (buttonsCount > 4 && availableCols <= 2)
+  
+  // 如果剩余列数不够放按钮，则另起一行并占满全宽
+  if (needsWrap) {
+    return cols
+  }
+  
+  // 否则占据剩余所有列
+  return availableCols
 })
 
 // --- 方法 ---
@@ -945,13 +965,10 @@ const handleEffectModalOk = () => {
               <!-- 融合模式下的操作按钮 -->
               <div 
                   v-if="fusionMode && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false"
-                  class="flex items-end justify-end gap-3"
+                  class="flex items-center justify-end gap-3"
                   :style="{ gridColumn: `span ${actionButtonSpan}` }"
               >
                   <template v-for="(action, index) in visibleActions" :key="action.key">
-                      <!-- 分隔符（在第2个按钮后添加） -->
-                      <div v-if="index === 2" class="w-px h-6 bg-border mx-1"></div>
-                      
                       <!-- 按钮容器 -->
                       <div class="relative group/action">
                         <Button 
@@ -999,9 +1016,6 @@ const handleEffectModalOk = () => {
             >
               <div class="flex items-center gap-3">
                 <template v-for="(action, actionIndex) in visibleActions" :key="action.key">
-                  <!-- 分隔符（在第2个按钮后添加） -->
-                  <div v-if="actionIndex === 2" class="w-px h-6 bg-border mx-1"></div>
-                  
                   <!-- 按钮容器 -->
                   <div class="relative group/action">
                     <Button 

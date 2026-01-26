@@ -241,24 +241,7 @@ function handleSend(content?: string) {
     const textToSend = content || inputValue.value.trim()
     if (!textToSend || isLoading.value) return
     
-    // L1: Add hidden system instruction for JSON format if it looks like a config request
-    let finalContent = textToSend
-    const isConfigRequest = /配置|修改|增加|删除|表格|导航/.test(textToSend)
-    if (isConfigRequest) {
-         finalContent += `\n\n(System Hint: If you are returning a configuration, please ensure it is valid JSON wrapped in \`\`\`json code blocks. Do not include polite phrases outside the JSON.)`
-    }
-    
-    // Pass the original content for UI display, but send finalContent to API logic if we were modifying aiStore to support that distinction.
-    // However, aiStore.sendMessage currently takes one string. 
-    // To avoid showing the system hint to the user, we might need to adjust aiStore or just accept it's hidden in the logic if we could.
-    // Since we can't easily hide it in the UI without changing aiStore structure significantly, 
-    // we will rely on keying off 'role: user' display vs what is sent.
-    // For now, let's just send it as is, or if we want to be cleaner, we modify aiStore.sendMessage to accept (displayContent, apiContent).
-    // Given the constraints, I will minimalistically just append it for now, 
-    // OR BETTER: We can rely on the L2/L3 cleaning in valid cases and only use this for retries.
-    // Let's stick to the prompt engineering in the Retry action specifically, and maybe light hinting here.
-    
-    aiStore.sendMessage(finalContent)
+    aiStore.sendMessage(textToSend)
     if (!content) inputValue.value = ''
 }
 
@@ -493,7 +476,7 @@ function formatTime(date: Date): string {
                             type="text"
                             placeholder="描述您想要的配置修改..."
                             class="input-field"
-                            :disabled="true"
+                            :disabled="false"
                             @keydown="handleKeydown"
                         />
                         <Button 

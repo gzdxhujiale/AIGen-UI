@@ -217,6 +217,71 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     /**
+     * 更新用户 Metadata (如显示名称)
+     */
+    const updateUserMetadata = async (metadata: { full_name?: string, avatar_url?: string }) => {
+        isLoading.value = true
+        error.value = null
+
+        try {
+            const { data, error: updateError } = await supabase.auth.updateUser({
+                data: metadata
+            })
+
+            if (updateError) {
+                error.value = updateError.message
+                return { success: false, error: updateError.message }
+            }
+
+            // 更新成功后，Supabase 返回的数据中包含了最新的用户信息
+            user.value = data.user
+            return { success: true, data }
+        } catch (err: any) {
+            error.value = err.message || '更新用户信息失败'
+            return { success: false, error: error.value }
+        } finally {
+            isLoading.value = false
+        }
+    }
+
+    /**
+     * 上传头像到 Supabase Storage
+     */
+    const uploadAvatar = async (file: File) => {
+        if (!user.value) return { success: false, error: '用户未登录' }
+
+        isLoading.value = true
+        error.value = null
+
+        try {
+            const fileExt = file.name.split('.').pop()
+            // 采用 用户ID/随机名 的结构，利于 RLS 策略管理
+            const filePath = `${user.value.id}/${Math.random()}.${fileExt}`
+
+            // 1. 上传到 avatars bucket
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, file)
+
+            if (uploadError) throw uploadError
+
+            // 2. 获取公开 URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filePath)
+
+            // 3. 更新用户元数据
+            return await updateUserMetadata({ avatar_url: publicUrl })
+        } catch (err: any) {
+            console.error('上传头像失败:', err)
+            error.value = err.message || '上传头像失败'
+            return { success: false, error: error.value }
+        } finally {
+            isLoading.value = false
+        }
+    }
+
+    /**
      * 清理订阅
      */
     const cleanup = () => {
@@ -233,10 +298,6 @@ export const useAuthStore = defineStore('auth', () => {
         isLoading,
         error,
         customUserName,
-        // teamsConfig, // Removed
-        // stylePreference, // Removed
-        // menuConfig, // Removed
-        // Getters
         isAuthenticated,
         userDisplayName,
         userEmail,
@@ -247,9 +308,8 @@ export const useAuthStore = defineStore('auth', () => {
         signUp,
         signOut,
         resetPassword,
-        // updateUserProfile, // Removed
-        // updateMenuConfig, // Removed
-        // fetchUserConfigs, // Removed
+        updateUserMetadata,
+        uploadAvatar,
         cleanup
     }
 })

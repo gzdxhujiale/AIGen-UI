@@ -45,6 +45,7 @@ export interface PageConfigContent {
     title: string            // 一级导航标题
     icon?: string            // 图标
     isOpen?: boolean         // 是否默认展开
+    visible?: boolean        // 是否可见
     items: PageSubItem[]     // 二级导航项列表
 }
 
@@ -64,6 +65,7 @@ const DEFAULT_PAGE_CONFIG_CONTENT: PageConfigContent = {
     title: '默认导航',
     icon: 'IconSettings',
     isOpen: true,
+    visible: true,
     items: []
 }
 
@@ -75,6 +77,7 @@ const DEFAULT_PAGE_CONFIG_RECORD: PageConfigContent = {
     title: '一级测试导航栏',
     icon: 'IconSettings',
     isOpen: true,
+    visible: true,
     items: [
         {
             id: '1',
@@ -179,6 +182,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
             title: record.title,
             icon: record.page_config.icon || 'IconSettings',
             isOpen: record.page_config.isOpen,
+            visible: record.page_config.visible ?? true,
             items: record.page_config.items.map(sub => ({
                 id: sub.id,
                 title: sub.name,
@@ -189,6 +193,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
 
         return [{
             label: 'Application',
+            showLabel: false,
             items: mainItems
         }]
     })
@@ -311,11 +316,12 @@ export const useConfigPageStore = defineStore('config-page', () => {
     /**
      * 创建新的一级导航配置
      */
-    async function createPageConfig(title: string, icon?: string) {
+    async function createPageConfig(title: string, icon?: string, visible: boolean = true) {
         const content: PageConfigContent = {
             ...DEFAULT_PAGE_CONFIG_CONTENT,
             title,
-            icon: icon || 'IconSettings'
+            icon: icon || 'IconSettings',
+            visible
         }
         return await savePageConfig(title, content)
     }
@@ -408,14 +414,14 @@ export const useConfigPageStore = defineStore('config-page', () => {
     /**
      * 添加一级导航 (适配器)
      */
-    async function addNavMainItem(item: { title: string, icon?: string }) {
-        return await createPageConfig(item.title, item.icon)
+    async function addNavMainItem(item: { title: string, icon?: string, visible?: boolean }) {
+        return await createPageConfig(item.title, item.icon, item.visible)
     }
 
     /**
      * 更新一级导航 (适配器)
      */
-    async function updateNavMainItem(oldTitle: string, updates: { title?: string, icon?: string }) {
+    async function updateNavMainItem(oldTitle: string, updates: { title?: string, icon?: string, visible?: boolean }) {
         const record = pageConfigs.value.get(oldTitle)
         if (!record) return { success: false, message: '导航不存在' }
 
@@ -427,11 +433,20 @@ export const useConfigPageStore = defineStore('config-page', () => {
             oldTitle = updates.title
         }
 
-        // 更新图标等其他属性
-        if (updates.icon) {
-            const currentRecord = pageConfigs.value.get(oldTitle)
-            if (currentRecord) {
+        // 更新图标、可见性等其他属性
+        const currentRecord = pageConfigs.value.get(oldTitle)
+        if (currentRecord) {
+            let hasChanges = false
+            if (updates.icon !== undefined && updates.icon !== currentRecord.page_config.icon) {
                 currentRecord.page_config.icon = updates.icon
+                hasChanges = true
+            }
+            if (updates.visible !== undefined && updates.visible !== currentRecord.page_config.visible) {
+                currentRecord.page_config.visible = updates.visible
+                hasChanges = true
+            }
+
+            if (hasChanges) {
                 return await savePageConfig(oldTitle, currentRecord.page_config)
             }
         }

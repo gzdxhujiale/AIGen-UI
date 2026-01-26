@@ -26,6 +26,10 @@ export interface NavMainItem {
      * 一级菜单是否默认展开
      */
     isOpen?: boolean
+    /**
+     * 一级菜单是否可见
+     */
+    visible?: boolean
     items?: NavSubItem[]
 }
 
