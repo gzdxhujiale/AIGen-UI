@@ -124,6 +124,9 @@ export const useConfigPageStore = defineStore('config-page', () => {
     const isLoaded = ref(false)
     const isLoading = ref(false)
 
+    // 预览层 (不会持久化，仅用于 UI 展示)
+    const previewPageConfigs = ref<Map<string, PageConfigRecord>>(new Map())
+
     // 同步状态
     const isSyncing = ref(false)
     const lastSyncTime = ref<Date | null>(null)
@@ -167,29 +170,39 @@ export const useConfigPageStore = defineStore('config-page', () => {
     // ============================================
 
     /**
-     * 获取所有页面配置的数组形式
+     * 获取所有页面配置的数组形式 (合并了预览数据)
      */
-    const pageConfigList = computed(() => Array.from(pageConfigs.value.values()))
+    const pageConfigList = computed(() => {
+        // 创建合并后的 Map
+        const mergedMap = new Map(pageConfigs.value)
 
+        // 覆盖/合并预览数据
+        previewPageConfigs.value.forEach((record, title) => {
+            mergedMap.set(title, record)
+        })
 
+        return Array.from(mergedMap.values())
+    })
 
     /**
      * 适配 layouts 的导航组结构 (将所有一级导航聚合到一个默认组)
      */
     const navGroups = computed<NavGroup[]>(() => {
-        const mainItems: NavMainItem[] = Array.from(pageConfigs.value.values()).map(record => ({
-            id: record.title, // 使用 title 作为 ID
-            title: record.title,
-            icon: record.page_config.icon || 'IconSettings',
-            isOpen: record.page_config.isOpen,
-            visible: record.page_config.visible ?? true,
-            items: record.page_config.items.map(sub => ({
-                id: sub.id,
-                title: sub.name,
-                url: '#', // 默认 URL
-                component: sub.component
+        const mainItems: NavMainItem[] = pageConfigList.value
+            .filter(record => record && record.page_config) // 安全过滤
+            .map(record => ({
+                id: record.title,
+                title: record.title,
+                icon: record.page_config?.icon || 'IconSettings',
+                isOpen: record.page_config?.isOpen,
+                visible: record.page_config?.visible ?? true,
+                items: (record.page_config?.items || []).map(sub => ({
+                    id: sub.id,
+                    title: sub.name,
+                    url: '#',
+                    component: sub.component
+                }))
             }))
-        }))
 
         return [{
             label: 'Application',
@@ -781,6 +794,73 @@ export const useConfigPageStore = defineStore('config-page', () => {
     // ============================================
 
     /**
+     * 设置预览配置 (AI 调用)
+     * 支持单个或批量设置
+     */
+    function setPreviewPageConfig(title: string, record: PageConfigRecord) {
+        previewPageConfigs.value.set(title, record)
+        // Force reactivity update for Ref<Map> if needed, or ensuring dependent computeds re-evaluate
+        // In some Vue versions, .set on a ref(Map) triggers, but to be safe:
+        previewPageConfigs.value = new Map(previewPageConfigs.value)
+    }
+
+    /**
+     * 清空预览配置
+     */
+    function clearPreview() {
+        previewPageConfigs.value.clear()
+    }
+
+    /**
+     * 应用预览配置 (将预览数据写入正式数据并同步)
+     */
+    async function applyPreview() {
+        try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return { success: false, message: '用户未登录' }
+
+            const updates: PageConfigRecord[] = []
+
+            // 1. 更新本地状态
+            previewPageConfigs.value.forEach((record, title) => {
+                // 确保 user_id 正确
+                record.user_id = user.id
+                // 更新正式 Map
+                pageConfigs.value.set(title, record)
+                updates.push(record)
+            })
+
+            // 2. 更新缓存
+            updateCache()
+
+            // 3. 持久化到 Supabase
+            // 注意: 这里的 saveAll 是先删后插，如果只是部分更新，应该用 upsert
+            // 为了安全起见，我们这里使用批量 upsert 逻辑
+            if (updates.length > 0) {
+                const { error } = await supabase
+                    .from('page_configs')
+                    .upsert(updates.map(r => ({
+                        user_id: user.id,
+                        title: r.title,
+                        page_config: r.page_config,
+                        updated_at: new Date().toISOString()
+                    })), { onConflict: 'user_id,title' })
+
+                if (error) throw error
+            }
+
+            // 4. 清空预览
+            clearPreview()
+            lastSyncTime.value = new Date()
+
+            return { success: true }
+        } catch (error: any) {
+            console.error('应用预览配置失败:', error)
+            return { success: false, message: error.message }
+        }
+    }
+
+    /**
      * 批量保存所有页面配置
      */
     async function saveAllPageConfigs(configs: PageConfigRecord[]) {
@@ -946,31 +1026,26 @@ export const useConfigPageStore = defineStore('config-page', () => {
         updateSubPageComponent,
         deleteSubPage,
         reorderSubPages,
-
-        // 筛选区操作
+        // 组件区
         updateFilterArea,
         addFilter,
         updateFilter,
         deleteFilter,
-
-        // 表格区操作
         updateTableArea,
         addTableColumn,
         updateTableColumn,
         deleteTableColumn,
-
-        // 操作区操作
         updateActionsArea,
         addActionButton,
         deleteActionButton,
-
-        // 卡片区操作
         updateCardArea,
         addCard,
         deleteCard,
-
-        // 批量操作
+        // 批量 & Preview
         saveAllPageConfigs,
+        setPreviewPageConfig,
+        clearPreview,
+        applyPreview,
         exportPageConfigs,
 
         // 迁移辅助

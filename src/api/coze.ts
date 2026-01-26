@@ -241,11 +241,8 @@ function extractConfigJson(content: string): any {
                     }
                 })
 
-                // 返回包含 pageConfigs 的对象，保留原始字段以防万一
-                return {
-                    ...parsed,
-                    pageConfigs
-                }
+                // 返回原始对象，不再强制注入 pageConfigs
+                return parsed
             }
         }
         return parsed
@@ -319,20 +316,58 @@ function extractConfigJson(content: string): any {
 
     // 4. 兜底方案：搜索最大的平衡 { ... } 或 [ ... ] 块
     const allJsonCandidates = extractAllBalancedJsons(content)
+
+    // 增加调试日志
+    console.log(`🔍 [CozeAPI] Found ${allJsonCandidates.length} JSON candidates via balanced search`)
+
     for (const candidate of allJsonCandidates) {
-        let parsed = tryParse(candidate)
+        // 尝试修复常见格式问题 (如未闭合的 Markdown 标记)
+        let cleanCandidate = candidate
+        // 如果候选以 { 或 [ 开头之前有 ```json，去除
+        if (cleanCandidate.trim().startsWith('```')) {
+            cleanCandidate = cleanCandidate.replace(/^```json\s*/i, '').replace(/```$/i, '')
+        }
+
+        let parsed = tryParse(cleanCandidate)
         if (parsed && isValidConfig(parsed)) {
-            console.log('✅ [CozeAPI] Found config via balanced bracket search')
+            console.log('✅ [CozeAPI] Found config via balanced bracket search (length: ' + cleanCandidate.length + ')')
             return normalizeConfig(parsed)
         }
     }
 
+    // 5. 最后的尝试：如果只有一个非空的 { } 块，且长度足够大，尝试强制修复
+    if (allJsonCandidates.length > 0) {
+        const largest = allJsonCandidates[0]
+        if (largest.length > 100) { // 假设有效配置至少 100 字符
+            console.log('⚠️ [CozeAPI] Trying force repair on largest candidate')
+            const repaired = jsonrepair(largest)
+            try {
+                const parsed = JSON.parse(repaired)
+                // 放宽校验
+                if (typeof parsed === 'object' && parsed !== null) {
+                    // 只要包含任何一个指标
+                    const str = JSON.stringify(parsed)
+                    if (configIndicators.some(k => str.includes(k))) {
+                        console.log('✅ [CozeAPI] Recovered config via soft validation')
+                        return normalizeConfig(parsed)
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+    }
+
     console.log('❌ [CozeAPI] No valid config found in response')
+    // 打印前 200 个字符以供调试
+    console.log('First 200 chars:', content.substring(0, 200))
+
     return null
 }
 
 /**
  * 尝试从字符串中提取平衡的 JSON 对象或数组
+ * 改进版：更能容忍中间的噪声
  */
 function extractBalancedJson(str: string): string | null {
     const candidates = extractAllBalancedJsons(str)

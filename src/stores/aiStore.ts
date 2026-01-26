@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { streamChat, isCozeConfigured, type ChatMessage } from '@/api/coze'
 import { useConfigStore } from './configStore'
+import { useConfigPageStore } from './config_page_Store'
 import { toast } from 'vue-sonner'
 
 export interface AIMessage extends ChatMessage {
@@ -32,8 +33,8 @@ export const useAIStore = defineStore('ai', () => {
 
     // Preview State - 预览模式状态
     const previewMode = ref<PreviewMode>(null)           // 当前预览模式
-    const previewOverrideConfig = ref<any>(null)         // 覆盖模式预览配置
-    const previewAppendConfig = ref<any>(null)           // 追加模式预览配置
+    // const previewOverrideConfig = ref<any>(null)         // 覆盖模式预览配置 (Deprecated)
+    // const previewAppendConfig = ref<any>(null)           // 追加模式预览配置 (Deprecated)
     const isMinimized = ref(false)                       // 窗口是否最小化
     const changeSummary = ref<ChangeSummary | null>(null) // 变更摘要
 
@@ -48,16 +49,11 @@ export const useAIStore = defineStore('ai', () => {
     const hasPendingConfig = computed(() => pendingConfig.value !== null)
 
     // 是否有预览配置
-    const hasPreviewConfig = computed(() =>
-        previewOverrideConfig.value !== null || previewAppendConfig.value !== null
-    )
+    const hasPreviewConfig = computed(() => pendingConfig.value !== null)
 
-    // 当前选中的预览配置
-    const currentPreviewConfig = computed(() => {
-        if (previewMode.value === 'override') return previewOverrideConfig.value
-        if (previewMode.value === 'append') return previewAppendConfig.value
-        return null
-    })
+    // V9 Refactor: Preview is now handled by configPageStore's merged view
+    // currentPreviewConfig is kept for compatibility but returns null as data is in store
+    const currentPreviewConfig = computed(() => null)
 
     // Actions
 
@@ -253,53 +249,14 @@ export const useAIStore = defineStore('ai', () => {
      */
     function setPreviewMode(mode: PreviewMode) {
         previewMode.value = mode
-
-        // Trigger configStore update
-        const configStore = useConfigStore()
-
-        let configToUse = null
-        if (mode === 'override') {
-            configToUse = previewOverrideConfig.value
-        } else if (mode === 'append') {
-            configToUse = previewAppendConfig.value
-        }
-
+        // V9: We primarily support append mode now. 
+        // If we needed to support override toggling, we would need to re-run generation logic here.
         if (mode === 'initial') {
-            configStore.clearPreviewConfig()
-            return
-        }
-
-        // Extract component config logic (shared with processResponse)
-        // Extract component config logic
-        let componentConfig = null
-
-        // 1. Try to get from pageConfigs
-        if (configToUse?.pageConfigs) {
-            componentConfig = Object.values(configToUse.pageConfigs)[0]
-        }
-        // 2. Try to use as direct Page Config
-        else if (configToUse?.filterArea || configToUse?.tableArea) {
-            componentConfig = configToUse
-        }
-        // 3. Try to get from navGroups
-        else if (configToUse?.navGroups) {
-            const navGroups = configToUse.navGroups
-            const firstItem = navGroups[0]?.items?.[0]
-            const subItem = firstItem?.items?.[0]
-            if (subItem?.component) {
-                componentConfig = subItem.component
-            }
-        }
-
-        if (componentConfig) {
-            configStore.setPreviewConfig(componentConfig as any, mode as 'append' | 'override')
-        }
-
-        // Sync Nav Groups for preview if available
-        if (configToUse?.navGroups) {
-            configStore.setPreviewNav(configToUse.navGroups)
+            clearPreview()
         }
     }
+
+
 
     /**
      * Minimize/restore window
@@ -316,224 +273,148 @@ export const useAIStore = defineStore('ai', () => {
      * Generate preview configurations for both modes
      * @param config - The raw config from AI
      */
+    /**
+     * Generate preview configurations for both modes
+     * V9 Refactor: Focus on Title-based matching
+     * @param config - The raw config from AI
+     */
     function generatePreviewConfigs(config: any) {
-        const configStore = useConfigStore()
-        const currentExport = configStore.exportFullConfig()
+        const configPageStore = useConfigPageStore()
 
-        // Normalize V9 Root to NavGroups if needed
-        // V9 structure: { title, items: [ { component... } ] } -> needs to be wrapped in NavGroup -> NavMainItem
-        if (!config.navGroups && config.title && Array.isArray(config.items) && config.items[0]?.component) {
-            console.log('⚡ [AIStore] V9 Root detected, wrapping into navGroups')
-            // Try to append to the first existing group to keep UI clean, or use default 'Application'
-            const defaultGroupName = currentExport.navGroups?.[0]?.label || 'Application'
+        // 1. Normalize Input: Ensure we have a list of PageConfigRecords
+        let recordsToPreview: any[] = []
 
-            // Ensure Sub Items have IDs (Only if missing)
-            config.items.forEach((item: any, index: number) => {
-                if (!item.id) {
-                    item.id = `page_gen_${Date.now()}_${index}`
-                }
-            })
-
-            // Construct the L1 Navigation Item
-            const navMainItem = {
-                id: config.id || `nav_main_${Date.now()}`,
-                title: config.title,
-                icon: config.icon || 'IconSettings',
-                visible: true,
-                isOpen: config.isOpen !== false,
-                items: config.items // L2 Items (Pages)
-            }
-
-            // Wrap in config object
-            config = {
-                ...config,
-                navGroups: [
-                    {
-                        label: defaultGroupName,
-                        items: [navMainItem]
-                    }
-                ]
-            }
-        }
-
-        // Ensure all items in navGroups have IDs (Sanity Check - Only if REALLY missing)
+        // Case A: AI returns navGroups (V9 Full Structure)
         if (config.navGroups) {
             config.navGroups.forEach((group: any) => {
                 group.items?.forEach((item: any) => {
-                    if (!item.id) item.id = `nav_main_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
-                    item.items?.forEach((sub: any) => {
-                        if (!sub.id) sub.id = `nav_sub_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+                    recordsToPreview.push({
+                        title: item.title || item.id,
+                        page_config: {
+                            title: item.title || item.id,
+                            icon: item.icon || 'IconSettings',
+                            isOpen: item.isOpen !== false,
+                            visible: true,
+                            items: item.items?.map((sub: any) => ({
+                                id: sub.id || `page_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                                name: sub.title || sub.name,
+                                component: sub.component
+                            })) || []
+                        }
                     })
                 })
             })
         }
-
-        // Store the original pending config
-        pendingConfig.value = config
-
-        // Generate override preview (full replacement)
-        previewOverrideConfig.value = config
-
-        // Generate append preview (merge with existing)
-        const appendedConfig = mergeConfigs(currentExport, config)
-        previewAppendConfig.value = appendedConfig
-
-        // Calculate change summary
-        changeSummary.value = calculateChangeSummary(currentExport, config)
-
-        // Default to append mode and set in configStore for live preview
-        previewMode.value = 'append'
-
-        // Trigger live preview in the app
-        // Note: AI returns 'pageConfigs' which maps to 'page1Configs' in the store
-        let componentConfig = null
-
-        // 1. Try to get from pageConfigs (Standard Full Config)
-        if (previewAppendConfig.value?.pageConfigs) {
-            componentConfig = Object.values(previewAppendConfig.value.pageConfigs)[0]
-        }
-        // 2. Try to use the config itself if it looks like a Page Config (Partial/Direct Config)
-        else if (previewAppendConfig.value?.filterArea || previewAppendConfig.value?.tableArea) {
-            console.log('⚡ [AIStore] Detected direct Page Config structure')
-            componentConfig = previewAppendConfig.value
-        }
-        // 3. Try to get from navGroups (Legacy/Nested)
-        else if (previewAppendConfig.value?.navGroups) {
-            const navGroups = previewAppendConfig.value.navGroups
-            const firstItem = navGroups[0]?.items?.[0]
-            const subItem = firstItem?.items?.[0]
-            if (subItem?.component) {
-                componentConfig = subItem.component
-            }
-        }
-
-        if (componentConfig) {
-            configStore.setPreviewConfig(componentConfig as any, 'append')
-        }
-
-        // Sync Nav Groups for preview if available
-        if (previewAppendConfig.value?.navGroups) {
-            configStore.setPreviewNav(previewAppendConfig.value.navGroups)
-        }
-    }
-
-    /**
-     * Helper: Merge configs for append mode
-     */
-    function mergeConfigs(current: any, newConfig: any): any {
-        const merged = JSON.parse(JSON.stringify(current))
-
-        // Merge navGroups
-        if (newConfig.navGroups && Array.isArray(newConfig.navGroups)) {
-            newConfig.navGroups.forEach((newGroup: any) => {
-                const existingGroup = merged.navGroups?.find((g: any) => g.label === newGroup.label)
-                if (existingGroup) {
-                    // Merge items into existing group
-                    newGroup.items?.forEach((newItem: any) => {
-                        const existingItem = existingGroup.items?.find((i: any) => i.id === newItem.id)
-                        if (existingItem) {
-                            // Update existing item
-                            Object.assign(existingItem, newItem)
-                        } else {
-                            // Add new item
-                            existingGroup.items = existingGroup.items || []
-                            existingGroup.items.push(newItem)
-                        }
-                    })
-                } else {
-                    // Add new group
-                    merged.navGroups = merged.navGroups || []
-                    merged.navGroups.push(newGroup)
-                }
-            })
-        }
-
-        // Merge pageConfigs
-        if (newConfig.pageConfigs) {
-            merged.pageConfigs = merged.pageConfigs || {}
-            Object.entries(newConfig.pageConfigs).forEach(([key, value]) => {
-                merged.pageConfigs[key] = value
-            })
-        }
-
-        return merged
-    }
-
-    /**
-     * Helper: Calculate change summary
-     */
-    function calculateChangeSummary(current: any, newConfig: any): ChangeSummary {
-        let addedNavItems = 0
-        let modifiedNavItems = 0
-        let deletedNavItems = 0
-        let addedPageConfigs = 0
-        let modifiedPageConfigs = 0
-
-        // Analyze nav changes
-        const currentNavIds = new Set<string>()
-        current.navGroups?.forEach((g: any) => {
-            g.items?.forEach((item: any) => {
-                currentNavIds.add(item.id)
-                item.items?.forEach((sub: any) => currentNavIds.add(sub.id))
-            })
-        })
-
-        newConfig.navGroups?.forEach((g: any) => {
-            g.items?.forEach((item: any) => {
-                if (currentNavIds.has(item.id)) {
-                    modifiedNavItems++
-                } else {
-                    addedNavItems++
-                }
-                item.items?.forEach((sub: any) => {
-                    if (currentNavIds.has(sub.id)) {
-                        modifiedNavItems++
-                    } else {
-                        addedNavItems++
+        // Case B: AI returns V9 Structure (Items list with Components)
+        // We handle this by splitting items into separate records if they seem to be top-level
+        else if (config.items && Array.isArray(config.items)) {
+            console.log('[AIStore] Processing Case B (Items List)')
+            config.items.forEach((item: any) => {
+                recordsToPreview.push({
+                    title: item.title || item.id,
+                    page_config: {
+                        title: item.title || item.id,
+                        icon: item.icon || 'IconSettings',
+                        isOpen: item.isOpen !== false,
+                        items: item.items?.map((sub: any) => ({
+                            id: sub.id,
+                            name: sub.title || sub.name,
+                            component: sub.component || (config.pageConfigs ? config.pageConfigs[sub.id] : null)
+                        })) || []
                     }
                 })
             })
-        })
+        }
+        // Case C: AI returns a single Page Config (legacy root usually) - Only if title is present and distinct from items list logic
+        // (Note: The above Case B might consume titled configs too if we are not careful. 
+        //  If config has a title AND items, do we treat it as a Group (Case C) or List of Roots (Case B)?
+        //  V9 usually implies the root is just a container. Let's assume Case B fits V9 better.)
+        else if (config.title && config.items) {
+            // This branch might now be unreachable if Case B catches it first. 
+            // That's actually OK for V9, as we prefer splitting. 
+            // But for legacy "System" -> "Page" updates, we might want Case C.
+            // Let's refine Case B condition ?? 
+            // No, let's keep Case B as primary for "items" presence.
+            recordsToPreview.push({
+                title: config.title,
+                page_config: config
+            })
+        }
 
-        // Analyze page config changes
-        const currentPageIds = new Set(Object.keys(current.pageConfigs || {}))
-        Object.keys(newConfig.pageConfigs || {}).forEach(key => {
-            if (currentPageIds.has(key)) {
-                modifiedPageConfigs++
+        if (recordsToPreview.length === 0) {
+            console.warn('AI returned unrecognized config structure', config)
+            return
+        }
+
+        // 2. Generate Append Preview (Merge by Title)
+        // Clear previous preview first
+        configPageStore.clearPreview()
+
+        recordsToPreview.forEach(newRecord => {
+            const existingRecord = configPageStore.getPageConfigByTitle(newRecord.title)
+
+            if (existingRecord) {
+                // Merge Logic:
+                // 1. Keep ID and UserID from existing
+                // 2. Merge page_config content
+                const mergedRecord = JSON.parse(JSON.stringify(existingRecord))
+
+                // Merge items (Pages)
+                if (newRecord.page_config.items) {
+                    newRecord.page_config.items.forEach((newItem: any) => {
+                        const existingItemIndex = mergedRecord.page_config.items.findIndex((i: any) => i.name === newItem.name || i.id === newItem.id)
+                        if (existingItemIndex > -1) {
+                            // Update existing page
+                            mergedRecord.page_config.items[existingItemIndex] = {
+                                ...mergedRecord.page_config.items[existingItemIndex],
+                                ...newItem
+                            }
+                        } else {
+                            // Add new page
+                            mergedRecord.page_config.items.push(newItem)
+                        }
+                    })
+                }
+
+                // Set to preview store
+                configPageStore.setPreviewPageConfig(newRecord.title, mergedRecord)
             } else {
-                addedPageConfigs++
+                // New Level 1 Navigation -> Just add it
+                configPageStore.setPreviewPageConfig(newRecord.title, newRecord)
             }
         })
 
-        return {
-            addedNavItems,
-            modifiedNavItems,
-            deletedNavItems,
-            addedPageConfigs,
-            modifiedPageConfigs
+        // Set local state for UI controls
+        previewMode.value = 'append'
+        pendingConfig.value = config // Store raw for reference
+        changeSummary.value = {
+            // Simplified summary calculation
+            addedNavItems: recordsToPreview.filter(r => !configPageStore.getPageConfigByTitle(r.title)).length,
+            modifiedNavItems: recordsToPreview.filter(r => configPageStore.getPageConfigByTitle(r.title)).length,
+            deletedNavItems: 0,
+            addedPageConfigs: 0,
+            modifiedPageConfigs: 0
         }
     }
+
+    /**
+     * Helper: Merge configs for append mode (Deprecated/Unused)
+     */
+    // function mergeConfigs(current: any, newConfig: any): any { ... }
+
+
 
     /**
      * Confirm and apply the current preview configuration
      */
     async function confirmPreview() {
-        const configToApply = currentPreviewConfig.value
-        if (!configToApply) {
-            toast.error('没有可应用的配置')
-            return
-        }
-
-        const configStore = useConfigStore()
+        const configPageStore = useConfigPageStore()
 
         try {
-            // Import the config
-            const result = configStore.importFullConfig(configToApply)
+            // Apply the preview
+            const result = await configPageStore.applyPreview()
 
             if (result.success) {
-                // Sync to cloud
-                await configStore.saveToSupabase()
-
                 // Add confirmation message
                 const modeLabel = previewMode.value === 'override' ? '覆盖' : '追加'
                 const confirmMessage: AIMessage = {
@@ -582,13 +463,11 @@ export const useAIStore = defineStore('ai', () => {
     function clearPreview() {
         pendingConfig.value = null
         previewMode.value = null
-        previewOverrideConfig.value = null
-        previewAppendConfig.value = null
         changeSummary.value = null
 
         // Also clear configStore preview
-        const configStore = useConfigStore()
-        configStore.clearPreviewConfig()
+        const configPageStore = useConfigPageStore()
+        configPageStore.clearPreview()
     }
 
     function setButtonPosition(x: number, y: number) {
@@ -605,8 +484,8 @@ export const useAIStore = defineStore('ai', () => {
         buttonPosition,
         // Preview State
         previewMode,
-        previewOverrideConfig,
-        previewAppendConfig,
+        // previewOverrideConfig,
+        // previewAppendConfig,
         isMinimized,
         changeSummary,
         // Getters

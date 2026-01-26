@@ -56,6 +56,7 @@ import { useConfigPageStore } from '@/stores/config_page_Store'
 import { useConfigTeamStore } from '@/stores/config_team_Store'
 import { useConfigMenuStore } from '@/stores/config_menu_Store'
 import { useAuthStore } from '@/stores/authStore'
+import { useAIStore } from '@/stores/aiStore'
 import { useNavigation } from '@/composables/useNavigation'
 import { supabase } from '@/api/supabase'
 import type { TeamItem } from '@/types'
@@ -135,6 +136,12 @@ const filteredNavGroups = computed(() => {
   }
   
   // 3. Normal Mode: Filter by Team Permissions
+  // Exception: If AI Preview Mode is active (V9), show all
+  const aiStore = useAIStore()
+  if (aiStore.previewMode) {
+      return applyVisibleFilter(navGroups)
+  }
+
   if (!team) return applyVisibleFilter(navGroups)
   
   // 检查 permissions 是否为有效的对象格式

@@ -2,7 +2,7 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm } from '@arco-design/web-vue'
-import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
+import { Pencil, Plus, Trash2, File } from 'lucide-vue-next'
 import { safeJsonParseWithError } from '@/utils/error'
 import { generateMockValue, evaluateConditionalValue } from '@/utils/mock-data'
 import {
@@ -1254,7 +1254,7 @@ const handleEffectModalOk = () => {
 
     <!-- 无配置时显示占位 -->
     <div v-else class="flex flex-col items-center justify-center h-full text-muted-foreground space-y-2">
-        <IconFile class="w-12 h-12 opacity-20" />
+        <File class="w-12 h-12 opacity-20" />
         <span class="text-xs">暂无页面配置</span>
         <span v-if="configStore.isInPreviewMode" class="text-[10px] opacity-50">Current ID: {{ currentNavId }}</span>
     </div>
