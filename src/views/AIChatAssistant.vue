@@ -493,7 +493,7 @@ function formatTime(date: Date): string {
                             type="text"
                             placeholder="描述您想要的配置修改..."
                             class="input-field"
-                            :disabled="isLoading"
+                            :disabled="true"
                             @keydown="handleKeydown"
                         />
                         <Button 
