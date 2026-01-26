@@ -37,9 +37,11 @@ export const useAuthStore = defineStore('auth', () => {
 
     const userAvatar = computed(() => {
         if (!user.value) return ''
-        return user.value.user_metadata?.avatar_url ||
-            user.value.user_metadata?.picture ||
-            ''
+        const metaAvatar = user.value.user_metadata?.avatar_url || user.value.user_metadata?.picture
+        if (metaAvatar) return metaAvatar
+
+        // 默认回退到 avatars 桶下的 ai.svg
+        return supabase.storage.from('avatars').getPublicUrl('ai.svg').data.publicUrl
     })
 
 

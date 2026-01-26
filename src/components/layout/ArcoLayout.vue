@@ -741,9 +741,7 @@ const headerMenuList = computed({
                             :image-url="authStore.userAvatar"
                             :style="{ backgroundColor: '#fff' }"
                             class="shadow-sm font-bold text-[rgb(var(--primary-6))]"
-                        >
-                            <span v-if="!authStore.userAvatar">{{ authStore.userDisplayName ? authStore.userDisplayName.slice(-1).toUpperCase() : 'U' }}</span>
-                        </a-avatar>
+                        />
                     </div>
                     <template #content>
                         <div class="py-1 min-w-[150px]">
