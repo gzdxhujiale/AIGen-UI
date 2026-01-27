@@ -1,1061 +1,266 @@
 <script setup lang="ts">
-import { ref, computed, reactive, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm } from '@arco-design/web-vue'
 import { Pencil, Plus, Trash2, File } from 'lucide-vue-next'
 import { safeJsonParseWithError } from '@/utils/error'
 import { generateMockValue, evaluateConditionalValue } from '@/utils/mock-data'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { FilterInput, FilterSelect, FilterDateRange, FilterTreeSelect, FilterCard, ArcoTable } from '@/components/ui/filter'
 import ConfigForm from '@/views/ConfigForm.vue'
 import { useNavigation } from '@/composables/useNavigation'
 import { useConfigStore } from '@/stores/configStore'
-import type { Page1Config, FilterConfig, TableColumn, ActionButtonConfig, CardItemConfig } from '@/types'
+import type { Page1Config } from '@/types'
 import { useConfigPageStore } from '@/stores/config_page_Store'
 import { useConfigCrud } from '@/composables/useConfigCrud'
 
-// --- Props ---
-const props = defineProps<{
-  navId?: string
-  visibleSections?: ('filter' | 'actions' | 'card' | 'table')[]
-}>()
-
-// --- 获取导航状态 ---
+// --- Props & Route ---
+const props = defineProps<{ navId?: string; visibleSections?: ('filter' | 'actions' | 'card' | 'table')[] }>()
 const { currentNavId: routeNavId } = useNavigation()
-
-// 优先使用传入的 prop，否则使用路由中的 navId
 const currentNavId = computed(() => props.navId || routeNavId.value)
 
-// Helper: Check if a section should be visible
-const isSectionVisible = (section: 'filter' | 'actions' | 'card' | 'table') => {
-  if (props.visibleSections) {
-    return props.visibleSections.includes(section)
-  }
-  return true
-}
-
-// --- 使用 Pinia store ---
-const configStore = useConfigStore()  // 仅用于 isEditMode 和 filterActionFusion
+// --- Stores ---
+const configStore = useConfigStore()
 const pageStore = useConfigPageStore()
-
-// 编辑模式状态
 const isEditMode = computed(() => configStore.isEditMode)
-
-// --- 获取当前 subId 所属的一级导航标题 ---
 const currentNavTitle = computed(() => pageStore.findNavTitleBySubId(currentNavId.value))
 
-// --- 获取当前页面配置  ---
-const pageConfig = computed<Page1Config | undefined>(() => {
-  const navId = currentNavId.value
+// --- UI State Management ---
+const uiState = reactive({
+  tableData: [] as any[],
+  currentPage: 1,
+  filters: {} as Record<string, any>,
+  // Modals
+  effect: { visible: false, title: '', content: '', formItems: [] as any[], data: {} as Record<string, any> },
+  table: { visible: false, title: '', columns: [] as any[], data: [] as any[], showCheckbox: false },
+  area: { visible: false, type: 'filter' as 'filter' | 'card' | 'table' | 'column' | 'action', config: {} as any },
+  // Drag & Drop
+  drag: { index: -1, overIndex: -1 }
+})
 
-  // 1. 尝试从 pageStore 获取（已包含预览逻辑）
+const pageConfig = computed<Page1Config | undefined>(() => {
   const navTitle = currentNavTitle.value
   if (navTitle) {
-      const subItem = pageStore.getSubPageConfig(navTitle, navId)
-      if (subItem?.component) {
-        return {
-          ...subItem.component,
-          mockData: () => []  // 不存储 mockData
-        } as Page1Config
-      }
+    const subItem = pageStore.getSubPageConfig(navTitle, currentNavId.value)
+    if (subItem?.component) return { ...subItem.component, mockData: () => [] } as Page1Config
   }
-
-  // 2. 兜底逻辑：处理非 V9 或单页预览
-  if (configStore.isInPreviewMode && configStore.previewConfig) {
-      return configStore.previewConfig
-  }
-
-  return undefined
+  return (configStore.isInPreviewMode ? configStore.previewConfig : undefined) ?? undefined
 })
 
-// --- 响应式数据 ---
-const tableData = ref<any[]>([])
-
-// 分页
-const currentPage = ref(1)
-const pageSize = computed(() => pageConfig.value?.tableArea.pageSize || 15)
-
-// 顶部栏状态
-const currentApp = ref(pageConfig.value?.topBar?.appOptions?.[0] ?? '')
-const currentLang = ref(pageConfig.value?.topBar?.langOptions?.[0] ?? '')
-
-// 从配置自动生成筛选状态
-const filters = reactive<Record<string, any>>({})
-
-// 弹窗状态
-const effectModalVisible = ref(false)
-const effectModalTitle = ref('')
-const effectModalContent = ref('')
-const effectModalFormItems = ref<any[]>([])
-const effectModalFormData = reactive<Record<string, any>>({})
- 
-// 列表弹窗状态 (Effect Type: table)
-const effectTableVisible = ref(false)
-const effectTableTitle = ref('')
-const effectTableColumns = ref<any[]>([])
-const effectTableData = ref<any[]>([])
-const effectTableShowCheckbox = ref(false)
-
-// ============================================
-// 编辑模式 - useConfigCrud 集成
-// ============================================
-const editDialogType = ref<'filter' | 'column' | 'action' | 'card'>('filter')
-
-// Transform 函数：将 Store 数据转换为表单格式
-const transformFilter = (item: any) => ({
-  ...item,
-  placeholder: item.placeholder || '',
-  options: item.options?.join(',') || '',
-  treeOptions: item.treeOptions ? JSON.stringify(item.treeOptions) : '',
-  visible: item.visible ?? true
-})
-
-const transformColumn = (item: any) => ({
-  ...item,
-  type: item.type || 'text',
-  width: item.width || '120px',
-  mockFormat: item.mockFormat || 'text',
-  mockList: item.mockList ? item.mockList.join(',') : '',
-  conditionRules: item.conditionRules ? JSON.stringify(item.conditionRules) : '',
-  buttons: item.buttons ? item.buttons.join(',') : '',
-  visible: item.visible ?? true,
-  fixed: item.fixed || 'none',
-  align: item.align || 'left',
-  ellipsis: item.ellipsis || false,
-  tooltip: item.tooltip || false
-})
-
-const transformAction = (item: any) => ({
-  ...item,
-  className: item.className || '',
-  variant: item.variant || 'outline',
-  effectType: item.effectType || 'none',
-  effectTitle: item.effectConfig?.title || '',
-  effectContent: item.effectConfig?.content || '',
-  effectFormItems: item.effectConfig?.formItems || [],
-  effectTableColumns: (item.effectConfig?.tableArea?.columns || []).map((col: any) => ({
-    ...col,
-    mockListStr: Array.isArray(col.mockList) ? col.mockList.join(',') : String(col.mockList || ''),
-    conditionRulesJson: col.conditionRules ? JSON.stringify(col.conditionRules) : '[]'
-  })),
-  visible: item.visible ?? true
-})
-
-const transformCard = (item: any) => ({
-  ...item,
-  data: String(item.data)
-})
-
-// Filter CRUD
-const filterCrud = useConfigCrud({
-  name: '筛选项',
-  defaultForm: () => ({
-    key: '', type: 'input' as const, label: '', placeholder: '',
-    options: '', treeOptions: '', visible: true
-  }),
-  doSave: async (modifying, index, form) => {
-    const navTitle = currentNavTitle.value
-    const subId = currentNavId.value
-    if (!navTitle) {
-      Message.error('无法找到当前页面所属的导航')
-      return
-    }
-    const newFilter: FilterConfig = {
-      key: form.key || `filter_${Date.now()}`,
-      type: form.type,
-      label: form.label,
-      placeholder: form.placeholder || undefined,
-      visible: form.visible,
-      options: form.options ? form.options.split(/[，,]/).map((s: string) => s.trim()).filter((s: string) => s) : [],
-      treeOptions: form.treeOptions ? safeJsonParseWithError(form.treeOptions, '树形数据') ?? undefined : undefined
-    }
-    
-    // V9: 获取当前组件配置，更新后整体保存
-    const subItem = pageStore.getSubPageConfig(navTitle, subId)
-    const component = subItem?.component
-    if (!component) {
-      Message.error('页面配置不存在')
-      return
-    }
-    
-    if (modifying && index !== null) {
-      component.filterArea.filters[index] = newFilter
-    } else {
-      component.filterArea.filters.push(newFilter)
-    }
-    
-    const result = await pageStore.updateSubPageComponent(navTitle, subId, component)
-    if (!result.success) {
-      Message.error('保存失败: ' + result.message)
-    }
+// --- Mock Data Engine ---
+const mockHelper = {
+  generate(config: Page1Config | any[], rowCount = 20) {
+    const cols = Array.isArray(config) ? config : (config as Page1Config).tableArea.columns
+    if (!cols?.length) return []
+    const normal = cols.filter((c: any) => (c.mockFormat || 'none') !== 'conditional')
+    const conditional = cols.filter((c: any) => c.mockFormat === 'conditional')
+    return Array.from({ length: rowCount }, (_, i) => {
+      const row: any = { id: i + 1 }
+      normal.forEach((c: any) => row[c.key] = generateMockValue(c, i))
+      conditional.forEach((c: any) => row[c.key] = c.conditionRules ? evaluateConditionalValue(row, c.conditionRules) : '')
+      return row
+    })
   },
-  doDelete: async (index) => {
-    const navTitle = currentNavTitle.value
-    const subId = currentNavId.value
-    if (!navTitle) return
-    
-    const subItem = pageStore.getSubPageConfig(navTitle, subId)
-    const component = subItem?.component
-    if (!component) return
-    
-    component.filterArea.filters.splice(index, 1)
-    await pageStore.updateSubPageComponent(navTitle, subId, component)
-  }
-})
-
-// Column CRUD
-const columnCrud = useConfigCrud({
-  name: '表格列',
-  defaultForm: () => ({
-    key: '', label: '', width: '120px',
-    type: 'text' as const, mockFormat: 'none' as const, mockList: '', conditionRules: '', buttons: '',
-    fixed: 'none' as const, align: 'left' as const, ellipsis: false, tooltip: false, visible: true
-  }),
-  doSave: async (modifying, index, form) => {
-    const navTitle = currentNavTitle.value
-    const subId = currentNavId.value
-    if (!navTitle) {
-      Message.error('无法找到当前页面所属的导航')
-      return
-    }
-    const newColumn: TableColumn = {
-      key: form.key || `col_${Date.now()}`,
-      label: form.label,
-      width: form.width,
-      type: form.type === 'text' ? undefined : form.type,
-      visible: form.visible,
-      mockFormat: (form.mockFormat as string) === 'none' ? undefined : form.mockFormat as 'text' | 'datetime' | 'number' | 'list' | 'list-order' | 'conditional' | undefined,
-      mockList: ((form.mockFormat as string) === 'list' || (form.mockFormat as string) === 'list-order') ? form.mockList.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined,
-      conditionRules: (form.mockFormat as string) === 'conditional' && form.conditionRules ? safeJsonParseWithError(form.conditionRules, '条件格式规则') ?? undefined : undefined,
-      buttons: (form.type as string) === 'text-button' && form.buttons ? form.buttons.split(/[，,]/).map((s: string) => s.trim()).filter((s: string) => s) : undefined,
-      fixed: form.fixed === 'none' ? undefined : form.fixed,
-      align: form.align === 'left' ? undefined : form.align,
-      ellipsis: form.ellipsis || undefined,
-      tooltip: form.tooltip || undefined
-    }
-    
-    const subItem = pageStore.getSubPageConfig(navTitle, subId)
-    const component = subItem?.component
-    if (!component) {
-      Message.error('页面配置不存在')
-      return
-    }
-    
-    if (modifying && index !== null) {
-      component.tableArea.columns[index] = newColumn
-    } else {
-      component.tableArea.columns.push(newColumn)
-    }
-    
-    const result = await pageStore.updateSubPageComponent(navTitle, subId, component)
-    if (!result.success) {
-      Message.error('保存失败: ' + result.message)
-    }
-  },
-  doDelete: async (index) => {
-    const navTitle = currentNavTitle.value
-    const subId = currentNavId.value
-    if (!navTitle) return
-    
-    const subItem = pageStore.getSubPageConfig(navTitle, subId)
-    const component = subItem?.component
-    if (!component) return
-    
-    component.tableArea.columns.splice(index, 1)
-    await pageStore.updateSubPageComponent(navTitle, subId, component)
-  }
-})
-
-// Action CRUD
-const actionCrud = useConfigCrud({
-  name: '操作按钮',
-  defaultForm: () => ({
-    key: '', label: '', variant: 'outline' as const, className: '',
-    effectType: 'none' as const, effectTitle: '', effectContent: '', effectFormItems: [] as any[], 
-    effectTableColumns: [] as any[], visible: true
-  }),
-  doSave: async (modifying, index, form) => {
-    const navTitle = currentNavTitle.value
-    const subId = currentNavId.value
-    if (!navTitle) {
-      Message.error('无法找到当前页面所属的导航')
-      return
-    }
-    
-    const subItem = pageStore.getSubPageConfig(navTitle, subId)
-    const component = subItem?.component
-    if (!component) {
-      Message.error('页面配置不存在')
-      return
-    }
-    
-    if (!component.actionsArea) component.actionsArea = { buttons: [] }
-    if (!component.actionsArea.buttons) component.actionsArea.buttons = []
-    
-    const newAction: ActionButtonConfig = {
-      key: form.key || `action_${Date.now()}`,
-      label: form.label,
-      variant: form.variant,
-      className: form.className || undefined,
-      visible: form.visible,
-      effectType: (form.effectType as string) === 'none' ? undefined : form.effectType,
-      effectConfig: (form.effectType as string) === 'modal' ? {
-        title: form.effectTitle, content: form.effectContent, formItems: form.effectFormItems
-      } : (form.effectType as string) === 'table' ? {
-        title: form.effectTitle, 
-        tableArea: { columns: form.effectTableColumns },
-        targetNavId: (form as any).effectConfig?.targetNavId
-      } : undefined
-    }
-    
-    if (modifying && index !== null) {
-      component.actionsArea.buttons[index] = newAction
-    } else {
-      component.actionsArea.buttons.push(newAction)
-    }
-    component.actionsArea.show = true
-    
-    const result = await pageStore.updateSubPageComponent(navTitle, subId, component)
-    if (!result.success) {
-      Message.error('保存失败: ' + result.message)
-    }
-  },
-  doDelete: async (index) => {
-    const navTitle = currentNavTitle.value
-    const subId = currentNavId.value
-    if (!navTitle) return
-    
-    const subItem = pageStore.getSubPageConfig(navTitle, subId)
-    const component = subItem?.component
-    if (!component?.actionsArea?.buttons) return
-    
-    component.actionsArea.buttons.splice(index, 1)
-    await pageStore.updateSubPageComponent(navTitle, subId, component)
-  }
-})
-
-// Card CRUD
-const cardCrud = useConfigCrud({
-  name: '卡片',
-  defaultForm: () => ({ key: '', title: '', data: '' }),
-  doSave: async (modifying, index, form) => {
-    const navTitle = currentNavTitle.value
-    const subId = currentNavId.value
-    if (!navTitle) {
-      Message.error('无法找到当前页面所属的导航')
-      return
-    }
-    
-    const subItem = pageStore.getSubPageConfig(navTitle, subId)
-    const component = subItem?.component
-    if (!component) {
-      Message.error('页面配置不存在')
-      return
-    }
-    
-    if (!component.cardArea) component.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
-    if (!component.cardArea.cards) component.cardArea.cards = []
-    
-    const newCard: CardItemConfig = {
-      key: form.key || `card_${Date.now()}`,
-      title: form.title,
-      data: form.data
-    }
-    
-    if (modifying && index !== null) {
-      component.cardArea.cards[index] = newCard
-    } else {
-      component.cardArea.cards.push(newCard)
-    }
-    
-    const result = await pageStore.updateSubPageComponent(navTitle, subId, component)
-    if (!result.success) {
-      Message.error('保存失败: ' + result.message)
-    }
-  },
-  doDelete: async (index) => {
-    const navTitle = currentNavTitle.value
-    const subId = currentNavId.value
-    if (!navTitle) return
-    
-    const subItem = pageStore.getSubPageConfig(navTitle, subId)
-    const component = subItem?.component
-    if (!component?.cardArea?.cards) return
-    
-    component.cardArea.cards.splice(index, 1)
-    await pageStore.updateSubPageComponent(navTitle, subId, component)
-  }
-})
-
-// 当前激活的 CRUD 实例（用于弹窗绑定）
-const currentCrud = computed(() => {
-  switch (editDialogType.value) {
-    case 'filter': return filterCrud
-    case 'column': return columnCrud
-    case 'action': return actionCrud
-    case 'card': return cardCrud
-  }
-})
-
-// Fix: Vue template does not auto-unwrap nested refs in plain objects (filterCrud.formData).
-// We must use top-level aliases for v-model to work correctly in ConfigForm.
-const filterEditForm = filterCrud.formData
-const columnEditForm = columnCrud.formData
-const actionEditForm = actionCrud.formData
-const cardEditForm = cardCrud.formData
-
-
-
-// 兼容性：保留旧的弹窗状态引用
-const editDialogOpen = computed({
-  get: () => currentCrud.value.dialogVisible.value,
-  set: (val) => { currentCrud.value.dialogVisible.value = val }
-})
-const editDialogMode = computed(() => currentCrud.value.mode.value)
-
-// 区域配置编辑弹窗
-const areaConfigDialogOpen = ref(false)
-const areaConfigType = ref<'filter' | 'card' | 'table'>('filter')
-
-// 筛选区配置表单
-const filterAreaConfig = ref({
-  columns: 4,
-  gap: '16px',
-  showActions: true
-})
-
-// 卡片区配置表单
-const cardAreaConfig = ref({
-  show: false,
-  columns: 4,
-  gap: '16px'
-})
-
-// 表格区配置表单
-const tableAreaConfig = ref({
-  height: '400px',
-  pageSize: 15,
-  scrollX: false,
-  scrollY: true,
-  showCheckbox: false,
-  stickyHeader: true
-})
-
-// 打开区域配置弹窗
-function openAreaConfigDialog(type: 'filter' | 'card' | 'table') {
-  areaConfigType.value = type
-  if (pageConfig.value) {
-    if (type === 'filter') {
-      filterAreaConfig.value = {
-        columns: pageConfig.value.filterArea.columns,
-        gap: pageConfig.value.filterArea.gap,
-        showActions: pageConfig.value.actionsArea?.show !== false
-      }
-    } else if (type === 'card') {
-      cardAreaConfig.value = {
-        show: pageConfig.value.cardArea?.show ?? false,
-        columns: pageConfig.value.cardArea?.columns ?? 4,
-        gap: pageConfig.value.cardArea?.gap ?? '16px'
-      }
-    } else if (type === 'table') {
-      tableAreaConfig.value = {
-        height: pageConfig.value.tableArea.height ?? '400px',
-        pageSize: pageConfig.value.tableArea.pageSize ?? 15,
-        scrollX: pageConfig.value.tableArea.scrollX ?? false,
-        scrollY: pageConfig.value.tableArea.scrollY ?? true,
-        showCheckbox: pageConfig.value.tableArea.showCheckbox ?? false,
-        stickyHeader: pageConfig.value.tableArea.stickyHeader !== false
-      }
-    }
-  }
-  areaConfigDialogOpen.value = true
-}
-
-// 保存区域配置
-async function saveAreaConfig() {
-  const navTitle = currentNavTitle.value
-  const subId = currentNavId.value
-  if (!navTitle) {
-    Message.error('无法找到当前页面所属的导航')
-    return
-  }
-  
-  const subItem = pageStore.getSubPageConfig(navTitle, subId)
-  const component = subItem?.component
-  if (!component) {
-    Message.error('页面配置不存在')
-    return
-  }
-  
-  if (areaConfigType.value === 'filter') {
-    component.filterArea.columns = filterAreaConfig.value.columns
-    component.filterArea.gap = filterAreaConfig.value.gap
-    if (!component.actionsArea) component.actionsArea = { buttons: [] }
-    component.actionsArea.show = filterAreaConfig.value.showActions
-  } else if (areaConfigType.value === 'card') {
-    if (!component.cardArea) component.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
-    component.cardArea.show = cardAreaConfig.value.show
-    component.cardArea.columns = cardAreaConfig.value.columns
-    component.cardArea.gap = cardAreaConfig.value.gap
-  } else if (areaConfigType.value === 'table') {
-    component.tableArea.height = tableAreaConfig.value.height
-    component.tableArea.pageSize = tableAreaConfig.value.pageSize
-    component.tableArea.scrollX = tableAreaConfig.value.scrollX
-    component.tableArea.scrollY = tableAreaConfig.value.scrollY
-    component.tableArea.showCheckbox = tableAreaConfig.value.showCheckbox
-    component.tableArea.stickyHeader = tableAreaConfig.value.stickyHeader
-  }
-  
-  areaConfigDialogOpen.value = false
-  const result = await pageStore.updateSubPageComponent(navTitle, subId, component)
-  if (result.success) {
-    Message.success('配置已更新')
-  } else {
-    Message.error('保存失败: ' + result.message)
+  load() {
+    uiState.tableData = pageConfig.value?.mockData?.().length ? pageConfig.value.mockData() : this.generate(pageConfig.value!)
+    uiState.currentPage = 1
   }
 }
 
-// 拖拽排序
-const dragIndex = ref(-1)
-const dragOverIndex = ref(-1)
-
-function handleDragStart(index: number) {
-  dragIndex.value = index
+// --- CRUD Config & Transformers ---
+const transformers: Record<string, (item: any) => any> = {
+  filter: (item: any) => ({ ...item, placeholder: item.placeholder || '', options: item.options?.join(',') || '', treeOptions: item.treeOptions ? JSON.stringify(item.treeOptions) : '', visible: item.visible ?? true }),
+  column: (item: any) => ({ ...item, type: item.type || 'text', width: item.width || '120px', mockFormat: item.mockFormat || 'text', mockList: item.mockList?.join(',') || '', conditionRules: item.conditionRules ? JSON.stringify(item.conditionRules) : '', buttons: item.buttons?.join(',') || '', visible: item.visible ?? true, fixed: item.fixed || 'none', align: item.align || 'left' }),
+  action: (item: any) => ({ ...item, className: item.className || '', variant: item.variant || 'outline', effectType: item.effectType || 'none', effectTitle: item.effectConfig?.title || '', effectContent: item.effectConfig?.content || '', effectFormItems: item.effectConfig?.formItems || [], effectTableColumns: (item.effectConfig?.tableArea?.columns || []).map((col: any) => ({ ...col, mockListStr: col.mockList?.join(',') || '', conditionRulesJson: col.conditionRules ? JSON.stringify(col.conditionRules) : '[]' })), visible: item.visible ?? true }),
+  card: (item: any) => ({ ...item, data: String(item.data) })
 }
 
-function handleDragOver(e: DragEvent, index: number) {
-  e.preventDefault()
-  dragOverIndex.value = index
+const crudHandlers = {
+  filter: useConfigCrud({ name: '筛选项', defaultForm: () => ({ key: '', type: 'input', label: '', placeholder: '', options: '', treeOptions: '', visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { const nf = { key: f.key || `f_${Date.now()}`, type: f.type, label: f.label, placeholder: f.placeholder || undefined, visible: f.visible, options: f.options ? f.options.split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : [], treeOptions: f.treeOptions ? safeJsonParseWithError(f.treeOptions, '树形') : undefined }; if (m && i !== null) item.filterArea.filters[i] = nf; else item.filterArea.filters.push(nf) }), doDelete: (i) => _saveComponentAction(item => item.filterArea.filters.splice(i, 1)) }),
+  column: useConfigCrud({ name: '列', defaultForm: () => ({ key: '', label: '', width: '120px', type: 'text', mockFormat: 'none', mockList: '', conditionRules: '', buttons: '', fixed: 'none', align: 'left', visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { const nc = { key: f.key || `c_${Date.now()}`, label: f.label, width: f.width, type: f.type === 'text' ? undefined : f.type, visible: f.visible, mockFormat: f.mockFormat === 'none' ? undefined : f.mockFormat, mockList: ['list', 'list-order'].includes(f.mockFormat) ? f.mockList.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined, conditionRules: f.mockFormat === 'conditional' && f.conditionRules ? safeJsonParseWithError(f.conditionRules, '条件') : undefined, buttons: f.type === 'text-button' && f.buttons ? f.buttons.split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : undefined, fixed: f.fixed === 'none' ? undefined : f.fixed, align: f.align === 'left' ? undefined : f.align }; if (m && i !== null) item.tableArea.columns[i] = nc; else item.tableArea.columns.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.tableArea.columns.splice(i, 1)) }),
+  action: useConfigCrud({ name: '按钮', defaultForm: () => ({ key: '', label: '', variant: 'outline', className: '', effectType: 'none', effectTitle: '', effectContent: '', effectFormItems: [], effectTableColumns: [], visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.actionsArea) item.actionsArea = { buttons: [], show: true }; const na = { key: f.key || `a_${Date.now()}`, label: f.label, variant: f.variant, className: f.className || undefined, visible: f.visible, effectType: f.effectType === 'none' ? undefined : f.effectType, effectConfig: f.effectType === 'modal' ? { title: f.effectTitle, content: f.effectContent, formItems: f.effectFormItems } : f.effectType === 'table' ? { title: f.effectTitle, targetNavId: (f as any).targetNavId || (f as any).effectConfig?.targetNavId } : undefined }; if (m && i !== null) item.actionsArea.buttons[i] = na; else item.actionsArea.buttons.push(na) }), doDelete: (i) => _saveComponentAction(item => item.actionsArea.buttons.splice(i, 1)) }),
+  card: useConfigCrud({ name: '卡片', defaultForm: () => ({ key: '', title: '', data: '' }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.cardArea) item.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }; const nc = { key: f.key || `cd_${Date.now()}`, title: f.title, data: f.data }; if (m && i !== null) item.cardArea.cards[i] = nc; else item.cardArea.cards.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.cardArea.cards.splice(i, 1)) })
 }
 
-async function handleDrop(type: 'filter' | 'action' | 'column', targetIndex: number) {
-  if (dragIndex.value === -1 || dragIndex.value === targetIndex) return
-  
-  const navTitle = currentNavTitle.value
-  const subId = currentNavId.value
-  if (!navTitle) return
-  
-  const subItem = pageStore.getSubPageConfig(navTitle, subId)
-  const component = subItem?.component
-  if (!component) return
-  
-  // 直接在组件配置数组上操作
-  if (type === 'filter') {
-    const [removed] = component.filterArea.filters.splice(dragIndex.value, 1)
-    component.filterArea.filters.splice(targetIndex, 0, removed)
-  } else if (type === 'action') {
-    if (!component.actionsArea?.buttons) return
-    const [removed] = component.actionsArea.buttons.splice(dragIndex.value, 1)
-    component.actionsArea.buttons.splice(targetIndex, 0, removed)
-  } else if (type === 'column') {
-    const [removed] = component.tableArea.columns.splice(dragIndex.value, 1)
-    component.tableArea.columns.splice(targetIndex, 0, removed)
-  }
-  
-  dragIndex.value = -1
-  dragOverIndex.value = -1
-  await pageStore.updateSubPageComponent(navTitle, subId, component)
+const _saveComponentAction = async (updateFn: (item: any) => void) => {
+  const navTitle = currentNavTitle.value, subId = currentNavId.value
+  if (!navTitle) return Message.error('未找到导航')
+  const item = pageStore.getSubPageConfig(navTitle, subId)
+  if (!item?.component) return Message.error('配置不存在')
+  updateFn(item.component)
+  const res = await pageStore.updateSubPageComponent(navTitle, subId, item.component)
+  if (!res.success) Message.error('保存失败: ' + res.message)
 }
 
-function handleDragEnd() {
-  dragIndex.value = -1
-  dragOverIndex.value = -1
-}
-
-// 辅助函数：打开编辑弹窗
-function openEditDialog(type: 'filter' | 'column' | 'action' | 'card', mode: 'add' | 'edit', index?: number) {
-  editDialogType.value = type
-  if (mode === 'add') {
-    currentCrud.value.openAdd()
-  } else if (index !== undefined) {
-    const config = pageConfig.value
+// --- Action & UI Logic ---
+const actions = {
+  handleAction(key: string, _record?: any) {
+    const config = pageConfig.value?.actionsArea?.buttons?.find(b => b.key === key)
     if (!config) return
-    let item: any
-    let transform: any
-    if (type === 'filter') {
-      item = config.filterArea.filters[index]
-      transform = transformFilter
-    } else if (type === 'column') {
-      item = config.tableArea.columns[index]
-      transform = transformColumn
-    } else if (type === 'action') {
-      item = config.actionsArea?.buttons?.[index]
-      transform = transformAction
-    } else if (type === 'card') {
-      item = config.cardArea?.cards?.[index]
-      transform = transformCard
+    if (config.effectType === 'modal') {
+      const ec = config.effectConfig
+      Object.assign(uiState.effect, { visible: true, title: ec?.title || '提示', content: ec?.content || '', formItems: ec?.formItems || [], data: {} })
+      uiState.effect.formItems.forEach((f: any) => uiState.effect.data[f.key] = f.defaultValue)
+    } else if (config.effectType === 'table') {
+      const targetId = config.effectConfig?.targetNavId
+      const targetTitle = targetId ? pageStore.findNavTitleBySubId(targetId) : null
+      const targetCfg = targetId && targetTitle ? pageStore.getSubPageConfig(targetTitle, targetId) : null
+      const cols = targetCfg?.component?.tableArea?.columns || []
+      Object.assign(uiState.table, { visible: true, title: (config.effectConfig as any)?.title || '列表', columns: cols, showCheckbox: targetCfg?.component?.tableArea?.showCheckbox || false, data: mockHelper.generate(cols, 10) })
+      if (!cols.length) Message.warning('未配置数据列')
     }
-    if (item) currentCrud.value.openEdit(index, item, transform)
+  },
+  openAreaConfig(type: 'filter' | 'card' | 'table') {
+    uiState.area.type = type
+    const cfg = pageConfig.value
+    if (!cfg) return
+    uiState.area.config = type === 'filter' ? { columns: cfg.filterArea.columns, gap: cfg.filterArea.gap, showActions: cfg.actionsArea?.show !== false } : type === 'card' ? { show: cfg.cardArea?.show ?? false, columns: cfg.cardArea?.columns ?? 4, gap: cfg.cardArea?.gap ?? '16px' } : { height: cfg.tableArea.height ?? '400px', pageSize: cfg.tableArea.pageSize ?? 15, scrollX: !!cfg.tableArea.scrollX, scrollY: !!cfg.tableArea.scrollY, showCheckbox: !!cfg.tableArea.showCheckbox, stickyHeader: cfg.tableArea.stickyHeader !== false }
+    uiState.area.visible = true
+  },
+  async saveAreaConfig() {
+    await _saveComponentAction(item => {
+      const { type, config } = uiState.area
+      if (type === 'filter') { item.filterArea.columns = config.columns; item.filterArea.gap = config.gap; if (!item.actionsArea) item.actionsArea = { buttons: [] }; item.actionsArea.show = config.showActions }
+      else if (type === 'card') { if (!item.cardArea) item.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }; item.cardArea.show = config.show; item.cardArea.columns = config.columns; item.cardArea.gap = config.gap }
+      else { item.tableArea.height = config.height; item.tableArea.pageSize = config.pageSize; item.tableArea.scrollX = config.scrollX; item.tableArea.scrollY = config.scrollY; item.tableArea.showCheckbox = config.showCheckbox; item.tableArea.stickyHeader = config.stickyHeader }
+    })
+    uiState.area.visible = false
+  },
+  drag: {
+    start(i: number) { uiState.drag.index = i },
+    over(e: DragEvent, i: number) { e.preventDefault(); uiState.drag.overIndex = i },
+    async drop(type: 'filter' | 'action' | 'column', target: number) {
+      if (uiState.drag.index === -1 || uiState.drag.index === target) return
+      await _saveComponentAction(item => {
+        const arr = type === 'filter' ? item.filterArea.filters : type === 'action' ? item.actionsArea.buttons : item.tableArea.columns
+        const [removed] = arr.splice(uiState.drag.index, 1)
+        arr.splice(target, 0, removed)
+      })
+      this.end()
+    },
+    end() { uiState.drag.index = -1; uiState.drag.overIndex = -1 }
   }
 }
 
-// 辅助函数：保存编辑
-function saveEdit() {
-  currentCrud.value.handleSave()
-}
+// --- Computed & Watch ---
+const isSectionVisible = (s: string) => props.visibleSections?.includes(s as any) ?? true
+const visibleFilters = computed(() => pageConfig.value?.filterArea.filters.filter(f => f.visible !== false) || [])
+const visibleColumns = computed(() => pageConfig.value?.tableArea.columns.filter(c => c.visible !== false) || [])
+const visibleActions = computed(() => pageConfig.value?.actionsArea?.buttons?.filter((a: any) => a.visible !== false) || [])
+const actionButtonSpan = computed(() => { if (!pageConfig.value) return 1; const cols = pageConfig.value.filterArea.columns, count = visibleFilters.value.length, rem = count % cols; if (rem === 0) return cols; const avail = cols - rem; return (avail < 1) ? cols : avail })
+const availableColumns = computed(() => pageConfig.value?.tableArea.columns.map(c => ({ key: c.key, label: c.label || c.key })) || [])
 
-// 辅助函数：删除项目
-function deleteItem(type: 'filter' | 'column' | 'action' | 'card', index: number) {
-  if (type === 'filter') filterCrud.handleDelete(index)
-  else if (type === 'column') columnCrud.handleDelete(index)
-  else if (type === 'action') actionCrud.handleDelete(index)
-  else if (type === 'card') cardCrud.handleDelete(index)
-}
+watch(currentNavId, () => mockHelper.load(), { immediate: true })
+watch(pageConfig, (c) => { if (c) { Object.keys(uiState.filters).forEach(k => delete uiState.filters[k]); c.filterArea.filters.forEach(f => uiState.filters[f.key] = f.defaultValue); mockHelper.load() } }, { immediate: true, deep: true })
 
-// 评估条件格式规则 逻辑已移至 @/utils/mock-data
+const currentCrud = computed(() => {
+  const type = uiState.area.type
+  if (type === 'filter') return crudHandlers.filter
+  if (type === 'column') return crudHandlers.column
+  if (type === 'action') return crudHandlers.action
+  if (type === 'card') return crudHandlers.card
+  return crudHandlers.filter
+})
 
-// 根据配置生成模拟数据
-function generateMockData(): any[] {
-  if (!pageConfig.value) return []
-  
-  const columns = pageConfig.value.tableArea.columns
-  if (!columns || columns.length === 0) return []
-  
-  const rowCount = 20
-  const data: any[] = []
-  
-  // 分离条件格式列和普通列
-  const normalColumns = columns.filter(col => col.mockFormat !== 'conditional')
-  const conditionalColumns = columns.filter(col => col.mockFormat === 'conditional')
-  
-  for (let i = 0; i < rowCount; i++) {
-    const row: Record<string, any> = { id: i + 1 }
-    
-    // 先生成普通列的值
-    normalColumns.forEach(col => {
-      row[col.key] = generateMockValue(col, i)
-    })
-    
-    // 再根据普通列的值生成条件格式列的值
-    conditionalColumns.forEach(col => {
-      if (col.conditionRules && col.conditionRules.length > 0) {
-        row[col.key] = evaluateConditionalValue(row, col.conditionRules)
-      } else {
-        row[col.key] = ''
-      }
-    })
-    
-    data.push(row)
-  }
-  
-  return data
-}
-
-// 加载数据函数
-function loadData() {
-  if (pageConfig.value?.mockData) {
-    const mockData = pageConfig.value.mockData()
-    if (mockData.length === 0) {
-      tableData.value = generateMockData()
-    } else {
-      tableData.value = mockData
+const editor = {
+  open: (type: keyof typeof crudHandlers, mode: 'add' | 'edit', i?: number) => {
+    uiState.area.type = type
+    if (mode === 'add') crudHandlers[type].openAdd()
+    else {
+      const item = type === 'filter' ? pageConfig.value?.filterArea.filters[i!] : type === 'column' ? pageConfig.value?.tableArea.columns[i!] : type === 'action' ? pageConfig.value?.actionsArea?.buttons?.[i!] : pageConfig.value?.cardArea?.cards?.[i!]
+      if (item) crudHandlers[type].openEdit(i!, item, transformers[type as string])
     }
-  } else {
-    tableData.value = generateMockData()
-  }
-  currentPage.value = 1
-}
-
-// 监听导航变化，重新加载数据
-watch(currentNavId, () => {
-  loadData()
-}, { immediate: true })
-
-// 监听配置变化，重置筛选状态并重新加载数据
-watch(pageConfig, (config) => {
-  if (config) {
-    // 清空旧状态
-    Object.keys(filters).forEach(key => delete filters[key])
-    // 设置新状态
-    config.filterArea.filters.forEach(filter => {
-      filters[filter.key] = filter.defaultValue
-    })
-    // 重新加载数据（配置变化时）
-    loadData()
-  }
-}, { immediate: true, deep: true })
-
-// --- 计算属性 ---
-const filteredData = computed(() => {
-  return tableData.value
-})
-
-// 可见的筛选项
-const visibleFilters = computed(() => {
-  return pageConfig.value?.filterArea.filters.filter(f => f.visible !== false) || []
-})
-
-// 可见的列
-const visibleColumns = computed(() => {
-  return pageConfig.value?.tableArea.columns.filter(c => c.visible !== false) || []
-})
-
-// 所有可用列（用于条件格式选择）
-const availableColumns = computed(() => {
-  return pageConfig.value?.tableArea.columns.map(c => ({ key: c.key, label: c.label || c.key })) || []
-})
-
-// 可见的操作按钮
-const visibleActions = computed(() => {
-  return pageConfig.value?.actionsArea?.buttons?.filter((a: { visible?: boolean }) => a.visible !== false) || []
-})
-
-// 融合模式状态
-const fusionMode = computed(() => configStore.filterActionFusion)
-
-// 计算融合模式下按钮容器需要占据的网格列数
-const actionButtonSpan = computed(() => {
-  if (!pageConfig.value || !visibleFilters.value) return 1
-  const cols = pageConfig.value.filterArea.columns
-  const count = visibleFilters.value.length
-  const remainder = count % cols
-  const buttonsCount = visibleActions.value.length
-  
-  // 如果当前行已经满了，直接占满新的一行
-  if (remainder === 0) return cols
-  
-  // 计算剩余可用列数
-  const availableCols = cols - remainder
-  
-  // 估算按钮所需的“栅格列宽”
-  // 一个典型的按钮加间距大约占 100-120px，栅格列宽通常在 200px 以上
-  // 这里的阈值设为：1个栅格列最多放 2 个按钮
-  const estimateNeededCols = Math.ceil(buttonsCount / 2)
-  
-  // 特殊情况：如果按钮超过 4 个，即使剩余 2 列也不建议挤在一起，直接换行
-  const needsWrap = estimateNeededCols > availableCols || (buttonsCount > 4 && availableCols <= 2)
-  
-  // 如果剩余列数不够放按钮，则另起一行并占满全宽
-  if (needsWrap) {
-    return cols
-  }
-  
-  // 否则占据剩余所有列
-  return availableCols
-})
-
-// --- 方法 ---
-const handleRowClick = (record: any) => {
-  console.log('Row clicked:', record)
-}
-
-const handleSelectionChange = (keys: (string | number)[]) => {
-  console.log('Selection changed:', keys)
-}
-
-const handleActionClick = (actionKey: string, record: any) => {
-  console.log('Action clicked:', actionKey, record)
-  
-  const actionConfig = pageConfig.value?.actionsArea?.buttons?.find(b => b.key === actionKey)
-  
-  if (actionConfig?.effectType === 'modal') {
-    effectModalTitle.value = actionConfig.effectConfig?.title || '提示'
-    effectModalContent.value = actionConfig.effectConfig?.content || ''
-    effectModalFormItems.value = actionConfig.effectConfig?.formItems || []
-    
-    Object.keys(effectModalFormData).forEach(key => delete effectModalFormData[key])
-    effectModalFormItems.value.forEach(item => {
-      effectModalFormData[item.key] = item.defaultValue
-    })
-    
-    effectModalVisible.value = true
-  } else if (actionConfig?.effectType === 'table') {
-    effectTableTitle.value = actionConfig.effectConfig?.title || '数据列表'
-    
-    let targetColumns: any[] = []
-    
-    // 如果配置了关联页面 ID，则尝试获取该页面的表格配置
-    if (actionConfig.effectConfig?.targetNavId) {
-      const targetNavId = actionConfig.effectConfig.targetNavId
-      const targetNavTitle = pageStore.findNavTitleBySubId(targetNavId)
-      
-      if (targetNavTitle) {
-        const targetConfig = pageStore.getSubPageConfig(targetNavTitle, targetNavId)
-        // 注意：这里我们需要确保引用的是 tableArea.columns
-        targetColumns = targetConfig?.component?.tableArea?.columns || []
-        
-        if (targetColumns.length === 0) {
-           Message.warning(`页面 "${targetConfig?.name || targetNavId}" 未配置表格列`)
-        }
-        effectTableShowCheckbox.value = targetConfig?.component?.tableArea?.showCheckbox ?? false
-      } else {
-         Message.warning('未找到关联页面的配置')
-      }
-    } else {
-      // 兼容旧配置
-      targetColumns = actionConfig.effectConfig?.tableArea?.columns || []
-      effectTableShowCheckbox.value = actionConfig.effectConfig?.tableArea?.showCheckbox ?? false
-    }
-    
-    effectTableColumns.value = targetColumns
-    
-    // 生成弹窗表格的 Mock 数据
-    const mockData: any[] = []
-    const columns = effectTableColumns.value
-    const normalColumns = columns.filter(col => col.mockFormat !== 'conditional')
-    const conditionalColumns = columns.filter(col => col.mockFormat === 'conditional')
-
-    for (let i = 0; i < 10; i++) {
-        const row: any = { id: i + 1 }
-        // 先生成普通列
-        normalColumns.forEach(col => {
-            row[col.key] = generateMockValue(col, i)
-        })
-        // 再生成条件列
-        conditionalColumns.forEach(col => {
-          if (col.conditionRules && col.conditionRules.length > 0) {
-            row[col.key] = evaluateConditionalValue(row, col.conditionRules)
-          } else {
-            row[col.key] = ''
-          }
-        })
-        mockData.push(row)
-    }
-    effectTableData.value = mockData
-    effectTableVisible.value = true
-  }
-}
-
-const handleEffectModalOk = () => {
-  console.log('Modal Form Submitted:', effectModalFormData)
-  effectModalVisible.value = false
+  },
+  delete: (type: keyof typeof crudHandlers, i: number) => crudHandlers[type].handleDelete(i)
 }
 </script>
 
 <template>
-  <div class="page1-container h-full w-full">
-    <div v-if="pageConfig" class="h-full flex flex-col overflow-hidden">
-      <!-- 临时调试面板 -->
-
-      <!-- 顶部操作栏 Teleport -->
-      <Teleport to="#breadcrumb-actions" defer>
-        <div class="flex items-center gap-4">
-          <!-- topBar 选择器（如果配置了的话） -->
-          <template v-if="pageConfig.topBar">
-            <!-- App 选择 -->
-            <Select v-if="pageConfig.topBar.appOptions" v-model="currentApp">
-              <SelectTrigger class="w-[120px] h-8 text-xs">
-                <SelectValue placeholder="选择应用" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="app in pageConfig.topBar.appOptions" :key="app" :value="app">
-                  {{ app }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-
-            <!-- 语言选择 -->
-            <Select v-if="pageConfig.topBar.langOptions" v-model="currentLang">
-              <SelectTrigger class="w-[100px] h-8 text-xs">
-                <SelectValue placeholder="选择语言" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="lang in pageConfig.topBar.langOptions" :key="lang" :value="lang">
-                  {{ lang }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </template>
-        </div>
-      </Teleport>
-
-      <!-- 主体内容-->
-      <div 
-        class="flex-1 flex flex-col p-4 gap-4"
-      >
-        
+  <div class="page1-container">
+    <div v-if="pageConfig" class="">
+      <div class="p-4 flex flex-col gap-4">
         <!-- 功能区 - 筛选条件 + 操作按钮 -->
         <div 
           v-if="(isSectionVisible('filter') && pageConfig.filterArea?.show !== false) || (isSectionVisible('actions') && pageConfig.actionsArea?.show !== false)"
           class="bg-background rounded-xl border shadow-sm relative"
           :class="{ 'ring-2 ring-primary/50': isEditMode }"
         >
-          <!-- 编辑模式标题栏 -->
           <div v-if="isEditMode" class="flex items-center justify-between px-5 py-2 border-b bg-muted/30">
             <div class="flex items-center gap-3">
               <span class="text-sm font-medium text-muted-foreground">筛选区 / 操作区</span>
               <span class="text-xs text-muted-foreground/70">({{ pageConfig.filterArea.columns }}列, 间距{{ pageConfig.filterArea.gap }})</span>
             </div>
             <div class="flex items-center gap-2">
-              <AButton size="mini" type="text" @click="openAreaConfigDialog('filter')">
+              <AButton size="mini" type="text" @click="actions.openAreaConfig('filter')">
                 <Pencil class="w-3 h-3 mr-1" />配置
               </AButton>
-              <AButton size="mini" @click="openEditDialog('filter', 'add')">
+              <AButton size="mini" @click="editor.open('filter', 'add')">
                 <Plus class="w-3 h-3 mr-1" />添加筛选
               </AButton>
-              <AButton size="mini" @click="openEditDialog('action', 'add')">
+              <AButton size="mini" @click="editor.open('action', 'add')">
                 <Plus class="w-3 h-3 mr-1" />添加按钮
               </AButton>
             </div>
           </div>
           
           <div class="p-5">
-            <!-- 动态筛选表单区 -->
             <div 
               v-if="isSectionVisible('filter') && pageConfig.filterArea?.show !== false"
               class="grid"
-              :class="{ 'mb-4': !fusionMode }"
-              :style="{
-                gridTemplateColumns: `repeat(${pageConfig.filterArea.columns}, 1fr)`,
-                gap: pageConfig.filterArea.gap,
-              }"
+              :class="{ 'mb-4': !configStore.filterActionFusion }"
+              :style="{ gridTemplateColumns: `repeat(${pageConfig.filterArea.columns}, 1fr)`, gap: pageConfig.filterArea.gap }"
             >
               <template v-for="(config, filterIndex) in visibleFilters" :key="config.key">
-                <!-- 带编辑覆盖层的筛选项容器 -->
                 <div 
                   class="relative group/filter"
-                  :class="[
-                    { 'cursor-move': isEditMode },
-                    { 'ring-2 ring-primary/30 ring-offset-1': isEditMode && dragOverIndex === filterIndex }
-                  ]"
+                  :class="[{ 'cursor-move': isEditMode }, { 'ring-2 ring-primary/30 ring-offset-1': isEditMode && uiState.drag.overIndex === filterIndex }]"
                   :draggable="isEditMode"
-                  @dragstart="handleDragStart(filterIndex)"
-                  @dragover="(e) => handleDragOver(e, filterIndex)"
-                  @drop="handleDrop('filter', filterIndex)"
-                  @dragend="handleDragEnd"
+                  @dragstart="actions.drag.start(filterIndex)"
+                  @dragover="(e) => actions.drag.over(e, filterIndex)"
+                  @drop="actions.drag.drop('filter', filterIndex)"
+                  @dragend="actions.drag.end"
                 >
-                  <!-- 输入框类型 -->
-                  <FilterInput
-                    v-if="config.type === 'input'"
-                    :label="config.label"
-                    v-model="filters[config.key]"
-                    :placeholder="config.placeholder"
-                  />
-                  
-                  <!-- 下拉框类型 -->
-                  <FilterSelect
-                    v-else-if="config.type === 'select'"
-                    :label="config.label"
-                    v-model="filters[config.key]"
-                    :options="config.options ?? []"
-                  />
+                  <FilterInput v-if="config.type === 'input'" :label="config.label" v-model="uiState.filters[config.key]" :placeholder="config.placeholder" />
+                  <FilterSelect v-else-if="config.type === 'select'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.options ?? []" />
+                  <FilterDateRange v-else-if="config.type === 'date-range'" :label="config.label" v-model="uiState.filters[config.key]" />
+                  <FilterTreeSelect v-else-if="config.type === 'tree-select'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.treeOptions ?? []" :placeholder="config.placeholder" />
 
-                  <!-- 日期范围选择类型 -->
-                  <FilterDateRange
-                    v-else-if="config.type === 'date-range'"
-                    :label="config.label"
-                    v-model="filters[config.key]"
-                  />
-
-                  <!-- 树形下拉框类型 -->
-                  <FilterTreeSelect
-                    v-else-if="config.type === 'tree-select'"
-                    :label="config.label"
-                    v-model="filters[config.key]"
-                    :options="config.treeOptions ?? []"
-                    :placeholder="config.placeholder"
-                  />
-
-                  <!-- 编辑模式悬浮操作 -->
-                  <div 
-                    v-if="isEditMode"
-                    class="absolute inset-0 bg-primary/5 opacity-0 group-hover/filter:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-md pointer-events-none"
-                  >
-                    <AButton size="mini" type="text" class="pointer-events-auto" @click.stop="openEditDialog('filter', 'edit', filterIndex)">
+                  <div v-if="isEditMode" class="absolute inset-0 bg-primary/5 opacity-0 group-hover/filter:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-md pointer-events-none">
+                    <AButton size="mini" type="text" class="pointer-events-auto" @click.stop="editor.open('filter', 'edit', filterIndex)">
                       <Pencil class="w-3 h-3" />
                     </AButton>
-                    <APopconfirm content="确定要删除该筛选项吗?" @ok="deleteItem('filter', filterIndex)">
-                      <AButton size="mini" type="text" status="danger" class="pointer-events-auto" @click.stop>
-                        <Trash2 class="w-3 h-3" />
-                      </AButton>
+                    <APopconfirm content="确定要删除该筛选项吗?" @ok="editor.delete('filter', filterIndex)">
+                      <AButton size="mini" type="text" status="danger" class="pointer-events-auto" @click.stop><Trash2 class="w-3 h-3" /></AButton>
                     </APopconfirm>
                   </div>
                 </div>
               </template>
 
-              <!-- 融合模式下的操作按钮 -->
-              <div 
-                  v-if="fusionMode && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false"
-                  class="flex items-center justify-end gap-3"
-                  :style="{ gridColumn: `span ${actionButtonSpan}` }"
-              >
-                  <template v-for="(action, index) in visibleActions" :key="action.key">
-                      <!-- 按钮容器 -->
-                      <div class="relative group/action">
-                        <Button 
-                            v-if="action.variant === 'shadcn-outline'"
-                            variant="outline"
-                            class="h-9 px-5"
-                            :class="action.className"
-                            @click="handleActionClick(action.key, null)"
-                        >
-                            {{ action.label }}
-                        </Button>
-                        <AButton 
-                            v-else
-                            :type="action.variant as any ?? 'outline'"
-                            class="h-9 px-5"
-                            :class="action.className"
-                            @click="handleActionClick(action.key, null)"
-                        >
-                            {{ action.label }}
-                        </AButton>
-                        
-                        <!-- 编辑模式悬浮操作 -->
-                        <div 
-                          v-if="isEditMode"
-                          class="absolute -top-1 -right-1 opacity-0 group-hover/action:opacity-100 transition-opacity flex gap-0.5"
-                        >
-                          <AButton size="mini" type="primary" class="!p-1 !min-w-0" @click.stop="openEditDialog('action', 'edit', index)">
-                            <Pencil class="w-2.5 h-2.5" />
-                          </AButton>
-                          <APopconfirm content="确定要删除该操作按钮吗?" @ok="deleteItem('action', index)">
-                            <AButton size="mini" status="danger" class="!p-1 !min-w-0" @click.stop>
-                              <Trash2 class="w-2.5 h-2.5" />
-                            </AButton>
-                          </APopconfirm>
-                        </div>
-                      </div>
-                  </template>
+              <div v-if="configStore.filterActionFusion && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false" class="flex items-center justify-end gap-3" :style="{ gridColumn: `span ${actionButtonSpan}` }">
+                <template v-for="(action, index) in visibleActions" :key="action.key">
+                  <div class="relative group/action">
+                    <Button v-if="action.variant === 'shadcn-outline'" variant="outline" class="h-9 px-5" :class="action.className" @click="actions.handleAction(action.key)">{{ action.label }}</Button>
+                    <AButton v-else :type="action.variant as any ?? 'outline'" class="h-9 px-5" :class="action.className" @click="actions.handleAction(action.key)">{{ action.label }}</AButton>
+                    <div v-if="isEditMode" class="absolute -top-1 -right-1 opacity-0 group-hover/action:opacity-100 transition-opacity flex gap-0.5">
+                      <AButton size="mini" type="primary" class="!p-1 !min-w-0" @click.stop="editor.open('action', 'edit', index)"><Pencil class="w-2.5 h-2.5" /></AButton>
+                      <APopconfirm content="确定要删除该操作按钮吗?" @ok="editor.delete('action', index)">
+                        <AButton size="mini" status="danger" class="!p-1 !min-w-0" @click.stop><Trash2 class="w-2.5 h-2.5" /></AButton>
+                      </APopconfirm>
+                    </div>
+                  </div>
+                </template>
               </div>
             </div>
 
-            <!-- 底部操作按钮 (非融合模式) -->
-            <div 
-              v-if="!fusionMode && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false" 
-              class="flex items-center justify-end pt-2 border-t"
-            >
+            <div v-if="!configStore.filterActionFusion && isSectionVisible('actions') && pageConfig.actionsArea?.show !== false" class="flex items-center justify-end pt-2 border-t">
               <div class="flex items-center gap-3">
-                <template v-for="(action, actionIndex) in visibleActions" :key="action.key">
-                  <!-- 按钮容器 -->
+                <template v-for="(action, index) in visibleActions" :key="action.key">
                   <div class="relative group/action">
-                    <Button 
-                      v-if="action.variant === 'shadcn-outline'"
-                      variant="outline"
-                      class="h-9 px-5"
-                      :class="action.className"
-                      @click="handleActionClick(action.key, null)"
-                    >
-                      {{ action.label }}
-                    </Button>
-                    <AButton 
-                      v-else
-                      :type="action.variant as any ?? 'outline'"
-                      class="h-9 px-5"
-                      :class="action.className"
-                      @click="handleActionClick(action.key, null)"
-                    >
-                      {{ action.label }}
-                    </AButton>
-                    
-                    <!-- 编辑模式悬浮操作 -->
-                    <div 
-                      v-if="isEditMode"
-                      class="absolute -top-1 -right-1 opacity-0 group-hover/action:opacity-100 transition-opacity flex gap-0.5"
-                    >
-                      <AButton size="mini" type="primary" class="!p-1 !min-w-0" @click.stop="openEditDialog('action', 'edit', actionIndex)">
-                        <Pencil class="w-2.5 h-2.5" />
-                      </AButton>
-                      <APopconfirm content="确定要删除该操作按钮吗?" @ok="deleteItem('action', actionIndex)">
-                        <AButton size="mini" status="danger" class="!p-1 !min-w-0" @click.stop>
-                          <Trash2 class="w-2.5 h-2.5" />
-                        </AButton>
+                    <Button v-if="action.variant === 'shadcn-outline'" variant="outline" class="h-9 px-5" :class="action.className" @click="actions.handleAction(action.key)">{{ action.label }}</Button>
+                    <AButton v-else :type="action.variant as any ?? 'outline'" class="h-9 px-5" :class="action.className" @click="actions.handleAction(action.key)">{{ action.label }}</AButton>
+                    <div v-if="isEditMode" class="absolute -top-1 -right-1 opacity-0 group-hover/action:opacity-100 transition-opacity flex gap-0.5">
+                      <AButton size="mini" type="primary" class="!p-1 !min-w-0" @click.stop="editor.open('action', 'edit', index)"><Pencil class="w-2.5 h-2.5" /></AButton>
+                      <APopconfirm content="确定要删除该操作按钮吗?" @ok="editor.delete('action', index)">
+                        <AButton size="mini" status="danger" class="!p-1 !min-w-0" @click.stop><Trash2 class="w-2.5 h-2.5" /></AButton>
                       </APopconfirm>
                     </div>
                   </div>
@@ -1065,55 +270,27 @@ const handleEffectModalOk = () => {
           </div>
         </div>
 
-        <!-- 卡片区 (显示时) -->
-        <div 
-          v-if="isSectionVisible('card') && pageConfig.cardArea?.show"
-          class="relative"
-          :class="{ 'ring-2 ring-primary/50 rounded-xl p-2': isEditMode }"
-        >
-          <!-- 编辑模式标题栏 -->
+        <!-- 卡片区 -->
+        <div v-if="isSectionVisible('card') && pageConfig.cardArea?.show" class="relative" :class="{ 'ring-2 ring-primary/50 rounded-xl p-2': isEditMode }">
           <div v-if="isEditMode" class="flex items-center justify-between px-3 py-2 mb-2">
             <div class="flex items-center gap-3">
               <span class="text-sm font-medium text-muted-foreground">卡片区 ({{ pageConfig.cardArea.cards?.length || 0 }} 个)</span>
               <span class="text-xs text-muted-foreground/70">({{ pageConfig.cardArea.columns }}列, 间距{{ pageConfig.cardArea.gap }})</span>
             </div>
             <div class="flex items-center gap-2">
-              <AButton size="mini" type="text" @click="openAreaConfigDialog('card')">
-                <Pencil class="w-3 h-3 mr-1" />配置
-              </AButton>
-              <AButton size="mini" @click="openEditDialog('card', 'add')">
-                <Plus class="w-3 h-3 mr-1" />添加卡片
-              </AButton>
+              <AButton size="mini" type="text" @click="actions.openAreaConfig('card')"><Pencil class="w-3 h-3 mr-1" />配置</AButton>
+              <AButton size="mini" @click="editor.open('card', 'add')"><Plus class="w-3 h-3 mr-1" />添加卡片</AButton>
             </div>
           </div>
           
-          <div 
-            class="grid"
-            :style="{
-              gridTemplateColumns: `repeat(${pageConfig.cardArea.columns}, 1fr)`,
-              gap: pageConfig.cardArea.gap,
-            }"
-          >
+          <div class="grid" :style="{ gridTemplateColumns: `repeat(${pageConfig.cardArea.columns}, 1fr)`, gap: pageConfig.cardArea.gap }">
             <template v-for="(card, cardIndex) in pageConfig.cardArea.cards" :key="card.key">
               <div class="relative group/card">
-                <FilterCard
-                  :title="card.title"
-                  :data="card.data"
-                  :height="pageConfig.cardArea.cardHeight"
-                  :width="pageConfig.cardArea.cardWidth"
-                />
-                <!-- 编辑模式悬浮操作 -->
-                <div 
-                  v-if="isEditMode"
-                  class="absolute inset-0 bg-primary/5 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-md"
-                >
-                  <AButton size="mini" type="text" @click="openEditDialog('card', 'edit', cardIndex)">
-                    <Pencil class="w-3 h-3" />
-                  </AButton>
-                  <APopconfirm content="确定要删除该卡片吗?" @ok="deleteItem('card', cardIndex)">
-                    <AButton size="mini" type="text" status="danger" @click.stop>
-                      <Trash2 class="w-3 h-3" />
-                    </AButton>
+                <FilterCard :title="card.title" :data="card.data" :height="pageConfig.cardArea.cardHeight" :width="pageConfig.cardArea.cardWidth" />
+                <div v-if="isEditMode" class="absolute inset-0 bg-primary/5 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-md">
+                  <AButton size="mini" type="text" @click="editor.open('card', 'edit', cardIndex)"><Pencil class="w-3 h-3" /></AButton>
+                  <APopconfirm content="确定要删除该卡片吗?" @ok="editor.delete('card', cardIndex)">
+                    <AButton size="mini" type="text" status="danger" @click.stop><Trash2 class="w-3 h-3" /></AButton>
                   </APopconfirm>
                 </div>
               </div>
@@ -1121,99 +298,55 @@ const handleEffectModalOk = () => {
           </div>
         </div>
 
-        <!-- 卡片区占位符 (隐藏时，仅编辑模式显示) -->
-        <div 
-          v-else-if="isEditMode && isSectionVisible('card')"
-          class="border-2 border-dashed border-muted-foreground/30 rounded-xl p-4"
-        >
+        <div v-else-if="isEditMode && isSectionVisible('card')" class="border-2 border-dashed border-muted-foreground/30 rounded-xl p-4">
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2 text-muted-foreground">
-              <span class="text-sm font-medium">卡片区 (已隐藏)</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <AButton size="mini" type="text" @click="openAreaConfigDialog('card')">
-                <Pencil class="w-3 h-3 mr-1" />显示卡片区
-              </AButton>
-            </div>
+            <span class="text-sm font-medium text-muted-foreground">卡片区 (已隐藏)</span>
+            <AButton size="mini" type="text" @click="actions.openAreaConfig('card')"><Pencil class="w-3 h-3 mr-1" />显示卡片区</AButton>
           </div>
         </div>
 
-        <!-- 列表区 - 使用 ArcoTable 组件 -->
-        <div 
-          v-if="isSectionVisible('table') && pageConfig.tableArea?.show !== false"
-          class="flex-1 flex flex-col"
-          :class="[
-            { 'shrink-0': !pageConfig.tableArea.scrollY },
-            { 'ring-2 ring-primary/50 rounded-xl': isEditMode }
-          ]"
-        >
-          <!-- 编辑模式标题栏 -->
+        <!-- 列表区 -->
+        <div v-if="isSectionVisible('table') && pageConfig.tableArea?.show !== false" class="flex flex-col" :class="[{ 'shrink-0': !pageConfig.tableArea.scrollY }, { 'ring-2 ring-primary/50 rounded-xl': isEditMode }]">
           <div v-if="isEditMode" class="flex items-center justify-between px-4 py-2 border-b bg-muted/30 rounded-t-xl">
             <div class="flex items-center gap-3">
               <span class="text-sm font-medium text-muted-foreground">表格区 ({{ visibleColumns.length }} 列)</span>
-              <span class="text-xs text-muted-foreground/70">
-                (每页{{ pageConfig.tableArea.pageSize || 15 }}条, 
-                {{ pageConfig.tableArea.scrollY ? '纵向滚动' : '无纵滚' }}, 
-                {{ pageConfig.tableArea.showCheckbox ? '有复选框' : '无复选框' }})
-              </span>
+              <span class="text-xs text-muted-foreground/70">({{ pageConfig.tableArea.pageSize || 15 }}条/页, {{ pageConfig.tableArea.scrollY ? '纵滚' : '无纵滚' }})</span>
             </div>
             <div class="flex items-center gap-2">
-              <AButton size="mini" type="text" @click="openAreaConfigDialog('table')">
-                <Pencil class="w-3 h-3 mr-1" />配置
-              </AButton>
-              <AButton size="mini" @click="openEditDialog('column', 'add')">
-                <Plus class="w-3 h-3 mr-1" />添加列
-              </AButton>
+              <AButton size="mini" type="text" @click="actions.openAreaConfig('table')"><Pencil class="w-3 h-3 mr-1" />配置</AButton>
+              <AButton size="mini" @click="editor.open('column', 'add')"><Plus class="w-3 h-3 mr-1" />添加列</AButton>
             </div>
           </div>
           
           <ArcoTable
             :columns="visibleColumns"
-            :data="filteredData"
+            :data="uiState.tableData"
             :show-checkbox="pageConfig.tableArea.showCheckbox"
-            :page-size="pageSize"
-            :height="pageConfig.tableArea.scrollY ? '100%' : pageConfig.tableArea.height"
+            :page-size="pageConfig.tableArea.pageSize"
             :scroll-x="pageConfig.tableArea.scrollX"
-            :scroll-y="pageConfig.tableArea.scrollY"
+            :scroll-y="false"
             :sticky-header="pageConfig.tableArea.stickyHeader !== false"
             :bordered="{ wrapper: true, cell: true }"
-            class="h-full flex-1"
-            :class="{ 'rounded-b-xl overflow-hidden': isEditMode }"
-            @row-click="handleRowClick"
-            @selection-change="handleSelectionChange"
-            @action-click="handleActionClick"
+            @action-click="actions.handleAction"
           >
-            <!-- 自定义表头 (支持拖拽和编辑) -->
             <template v-for="(col, colIndex) in visibleColumns" :key="col.key" #[`header-${col.key}`]>
               <div 
                 class="flex items-center gap-2 relative group/column h-full w-full"
                 :class="{ 'cursor-move': isEditMode }"
                 :draggable="isEditMode"
-                @dragstart="handleDragStart(colIndex)"
-                @dragover="(e) => handleDragOver(e, colIndex)"
-                @drop="handleDrop('column', colIndex)"
-                @dragend="handleDragEnd"
+                @dragstart="actions.drag.start(colIndex)"
+                @dragover="(e) => actions.drag.over(e, colIndex)"
+                @drop="actions.drag.drop('column', colIndex)"
+                @dragend="actions.drag.end"
               >
                 <span>{{ col.label }}</span>
-                
-                <!-- 编辑模式悬浮操作 -->
-                <div 
-                  v-if="isEditMode"
-                  class="absolute -right-2 top-1/2 -translate-y-1/2 bg-background border shadow-sm rounded flex items-center p-0.5 opacity-0 group-hover/column:opacity-100 transition-opacity z-10"
-                >
-                  <AButton size="mini" type="text" class="!px-1 !h-5" @click.stop="openEditDialog('column', 'edit', colIndex)">
-                    <Pencil class="w-2.5 h-2.5" />
-                  </AButton>
-                  <div class="w-px h-3 bg-border mx-0.5"></div>
-                  <APopconfirm content="确定要删除该列吗?" @ok="deleteItem('column', colIndex)">
-                    <AButton size="mini" type="text" status="danger" class="!px-1 !h-5" @click.stop>
-                      <Trash2 class="w-2.5 h-2.5" />
-                    </AButton>
+                <div v-if="isEditMode" class="absolute -right-2 top-1/2 -translate-y-1/2 bg-background border shadow-sm rounded flex items-center p-0.5 opacity-0 group-hover/column:opacity-100 transition-opacity z-10">
+                  <AButton size="mini" type="text" class="!px-1 !h-5" @click.stop="editor.open('column', 'edit', colIndex)"><Pencil class="w-2.5 h-2.5" /></AButton>
+                  <APopconfirm content="确定要删除该列吗?" @ok="editor.delete('column', colIndex)">
+                    <AButton size="mini" type="text" status="danger" class="!px-1 !h-5" @click.stop><Trash2 class="w-2.5 h-2.5" /></AButton>
                   </APopconfirm>
                 </div>
-
-                <!-- 拖拽指示器 -->
-                <div v-if="isEditMode && dragOverIndex === colIndex" class="absolute left-0 top-0 bottom-0 w-0.5 bg-primary z-20"></div>
+                <div v-if="isEditMode && uiState.drag.overIndex === colIndex" class="absolute left-0 top-0 bottom-0 w-0.5 bg-primary z-20"></div>
               </div>
             </template>
           </ArcoTable>
@@ -1221,183 +354,77 @@ const handleEffectModalOk = () => {
       </div>
     </div>
 
-    <!-- 无配置时显示占位 -->
     <div v-else class="flex flex-col items-center justify-center h-full text-muted-foreground space-y-2">
-        <File class="w-12 h-12 opacity-20" />
-        <span class="text-xs">暂无页面配置</span>
-        <span v-if="configStore.isInPreviewMode" class="text-[10px] opacity-50">Current ID: {{ currentNavId }}</span>
+      <File class="w-12 h-12 opacity-20" />
+      <span class="text-xs">暂无页面配置</span>
     </div>
 
-    <!-- 效果弹窗 -->
-    <AModal
-      v-model:visible="effectModalVisible"
-      :title="effectModalTitle"
-      @ok="handleEffectModalOk"
-      @cancel="effectModalVisible = false"
-      :width="520"
-    >
+    <!-- 效果弹窗 (Modal) -->
+    <AModal v-model:visible="uiState.effect.visible" :title="uiState.effect.title" @ok="uiState.effect.visible = false" :width="520">
       <AScrollbar style="max-height: 400px; overflow: auto;" class="pr-2">
-        <div v-if="effectModalContent" class="whitespace-pre-wrap py-2 text-sm leading-6 mb-4">
-          {{ effectModalContent }}
-        </div>
-
-        <!-- 动态表单 -->
-        <div v-if="effectModalFormItems.length > 0" class="space-y-4 py-2">
-          <template v-for="config in effectModalFormItems" :key="config.key">
-            <FilterInput
-              v-if="config.type === 'input'"
-              :label="config.label"
-              v-model="effectModalFormData[config.key]"
-              :placeholder="config.placeholder"
-            />
-            
-            <FilterSelect
-              v-else-if="config.type === 'select'"
-              :label="config.label"
-              v-model="effectModalFormData[config.key]"
-              :options="config.options ?? []"
-            />
-
-            <FilterDateRange
-              v-else-if="config.type === 'date-range'"
-              :label="config.label"
-              v-model="effectModalFormData[config.key]"
-            />
-
-            <FilterTreeSelect
-              v-else-if="config.type === 'tree-select'"
-              :label="config.label"
-              v-model="effectModalFormData[config.key]"
-              :options="config.treeOptions ?? []"
-              :placeholder="config.placeholder"
-            />
+        <div v-if="uiState.effect.content" class="whitespace-pre-wrap py-2 text-sm leading-6 mb-4">{{ uiState.effect.content }}</div>
+        <div v-if="uiState.effect.formItems.length > 0" class="space-y-4 py-2">
+          <template v-for="config in uiState.effect.formItems" :key="config.key">
+            <FilterInput v-if="config.type === 'input'" :label="config.label" v-model="uiState.effect.data[config.key]" :placeholder="config.placeholder" />
+            <FilterSelect v-else-if="config.type === 'select'" :label="config.label" v-model="uiState.effect.data[config.key]" :options="config.options ?? []" />
+            <FilterDateRange v-else-if="config.type === 'date-range'" :label="config.label" v-model="uiState.effect.data[config.key]" />
+            <FilterTreeSelect v-else-if="config.type === 'tree-select'" :label="config.label" v-model="uiState.effect.data[config.key]" :options="config.treeOptions ?? []" :placeholder="config.placeholder" />
           </template>
         </div>
       </AScrollbar>
     </AModal>
 
-    <!-- 编辑弹窗 -->
-    <AModal
-      v-model:visible="editDialogOpen"
-      :title="editDialogMode === 'add' ? '添加' + (editDialogType === 'filter' ? '筛选项' : editDialogType === 'column' ? '列' : editDialogType === 'action' ? '按钮' : '卡片') : '编辑' + (editDialogType === 'filter' ? '筛选项' : editDialogType === 'column' ? '列' : editDialogType === 'action' ? '按钮' : '卡片')"
-      @ok="saveEdit"
-      @cancel="editDialogOpen = false"
-      :width="480"
-    >
-      <div v-if="editDialogType === 'filter'" class="space-y-4">
-        <ConfigForm type="filter" v-model="filterEditForm" />
-      </div>
-
-      <!-- 列编辑表单 -->
-      <div v-else-if="editDialogType === 'column'" class="space-y-4">
-        <ConfigForm type="column" v-model="columnEditForm" :available-columns="availableColumns" />
-      </div>
-
-      <!-- 操作按钮编辑表单 -->
-      <div v-else-if="editDialogType === 'action'" class="space-y-4">
-        <ConfigForm type="action" v-model="actionEditForm" />
-      </div>
-
-      <!-- 卡片编辑表单 -->
-      <div v-else-if="editDialogType === 'card'" class="space-y-4">
-        <ConfigForm type="card" v-model="cardEditForm" />
-      </div>
-    </AModal>
- 
-    <!-- 表格弹窗 (Effect Type: table) -->
-    <AModal
-      v-model:visible="effectTableVisible"
-      :title="effectTableTitle"
-      @ok="effectTableVisible = false"
-      :width="800"
-      :footer="false"
-    >
+    <!-- 效果弹窗 (Table) -->
+    <AModal v-model:visible="uiState.table.visible" :title="uiState.table.title" @ok="uiState.table.visible = false" :width="800" :footer="false">
       <div class="h-[400px]">
-        <ArcoTable
-          :columns="effectTableColumns"
-          :data="effectTableData"
-          :show-checkbox="effectTableShowCheckbox"
-          :page-size="5"
-          height="100%"
-          :bordered="{ wrapper: true, cell: true }"
-        />
+        <ArcoTable :columns="uiState.table.columns" :data="uiState.table.data" :show-checkbox="uiState.table.showCheckbox" :page-size="5" height="100%" :bordered="{ wrapper: true, cell: true }" />
       </div>
     </AModal>
-     <!-- 区域配置弹窗 -->
-    <AModal
-      v-model:visible="areaConfigDialogOpen"
-      :title="areaConfigType === 'filter' ? '筛选区配置' : areaConfigType === 'card' ? '卡片区配置' : '表格区配置'"
-      @ok="saveAreaConfig"
-      @cancel="areaConfigDialogOpen = false"
+
+    <!-- 配置编辑弹窗 -->
+    <AModal 
+      v-if="currentCrud"
+      v-model:visible="currentCrud.dialogVisible.value" 
+      :title="(currentCrud.mode.value === 'add' ? '添加' : '编辑') + currentCrud.name" 
+      @ok="currentCrud.handleSave()" 
       :width="480"
     >
-      <!-- 筛选区配置 -->
-      <div v-if="areaConfigType === 'filter'" class="space-y-4">
+      <ConfigForm :type="uiState.area.type as any" v-model="currentCrud.formData.value" :available-columns="availableColumns" />
+    </AModal>
+
+    <!-- 区域配置弹窗 -->
+    <AModal v-model:visible="uiState.area.visible" :title="uiState.area.type === 'filter' ? '筛选区配置' : uiState.area.type === 'card' ? '卡片区配置' : '表格区配置'" @ok="actions.saveAreaConfig" :width="480">
+      <div v-if="uiState.area.type === 'filter'" class="space-y-4 text-left">
         <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="text-sm font-medium mb-1.5 block">每行列数</label>
-            <AInputNumber v-model="filterAreaConfig.columns" :min="1" :max="6" />
-          </div>
-          <div>
-            <label class="text-sm font-medium mb-1.5 block">间距</label>
-            <AInput v-model="filterAreaConfig.gap" placeholder="如: 16px" />
-          </div>
+          <div><label class="text-sm font-medium mb-1.5 block">每行列数</label><AInputNumber v-model="uiState.area.config.columns" :min="1" :max="6" /></div>
+          <div><label class="text-sm font-medium mb-1.5 block">间距</label><AInput v-model="uiState.area.config.gap" placeholder="如: 16px" /></div>
         </div>
         <div class="flex items-center gap-2">
-          <input type="checkbox" id="showActions" v-model="filterAreaConfig.showActions" class="rounded" />
+          <input type="checkbox" id="showActions" v-model="uiState.area.config.showActions" class="rounded" />
           <label for="showActions" class="text-sm">显示操作区</label>
         </div>
       </div>
 
-      <!-- 卡片区配置 -->
-      <div v-else-if="areaConfigType === 'card'" class="space-y-4">
-        <div class="flex items-center gap-2 pb-2 border-b">
-          <input type="checkbox" id="showCard" v-model="cardAreaConfig.show" class="rounded" />
-          <label for="showCard" class="text-sm font-medium">显示卡片区</label>
-        </div>
+      <div v-else-if="uiState.area.type === 'card'" class="space-y-4 text-left">
+        <div class="flex items-center gap-2 pb-2 border-b"><input type="checkbox" id="showCard" v-model="uiState.area.config.show" class="rounded" /><label for="showCard" class="text-sm font-medium">显示卡片区</label></div>
         <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="text-sm font-medium mb-1.5 block">每行列数</label>
-            <AInputNumber v-model="cardAreaConfig.columns" :min="1" :max="6" />
-          </div>
-          <div>
-            <label class="text-sm font-medium mb-1.5 block">间距</label>
-            <AInput v-model="cardAreaConfig.gap" placeholder="如: 16px" />
-          </div>
+          <div><label class="text-sm font-medium mb-1.5 block">每行列数</label><AInputNumber v-model="uiState.area.config.columns" :min="1" :max="6" /></div>
+          <div><label class="text-sm font-medium mb-1.5 block">间距</label><AInput v-model="uiState.area.config.gap" placeholder="如: 16px" /></div>
         </div>
       </div>
 
-      <!-- 表格区配置 -->
-      <div v-else-if="areaConfigType === 'table'" class="space-y-4">
+      <div v-else-if="uiState.area.type === 'table'" class="space-y-4 text-left">
         <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="text-sm font-medium mb-1.5 block">表格高度</label>
-            <AInput v-model="tableAreaConfig.height" placeholder="如: 400px" />
-          </div>
-          <div>
-            <label class="text-sm font-medium mb-1.5 block">每页条数</label>
-            <AInputNumber v-model="tableAreaConfig.pageSize" :min="5" :max="100" />
-          </div>
+          <div><label class="text-sm font-medium mb-1.5 block">表格高度</label><AInput v-model="uiState.area.config.height" placeholder="如: 400px" /></div>
+          <div><label class="text-sm font-medium mb-1.5 block">每页条数</label><AInputNumber v-model="uiState.area.config.pageSize" :min="5" :max="100" /></div>
         </div>
         <div class="grid grid-cols-2 gap-4">
-          <div class="flex items-center gap-2">
-            <input type="checkbox" id="scrollX" v-model="tableAreaConfig.scrollX" class="rounded" />
-            <label for="scrollX" class="text-sm">横向滚动</label>
-          </div>
-          <div class="flex items-center gap-2">
-            <input type="checkbox" id="scrollY" v-model="tableAreaConfig.scrollY" class="rounded" />
-            <label for="scrollY" class="text-sm">纵向滚动</label>
-          </div>
+          <div class="flex items-center gap-2"><input type="checkbox" id="scrollX" v-model="uiState.area.config.scrollX" class="rounded" /><label for="scrollX" class="text-sm">横向滚动</label></div>
+          <div class="flex items-center gap-2"><input type="checkbox" id="scrollY" v-model="uiState.area.config.scrollY" class="rounded" /><label for="scrollY" class="text-sm">纵向滚动</label></div>
         </div>
         <div class="grid grid-cols-2 gap-4">
-          <div class="flex items-center gap-2">
-            <input type="checkbox" id="showCheckbox" v-model="tableAreaConfig.showCheckbox" class="rounded" />
-            <label for="showCheckbox" class="text-sm">显示复选框</label>
-          </div>
-          <div class="flex items-center gap-2">
-            <input type="checkbox" id="stickyHeader" v-model="tableAreaConfig.stickyHeader" class="rounded" />
-            <label for="stickyHeader" class="text-sm">吸顶表头</label>
-          </div>
+          <div class="flex items-center gap-2"><input type="checkbox" id="showCheckbox" v-model="uiState.area.config.showCheckbox" class="rounded" /><label for="showCheckbox" class="text-sm">显示复选框</label></div>
+          <div class="flex items-center gap-2"><input type="checkbox" id="stickyHeader" v-model="uiState.area.config.stickyHeader" class="rounded" /><label for="stickyHeader" class="text-sm">吸顶表头</label></div>
         </div>
       </div>
     </AModal>

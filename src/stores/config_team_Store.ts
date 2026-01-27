@@ -5,146 +5,62 @@ import { toast } from 'vue-sonner'
 import type { TeamItem } from '@/types/navigation'
 import * as Icons from 'lucide-vue-next'
 
-const DEFAULT_TEAM_CONFIG: TeamItem[] = [
-    {
-        name: 'AIGen-UI',
-        logo: Icons.GalleryVerticalEnd as any, // 匹配原有逻辑，虽然 SQL 里默认是 IconMosaic
-        plan: 'online', // SQL 里是 role，类型里是 plan，需要对齐
-        permissions: { navMain: 'all', projects: 'all' } // 类型里是对象，SQL 默认里是数组，需要对齐类型
-    }
-]
+const DEFAULT_TEAM_CONFIG: TeamItem[] = [{
+    name: 'AIGen-UI',
+    logo: Icons.GalleryVerticalEnd as any,
+    plan: 'online',
+    permissions: { navMain: 'all', projects: 'all' }
+}]
 
 export const useConfigTeamStore = defineStore('config-team', () => {
     const teams = ref<TeamItem[]>([])
-    const isLoaded = ref(false)
-    const isLoading = ref(false)
+    const isLoaded = ref(false), isLoading = ref(false)
     const CACHE_KEY = 'aigen_team_config_cache'
 
-    /**
-     * 从本地缓存加载 (同步)
-     */
-    function loadFromCache() {
-        const cached = localStorage.getItem(CACHE_KEY)
-        if (cached) {
-            try {
-                teams.value = JSON.parse(cached)
-                isLoaded.value = true
-            } catch (e) {
-                console.error('Failed to parse team config cache', e)
-            }
-        }
-    }
-
-    /**
-     * 加载团队配置
-     */
-    async function loadTeams() {
-        isLoading.value = true
+    const _runAction = async (fn: (uid: string) => Promise<any>, silent = false) => {
+        if (!silent) isLoading.value = true
         try {
             const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return { success: false, message: '用户未登录' }
-
-            const { data, error } = await supabase
-                .from('team_configs')
-                .select('team_config')
-                .eq('user_id', user.id)
-                .maybeSingle()
-
-            if (error) throw error
-
-            if (data?.team_config) {
-                teams.value = data.team_config
-                // 更新缓存
-                localStorage.setItem(CACHE_KEY, JSON.stringify(teams.value))
-            } else {
-                // 如果云端没数据，使用默认值
-                teams.value = JSON.parse(JSON.stringify(DEFAULT_TEAM_CONFIG))
-                // 自动保存初始默认值
-                await saveTeams()
-            }
-            isLoaded.value = true
-            return { success: true }
-        } catch (error: any) {
-            console.error('加载团队配置失败:', error)
-            toast.error('加载团队配置失败: ' + error.message)
-            return { success: false, message: error.message }
-        } finally {
-            isLoading.value = false
-        }
-    }
-
-    /**
-     * 保存团队配置
-     */
-    async function saveTeams() {
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return { success: false, message: '用户未登录' }
-
-            // 转换图标为字符串进行持久化，如果 logo 是组件
-            const serializedTeams = teams.value.map(team => ({
-                ...team,
-                logo: typeof team.logo === 'string' ? team.logo : (team.logo as any)?.name || 'GalleryVerticalEnd'
-            }))
-
-            // 乐观更新缓存
+            if (!user) throw new Error('用户未登录')
+            const res = await fn(user.id)
             localStorage.setItem(CACHE_KEY, JSON.stringify(teams.value))
-
-            const { error } = await supabase
-                .from('team_configs')
-                .upsert({
-                    user_id: user.id,
-                    team_config: serializedTeams,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'user_id' })
-
-            if (error) throw error
-            return { success: true }
-        } catch (error: any) {
-            console.error('保存团队配置失败:', error)
-            return { success: false, message: error.message }
-        }
+            return { success: true, data: res }
+        } catch (e: any) {
+            if (!silent) toast.error(e.message)
+            return { success: false, message: e.message }
+        } finally { isLoading.value = false }
     }
 
-    /**
-     * 添加团队
-     */
-    async function addTeam(team: TeamItem) {
-        teams.value.push(team)
-        return await saveTeams()
+    const loadFromCache = () => {
+        const cached = localStorage.getItem(CACHE_KEY)
+        if (cached) { teams.value = JSON.parse(cached); isLoaded.value = true }
     }
 
-    /**
-     * 更新团队
-     */
-    async function updateTeam(index: number, updates: Partial<TeamItem>) {
-        if (teams.value[index]) {
-            teams.value[index] = { ...teams.value[index], ...updates }
-            return await saveTeams()
-        }
-        return { success: false, message: '团队不存在' }
+    const saveTeams = () => _runAction(async (uid) => {
+        const serialized = teams.value.map(t => ({ ...t, logo: typeof t.logo === 'string' ? t.logo : (t.logo as any)?.name || 'GalleryVerticalEnd' }))
+        const { error } = await supabase.from('team_configs').upsert({
+            user_id: uid, team_config: serialized, updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' })
+        if (error) throw error
+    })
+
+    const loadTeams = () => _runAction(async (uid) => {
+        const { data, error } = await supabase.from('team_configs').select('team_config').eq('user_id', uid).maybeSingle()
+        if (error) throw error
+        if (data?.team_config) teams.value = data.team_config
+        else { teams.value = JSON.parse(JSON.stringify(DEFAULT_TEAM_CONFIG)); await saveTeams() }
+        isLoaded.value = true
+    })
+
+    const addTeam = (team: TeamItem) => { teams.value.push(team); return saveTeams() }
+    const updateTeam = (idx: number, up: Partial<TeamItem>) => {
+        if (!teams.value[idx]) return { success: false, message: '不存在' }
+        teams.value[idx] = { ...teams.value[idx], ...up }; return saveTeams()
+    }
+    const deleteTeam = (idx: number) => {
+        if (!teams.value[idx]) return { success: false, message: '不存在' }
+        teams.value.splice(idx, 1); return saveTeams()
     }
 
-    /**
-     * 删除团队
-     */
-    async function deleteTeam(index: number) {
-        if (teams.value[index]) {
-            teams.value.splice(index, 1)
-            return await saveTeams()
-        }
-        return { success: false, message: '团队不存在' }
-    }
-
-    return {
-        teams,
-        isLoaded,
-        isLoading,
-        loadFromCache,
-        loadTeams,
-        saveTeams,
-        addTeam,
-        updateTeam,
-        deleteTeam
-    }
+    return { teams, isLoaded, isLoading, loadFromCache, loadTeams, saveTeams, addTeam, updateTeam, deleteTeam }
 })

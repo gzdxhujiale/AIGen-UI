@@ -41,7 +41,7 @@ export function initNavigation(navGroups: NavGroup[]) {
     if (firstMainNav) {
         currentMainNav.value = firstMainNav.title
         if (firstSubNav) {
-            currentSubNav.value = firstSubNav.title
+            currentSubNav.value = firstSubNav.name
             _currentNavId.value = firstSubNav.id
         } else {
             // 如果一级菜单没有子项，则使用一级菜单自己的 ID (V9 通常有子项)
@@ -62,8 +62,8 @@ export function useNavigation() {
         } else {
             const navGroups = _navGroupsRef.value || []
             for (const group of navGroups) {
-                for (const mainItem of group.items) {
-                    const subItem = mainItem.items?.find(item => item.title === subNav)
+                for (const mainItem of (group.items as any[])) {
+                    const subItem = (mainItem.items as any[])?.find(item => item.name === subNav)
                     if (subItem) {
                         _currentNavId.value = subItem.id
                         return

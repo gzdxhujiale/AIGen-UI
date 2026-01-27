@@ -92,6 +92,7 @@ export function useConfigCrud<T extends Record<string, any>>(options: ConfigCrud
     }
 
     return {
+        name: options.name || '项',
         dialogVisible,
         editingIndex,
         mode,

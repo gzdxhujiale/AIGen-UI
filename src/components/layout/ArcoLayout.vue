@@ -1,57 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, watch, reactive } from 'vue'
 import {
-  Layout as ALayout,
-  LayoutHeader as ALayoutHeader,
-  LayoutContent as ALayoutContent,
-  LayoutSider as ALayoutSider,
-  Button as AButton,
-  Breadcrumb as ABreadcrumb,
-  BreadcrumbItem as ABreadcrumbItem,
-  Menu as AMenu,
-  MenuItem as AMenuItem,
-  SubMenu as ASubMenu,
-  Dropdown as ADropdown,
-  Doption as ADoption,
-  Dgroup as ADgroup,
-  Avatar as AAvatar,
-  Divider as ADivider,
-  Scrollbar as AScrollbar,
-  Select as ASelect,
-  Option as AOption,
-  RadioGroup as ARadioGroup,
-  Radio as ARadio,
-  Textarea as ATextarea
+  Layout as ALayout, LayoutHeader as ALayoutHeader, LayoutContent as ALayoutContent, LayoutSider as ALayoutSider,
+  Button as AButton, Breadcrumb as ABreadcrumb, BreadcrumbItem as ABreadcrumbItem, Menu as AMenu, MenuItem as AMenuItem,
+  SubMenu as ASubMenu, Dropdown as ADropdown, Doption as ADoption, Dgroup as ADgroup, Avatar as AAvatar, Divider as ADivider,
+  Scrollbar as AScrollbar, Select as ASelect, Option as AOption, RadioGroup as ARadioGroup, Radio as ARadio, Textarea as ATextarea,
+  Modal as AModal, Input as AInput, Form as AForm, FormItem as AFormItem, Message, Popconfirm as APopconfirm, Checkbox as ACheckbox
 } from '@arco-design/web-vue'
-import {
-  IconMenuFold,
-  IconMenuUnfold,
-  IconSettings,
-  IconApps,
-  IconList,
-  IconFile,
-  IconFolder,
-  IconHome,
-  IconUser,
-  IconDashboard,
-  IconStorage,
-  IconCalendar,
-  IconSafe,
-  IconFire,
-
-} from '@arco-design/web-vue/es/icon'
-import {
-    ChevronRight,
-    ChevronsUpDown,
-    LogOut,
-    Plus,
-    Pencil,
-    Eye,
-    Trash2,
-    GripVertical
-} from 'lucide-vue-next'
+import * as ArcIcons from '@arco-design/web-vue/es/icon'
+import { ChevronRight, ChevronsUpDown, LogOut, Plus, Pencil, Eye, Trash2, GripVertical } from 'lucide-vue-next'
 import { useConfigStore } from '@/stores/configStore'
-import { type NavMainItem, type NavSubItem, type NavGroup } from '@/types'
 import { useConfigPageStore } from '@/stores/config_page_Store'
 import { useConfigTeamStore } from '@/stores/config_team_Store'
 import { useConfigMenuStore } from '@/stores/config_menu_Store'
@@ -59,877 +17,231 @@ import { useAuthStore } from '@/stores/authStore'
 import { useAIStore } from '@/stores/aiStore'
 import { useNavigation } from '@/composables/useNavigation'
 import { supabase } from '@/api/supabase'
-import type { TeamItem } from '@/types'
+import type { TeamItem, NavGroup } from '@/types'
 import AIChatAssistant from '@/views/AIChatAssistant.vue'
 import draggable from 'vuedraggable'
-import { Modal as AModal, Input as AInput, Form as AForm, FormItem as AFormItem, Message, Popconfirm as APopconfirm } from '@arco-design/web-vue'
 
-const configStore = useConfigStore()
-const pageStore = useConfigPageStore()
-const teamStore = useConfigTeamStore()
-const menuStore = useConfigMenuStore()
-const authStore = useAuthStore()
+const configStore = useConfigStore(), pageStore = useConfigPageStore(), teamStore = useConfigTeamStore()
+const menuStore = useConfigMenuStore(), authStore = useAuthStore(), aiStore = useAIStore()
 const { breadcrumbs, currentNavId, setNavigation, setDetailTitle } = useNavigation()
 
-// --- 状态管理 ---
-const collapsed = ref(false)
-const activeTeam = ref<TeamItem | null>(null)
+// --- 状态 ---
+const collapsed = ref(false), isNavInitialized = ref(false), activeTeam = ref<TeamItem | null>(null)
+const openKeys = ref<string[]>([])
 
 const teamLogoUrl = computed(() => {
-    // 方案 1: 基于用户邮箱或特定条件切换 Logo
-    // 你可以在这里添加更多账号和对应的图标文件名
-    const logoMap: Record<string, string> = {
-        '2063994160@qq.com': 'black.jpeg', 
-    }
-
-    const fileName = logoMap[authStore.userEmail] || 'ai.svg'
-    return supabase.storage.from('team_avatars').getPublicUrl(fileName).data.publicUrl
+    const logoMap: Record<string, string> = { '2063994160@qq.com': 'black.jpeg' }
+    return supabase.storage.from('team_avatars').getPublicUrl(logoMap[authStore.userEmail] || 'ai.svg').data.publicUrl
 })
 
-// --- 团队逻辑 ---
+const effectiveTeams = computed(() => teamStore.teams)
+watch(effectiveTeams, (ts) => { if (ts.length && (!activeTeam.value || !ts.find(t => t.name === activeTeam.value?.name))) activeTeam.value = ts[0] }, { immediate: true })
 
-
-const effectiveTeams = computed<TeamItem[]>(() => {
-  return teamStore.teams
-})
-
-watch(effectiveTeams, (newTeams) => {
-    if (newTeams.length > 0) {
-        if (!activeTeam.value || !newTeams.find(t => t.name === activeTeam.value?.name)) {
-            activeTeam.value = newTeams[0]
-        }
-    }
-}, { deep: true, immediate: true })
-
-const handleTeamSelect = (value: any) => {
-    if (value === 'add_team') return 
-    const team = effectiveTeams.value.find(t => t.name === value)
-    if (team) activeTeam.value = team
-}
-
-// --- 导航过滤 ---
+// --- 导航逻辑 ---
 const filteredNavGroups = computed(() => {
-  const team = activeTeam.value
-  
-  // 1. Determine source: Preview vs Store
-  let rawNavGroups = pageStore.navGroups
-  if (configStore.isInPreviewMode && configStore.previewNavGroups) {
-      rawNavGroups = configStore.previewNavGroups
-  }
-  const navGroups = rawNavGroups.flat()
-  
-  // Helper to filter visible:false items
-  const applyVisibleFilter = (groups: NavGroup[]) => {
-    return groups.map(group => ({
-      ...group,
-      items: group.items.filter((item: NavMainItem) => item.visible !== false)
-    })).filter(group => group.items.length > 0)
-  }
+    const teams = pageStore.navGroups.flat() || []
+    const applyFilter = (gs: NavGroup[]) => gs.map(g => ({ ...g, items: g.items.filter(i => i.visible !== false) })).filter(g => g.items.length > 0)
+    
+    if (configStore.isInPreviewMode || aiStore.previewMode) return applyFilter(teams)
+    if (!activeTeam.value) return applyFilter(teams)
 
-  // If no data, return empty
-  if (!navGroups || navGroups.length === 0) return []
+    const perms = activeTeam.value.permissions as any
+    if (!perms || (perms.navMain === 'all' && !perms.navItems)) return applyFilter(teams)
 
-  // 2. In Preview Mode, showing ALL visible items (Bypass Team Permissions)
-  // This ensures AI generated items (which are not in team permissions yet) are visible.
-  if (configStore.isInPreviewMode) {
-      return applyVisibleFilter(navGroups)
-  }
-  
-  // 3. Normal Mode: Filter by Team Permissions
-  // Exception: If AI Preview Mode is active (V9), show all
-  const aiStore = useAIStore()
-  if (aiStore.previewMode) {
-      return applyVisibleFilter(navGroups)
-  }
-
-  if (!team) return applyVisibleFilter(navGroups)
-  
-  // 检查 permissions 是否为有效的对象格式
-  const permissions = team.permissions
-  if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) {
-    return applyVisibleFilter(navGroups)
-  }
-  
-  const { navMain, navItems } = permissions
-  
-  // 如果是全部权限且没有细粒度控制，返回所有可见导航
-  if (navMain === 'all' && !navItems) return applyVisibleFilter(navGroups)
-
-  return navGroups.map(group => {
-    const filteredItems = group.items.filter((item: NavMainItem) => {
-      // 基础可见性检查
-      if (item.visible === false) return false
-      
-      const isMainVisible = navMain === 'all' || (Array.isArray(navMain) && navMain.includes(item.id))
-      if (!isMainVisible) return false
-      
-      if (navItems && navItems[item.id]) {
-        if (!item.items) return true
-        const visibleSubItemIds = navItems[item.id] ?? []
-        return item.items.filter((sub: NavSubItem) => visibleSubItemIds.includes(sub.id)).length > 0
-      }
-      return true
-    }).map((item: NavMainItem) => {
-        if (navItems && navItems[item.id] && item.items) {
-             const visibleSubItemIds = navItems[item.id] ?? []
-             return { ...item, items: item.items.filter((sub: NavSubItem) => visibleSubItemIds.includes(sub.id)) }
-        }
-        return item
-    })
-    return { ...group, items: filteredItems }
-  }).filter((group: NavGroup) => group.items.length > 0)
+    return teams.map(g => ({
+        ...g,
+        items: g.items.filter(i => (i.visible !== false) && (perms.navMain === 'all' || perms.navMain?.includes(i.id)))
+            .map(i => {
+                const visibleSubs = perms.navItems?.[i.id]
+                return visibleSubs ? { ...i, items: i.items?.filter(s => visibleSubs.includes(s.id)) } : i
+            }).filter(i => !i.items || i.items.length > 0)
+    })).filter(g => g.items.length > 0)
 })
 
-// --- 菜单处理 ---
 const selectedKeys = computed(() => [currentNavId.value].filter(Boolean) as string[])
+const resolveIcon = (icon: any) => typeof icon === 'string' ? (ArcIcons as any)[icon] || icon : icon
 
-const openKeys = ref<string[]>([])
-const isNavInitialized = ref(false)
+const handleNavClick = (main: string, sub: string, id?: string) => { setNavigation(main, sub, id); setDetailTitle(null) }
 
-// 初始化 openKeys (作为默认展开状态)
-const initDefaultOpenKeys = () => {
-    const keys: string[] = [...openKeys.value]
-    filteredNavGroups.value.forEach(group => {
-        group.items.forEach(item => {
-            // 默认展开配置了 isOpen 的菜单
-            if (item.isOpen && !keys.includes('sub-' + item.id)) {
-                keys.push('sub-' + item.id)
-            }
-            // 默认展开当前选中项所在的菜单
-            if (item.items?.some(sub => sub.id === currentNavId.value)) {
-                if (!keys.includes('sub-' + item.id)) {
-                    keys.push('sub-' + item.id)
-                }
-            }
-        })
-    })
-    openKeys.value = keys
-}
-
-
-const resolveIcon = (icon: any) => {
-    if (!icon) return null
-    if (typeof icon === 'string') {
-        const iconMap: Record<string, any> = {
-            IconSettings, IconApps, IconList, IconFile, IconFolder, IconHome, 
-            IconUser, IconDashboard, IconStorage, IconCalendar, IconSafe, IconFire
-        }
-        return iconMap[icon] || icon
-    }
-    return icon
-}
-
-// 当用户在其他地方切换导航 ID 时（如通过面包屑或代码跳转），自动打开对应父菜单
-watch(currentNavId, (newId) => {
-    if (!newId) return
-    filteredNavGroups.value.forEach(group => {
-        group.items.forEach(item => {
-            if (item.items?.some(sub => sub.id === newId)) {
-                if (!openKeys.value.includes('sub-' + item.id)) {
-                    openKeys.value = [...openKeys.value, 'sub-' + item.id]
-                }
-            }
-        })
-    })
+watch(currentNavId, (id) => {
+    if (!id) return
+    filteredNavGroups.value.forEach(g => g.items.forEach(i => {
+        if (i.items?.some(s => s.id === id) && !openKeys.value.includes('sub-' + i.id)) openKeys.value.push('sub-' + i.id)
+    }))
 })
 
-const handleNavClick = (mainNav: string, subNav: string, navId?: string) => {
-    // 强制传递 ID 以确保 pageConfig 能找到
-    setNavigation(mainNav, subNav, navId)
-    setDetailTitle(null)
-}
-
-// 仅在初始结构就绪时执行一次默认展开和默认选中
-watch(filteredNavGroups, (newGroups) => {
-    if (newGroups.length > 0 && newGroups.some(g => g.items.length > 0)) {
-        // 1. 初始化展开状态
-        if (!isNavInitialized.value) {
-            initDefaultOpenKeys()
-            isNavInitialized.value = true
-        }
-
-        // 2. 默认选中逻辑：如果没有选中项，或者当前选中项已不可见
-        const allVisibleSubIds = newGroups.flatMap(g => g.items.flatMap(m => m.items?.map(s => s.id) || []))
-        const isCurrentVisible = currentNavId.value && allVisibleSubIds.includes(currentNavId.value)
-
-        if (!currentNavId.value || (!isCurrentVisible && !['settings', 'profile', 'billing'].includes(currentNavId.value))) {
-            const firstGroup = newGroups[0]
-            const firstMain = firstGroup.items[0]
-            if (firstMain) {
-                const firstSub = firstMain.items?.[0]
-                if (firstSub) {
-                    handleNavClick(firstMain.title, firstSub.title, firstSub.id)
-                } else {
-                    // 如果没有二级菜单，则尝试直接跳转一级（目前 V9 架构通常都有二级）
-                    handleNavClick(firstGroup.label, firstMain.title, firstMain.id)
-                }
-            }
-        }
+watch(filteredNavGroups, (gs) => {
+    if (!gs.length) return
+    if (!isNavInitialized.value) {
+        gs.forEach(g => g.items.forEach(i => i.isOpen && openKeys.value.push('sub-' + i.id)))
+        isNavInitialized.value = true
+    }
+    const allIds = gs.flatMap(g => g.items.flatMap(m => m.items?.map(s => s.id) || []))
+    if (!currentNavId.value || (!allIds.includes(currentNavId.value) && !['settings', 'profile'].includes(currentNavId.value))) {
+        const first = gs[0]?.items[0]; if (first) handleNavClick(first.title, first.items?.[0]?.name || first.title, first.items?.[0]?.id || first.id)
     }
 }, { immediate: true })
 
-const handleUserAction = async (value: any) => {
-    switch (value) {
-        case 'logout': await authStore.signOut(); break
-        case 'profile': setNavigation('账户', '个人资料', 'profile'); setDetailTitle(null); break
-        case 'upgrade':
-        case 'settings': setNavigation('系统', '配置设置', 'settings'); setDetailTitle(null); break
-        case 'billing': setNavigation('Account', 'Billing', 'billing'); setDetailTitle(null); break
-        case 'toggle-edit': configStore.setEditMode(!configStore.isEditMode); break
+// --- 动作处理 ---
+const handleUserAction = (val: any) => {
+    const actions: Record<string, () => void> = {
+        logout: () => authStore.signOut(),
+        profile: () => { setNavigation('账户', '个人资料', 'profile'); setDetailTitle(null) },
+        settings: () => { setNavigation('系统', '配置设置', 'settings'); setDetailTitle(null) },
+        'toggle-edit': () => configStore.setEditMode(!configStore.isEditMode)
     }
+    actions[val]?.()
 }
 
-const handleSubNavClick = () => {
-  if (breadcrumbs.value.detail) {
-    setDetailTitle(null)
-  }
-}
-// --- 编辑模式逻辑 ---
-const editDialogVisible = ref(false)
-const editDialogTitle = ref('')
-const editDialogMode = ref<'add-main' | 'edit-main' | 'add-sub' | 'edit-sub'>('add-main')
-const editForm = reactive({
-    groupIdx: 0,
-    mainItemId: '',
-    subItemId: '',
-    title: '',
-    url: '',
-    icon: '',
-    visible: true
-})
-
-const openAddMainDialog = (groupIdx: number) => {
-    if (groupIdx < 0 || groupIdx >= pageStore.navGroups.length) {
-        Message.error('无法找到对应的导航组')
-        return
-    }
-    editDialogMode.value = 'add-main'
-    editDialogTitle.value = '添加一级导航'
-    editForm.groupIdx = groupIdx
-    editForm.title = ''
-    editForm.icon = 'IconSettings'
-    editForm.visible = true
-    editDialogVisible.value = true
-}
-
-const openEditMainDialog = (groupIdx: number, item: NavMainItem) => {
-    if (groupIdx < 0) return
-
-    editDialogMode.value = 'edit-main'
-    editDialogTitle.value = '编辑一级导航'
-    editForm.groupIdx = groupIdx
-    editForm.mainItemId = item.id
-    editForm.title = item.title
-    editForm.icon = typeof item.icon === 'string' ? item.icon : (item.icon?.name || 'IconSettings')
-    editForm.visible = item.visible ?? true
-    editDialogVisible.value = true
-}
-
-const openAddSubDialog = (groupIdx: number, mainItemId: string) => {
-    if (groupIdx < 0) return
-
-    editDialogMode.value = 'add-sub'
-    editDialogTitle.value = '添加二级导航'
-    editForm.groupIdx = groupIdx
-    editForm.mainItemId = mainItemId
-    editForm.title = ''
-    editForm.url = '#'
-    editDialogVisible.value = true
-}
-
-const openEditSubDialog = (groupIdx: number, mainItemId: string, subItem: NavSubItem) => {
-    if (groupIdx < 0) return
-
-    editDialogMode.value = 'edit-sub'
-    editDialogTitle.value = '编辑二级导航'
-    editForm.groupIdx = groupIdx
-    editForm.mainItemId = mainItemId
-    editForm.subItemId = subItem.id
-    editForm.title = subItem.title
-    editForm.url = subItem.url || '#'
-    editDialogVisible.value = true
+// --- 编辑弹窗统合 ---
+const editDialog = reactive({ visible: false, title: '', mode: '', form: { groupIdx: 0, mainId: '', subId: '', title: '', icon: 'IconSettings', visible: true, url: '#' } })
+const _openNavDialog = (mode: string, params: any = {}) => {
+    Object.assign(editDialog, { visible: true, mode, title: mode.includes('add') ? '新增导航' : '编辑导航' })
+    Object.assign(editDialog.form, { groupIdx: params.idx || 0, mainId: params.mId || '', subId: params.sId || '', title: params.item?.name || params.item?.title || '', icon: params.item?.icon || 'IconSettings', visible: params.item?.visible ?? true })
 }
 
 const handleEditSubmit = () => {
-    if (!editForm.title) {
-        Message.warning('请输入标题')
-        return
+    const f = editDialog.form; if (!f.title) return Message.warning('请输入标题')
+    const actions: any = {
+        'add-main': () => pageStore.addNavMainItem({ title: f.title, icon: f.icon, visible: f.visible }),
+        'edit-main': () => pageStore.updateNavMainItem(f.mainId, { title: f.title, icon: f.icon, visible: f.visible }),
+        'add-sub': () => pageStore.addSubPage(f.mainId, { id: crypto.randomUUID(), name: f.title }),
+        'edit-sub': () => pageStore.updateSubPage(f.mainId, f.subId, { name: f.title })
     }
-
-    if (editDialogMode.value === 'add-main') {
-        pageStore.addNavMainItem({
-            title: editForm.title,
-            icon: editForm.icon,
-            visible: editForm.visible
-        })
-        Message.success('添加成功')
-    } else if (editDialogMode.value === 'edit-main') {
-        pageStore.updateNavMainItem(editForm.mainItemId, {
-            title: editForm.title,
-            icon: editForm.icon,
-            visible: editForm.visible
-        })
-        Message.success('更新成功')
-    } else if (editDialogMode.value === 'add-sub') {
-        pageStore.addSubPage(editForm.mainItemId, {
-            id: crypto.randomUUID(), // 需要生成 ID
-            name: editForm.title,
-        })
-        Message.success('添加成功')
-    } else if (editDialogMode.value === 'edit-sub') {
-        pageStore.updateSubPage(editForm.mainItemId, editForm.subItemId, {
-            name: editForm.title // PageSubItem 使用 name 而不是 title
-        })
-         Message.success('更新成功')
-    }
-    editDialogVisible.value = false
+    actions[editDialog.mode]?.(); Message.success('操作成功'); editDialog.visible = false
 }
 
-const handleDeleteMain = (_groupIdx: number, itemId: string) => {
-    // 忽略 groupIdx
-    pageStore.deleteNavMainItem(itemId)
-    Message.success('删除成功')
+// --- Header 菜单 ---
+const hMenuDialog = reactive({ visible: false, isEdit: false, idx: -1, form: { type: 'text-button', label: '', options: '' } })
+const _openHMenuDialog = (idx = -1, item?: any) => {
+    Object.assign(hMenuDialog, { visible: true, isEdit: idx > -1, idx, form: { type: item?.type || 'text-button', label: item?.label || '', options: item?.options?.join(',') || '' } })
 }
 
-const handleDeleteSub = (_groupIdx: number, mainItemId: string, subItemId: string) => {
-    // 忽略 groupIdx
-    pageStore.deleteSubPage(mainItemId, subItemId)
-    Message.success('删除成功')
+const saveHMenu = async () => {
+    const f = hMenuDialog.form; if (!f.label) return Message.warning('请填写标题')
+    const newItem = { 
+        type: f.type as "text-button" | "dropdown", 
+        label: f.label, 
+        options: f.type === 'dropdown' ? f.options.split(/[,，]/).map(s => s.trim()).filter(Boolean) : undefined 
+    }
+    const items = [...(menuStore.menuConfig?.items || [])]
+    hMenuDialog.isEdit ? (items[hMenuDialog.idx] = newItem) : items.push(newItem)
+    await menuStore.updateMenu({ items }); hMenuDialog.visible = false
 }
 
-const iconOptions = [
-    { label: 'Settings', value: 'IconSettings' },
-    { label: 'Apps', value: 'IconApps' },
-    { label: 'List', value: 'IconList' },
-    { label: 'File', value: 'IconFile' },
-    { label: 'Folder', value: 'IconFolder' },
-    { label: 'Home', value: 'IconHome' },
-    { label: 'User', value: 'IconUser' },
-    { label: 'Dashboard', value: 'IconDashboard' },
-    { label: 'Storage', value: 'IconStorage' },
-    { label: 'Calendar', value: 'IconCalendar' },
-    { label: 'Safe', value: 'IconSafe' },
-    { label: 'Fire', value: 'IconFire' },
-    { label: 'Mosaic', value: 'IconMosaic' }
-]
-
-// --- Header Menu Editing ---
-const menuEditDialog = reactive({
-    visible: false,
-    isEdit: false,
-    editIndex: -1,
-    form: {
-        type: 'text-button',
-        label: '',
-        options: ''
-    }
-})
-
-const openAddHeaderMenuDialog = () => {
-    menuEditDialog.isEdit = false
-    menuEditDialog.editIndex = -1
-    menuEditDialog.form = { type: 'text-button', label: '', options: '' }
-    menuEditDialog.visible = true
-}
-
-const openEditHeaderMenuDialog = (index: number, item: any) => {
-    menuEditDialog.isEdit = true
-    menuEditDialog.editIndex = index
-    menuEditDialog.form = {
-        type: item.type,
-        label: item.label,
-        options: item.options ? item.options.join(',') : ''
-    }
-    menuEditDialog.visible = true
-}
-
-const handleHeaderMenuSave = async () => {
-    if (!menuEditDialog.form.label) {
-        Message.warning('请输入按钮文字')
-        return
-    }
-
-    const newItem: any = {
-        type: menuEditDialog.form.type,
-        label: menuEditDialog.form.label
-    }
-
-    if (menuEditDialog.form.type === 'dropdown') {
-        if (!menuEditDialog.form.options) {
-             Message.warning('请输入选项（以逗号分隔）')
-             return
-        }
-        newItem.options = menuEditDialog.form.options.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
-    }
-
-    // Clone current config
-    const newConfig = [...(menuStore.menuConfig?.items || [])]
-
-    if (menuEditDialog.isEdit && menuEditDialog.editIndex > -1) {
-        newConfig[menuEditDialog.editIndex] = newItem
-    } else {
-        newConfig.push(newItem)
-    }
-
-    await menuStore.updateMenu({ items: newConfig })
-    Message.success('菜单配置已更新')
-    menuEditDialog.visible = false
-}
-
-const handleHeaderMenuDelete = async (index: number) => {
-     const newConfig = [...(menuStore.menuConfig?.items || [])]
-     newConfig.splice(index, 1)
-     await menuStore.updateMenu({ items: newConfig })
-     Message.success('菜单项已删除')
-}
-
-
-
-const headerMenuList = computed({
-    get: () => menuStore.menuConfig?.items || [],
-    set: async (val) => {
-        await menuStore.updateMenu({ items: val })
-    }
-})
-
+const iconOptions = ['IconSettings', 'IconApps', 'IconList', 'IconFile', 'IconFolder', 'IconHome', 'IconUser', 'IconDashboard', 'IconStorage', 'IconCalendar', 'IconSafe', 'IconFire', 'IconMosaic'].map(v => ({ label: v.replace('Icon', ''), value: v }))
 </script>
 
 <template>
-  <a-layout class="arco-layout">
-    <!-- 1. 侧边栏侧部 -->
-    <a-layout-sider
-      :collapsed="collapsed"
-      :trigger="null"
-      hide-trigger
-      collapsible
-      breakpoint="xl"
-      :width="230"
-      class="border-r border-[var(--color-border-2)] bg-[var(--color-bg-2)] h-screen shrink-0"
-    >
+  <a-layout class="h-screen bg-[var(--color-fill-2)]">
+    <a-layout-sider :collapsed="collapsed" :width="230" class="border-r border-[var(--color-border-2)] bg-[var(--color-bg-2)] transition-all">
       <div class="flex flex-col h-full overflow-hidden">
-        <!-- 1.1 团队切换器 -->
-        <div class="h-14 flex items-center px-2 border-b border-[var(--color-border-2)] shrink-0">
-          <a-dropdown @select="handleTeamSelect" trigger="click" position="br" v-if="!collapsed">
-            <div class="flex items-center gap-2 p-2 rounded-lg hover:bg-[var(--color-fill-2)] cursor-pointer transition-colors w-full overflow-hidden">
-                <div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-white border border-[var(--color-border-2)] shrink-0 overflow-hidden">
-                    <img :src="teamLogoUrl" class="size-full object-cover" alt="team logo" />
-                </div>
-                <div class="grid flex-1 text-left text-sm leading-tight overflow-hidden">
-                    <span class="truncate font-medium text-[var(--color-text-1)]">{{ activeTeam?.name }}</span>
-                    <span class="truncate text-xs text-[var(--color-text-3)]">{{ activeTeam?.plan }}</span>
-                </div>
-                <ChevronsUpDown class="ml-auto size-4 text-[var(--color-text-3)] shrink-0" />
+        <div class="h-14 flex items-center px-2 border-b border-[var(--color-border-2)]">
+          <a-dropdown @select="(v: string) => v !== 'add_team' && (activeTeam = effectiveTeams.find(t => t.name === v)!)" trigger="click" position="br" v-if="!collapsed">
+            <div class="flex items-center gap-2 p-2 rounded-lg hover:bg-[var(--color-fill-2)] cursor-pointer w-full overflow-hidden">
+                <div class="size-8 rounded-lg bg-white border border-[var(--color-border-2)] flex items-center justify-center overflow-hidden"><img :src="teamLogoUrl" class="size-full" /></div>
+                <div class="flex-1 min-w-0 text-left"><div class="truncate font-medium text-sm">{{ activeTeam?.name }}</div><div class="truncate text-xs text-gray-500">{{ activeTeam?.plan }}</div></div>
+                <ChevronsUpDown class="size-4 text-gray-400" />
             </div>
             <template #content>
-                <a-dgroup key="teams_list" title="Teams">
-                    <a-doption v-for="team in effectiveTeams" :key="team.name" :value="team.name">
-                        <template #icon>
-                          <img :src="teamLogoUrl" class="size-3.5" alt="team logo" />
-                        </template>
-                        {{ team.name }}
-                    </a-doption>
-                </a-dgroup>
-                <a-doption key="add_team_opt" value="add_team">
-                    <template #icon><Plus class="size-3.5" /></template>
-                    Add team
-                </a-doption>
+              <a-dgroup title="Teams"><a-doption v-for="t in effectiveTeams" :key="t.name" :value="t.name">{{ t.name }}</a-doption></a-dgroup>
+              <a-doption value="add_team"><template #icon><Plus class="size-3.5" /></template>Add team</a-doption>
             </template>
           </a-dropdown>
-          <div v-else class="flex items-center justify-center w-full">
-              <div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-white border border-[var(--color-border-2)] shrink-0 overflow-hidden">
-                  <img :src="teamLogoUrl" class="size-full object-cover" alt="team logo" />
-              </div>
-          </div>
+          <div v-else class="w-full flex justify-center"><img :src="teamLogoUrl" class="size-8 rounded-lg" /></div>
         </div>
 
-        <!-- 1.2 主导航 -->
-        <div class="flex-1 overflow-y-auto py-4 px-2 custom-scrollbar">
-          <div v-for="(group, groupIdx) in (configStore.isEditMode ? pageStore.navGroups : filteredNavGroups)" :key="group.label || groupIdx" class="mb-6">
-            <div v-if="!collapsed && (group.showLabel ?? true)" class="px-4 mb-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
-              {{ group.label }}
-            </div>
-            <a-menu
-              v-if="!configStore.isEditMode"
-              mode="vertical"
-              :collapsed="collapsed"
-              :selected-keys="selectedKeys"
-              v-model:open-keys="openKeys"
-              :style="{ width: '100%', border: 'none', backgroundColor: 'transparent' }"
-            >
-              <template v-for="item in group.items" :key="item.id">
-                <a-sub-menu v-if="item.items && item.items.length > 0" :key="'sub-'+item.id">
-                  <template #title>
-                    <div class="flex items-center justify-between w-full group/menu-item">
-                      <div class="flex items-center gap-1.5">
-                        <component :is="resolveIcon(item.icon)" v-if="item.icon" class="w-4 h-4 shrink-0" />
-                        <span class="truncate">{{ item.title }}</span>
-                      </div>
-                      <ChevronRight 
-                        v-if="!collapsed"
-                        class="ml-auto h-4 w-4 shrink-0 transition-transform duration-200"
-                        :class="{ 'rotate-90': openKeys.includes('sub-' + item.id) }"
-                      />
-                    </div>
-                  </template>
-                  <a-menu-item 
-                    v-for="sub in item.items" 
-                    :key="sub.id" 
-                    class="secondary-nav-item"
-                    @click="handleNavClick(item.title, sub.title || sub.name || '', sub.id)"
-                  >
-                    {{ sub.title || sub.name }}
-                  </a-menu-item>
+        <a-scrollbar class="flex-1 py-4 px-2 overflow-hidden">
+          <div v-for="(g, idx) in (configStore.isEditMode ? pageStore.navGroups : filteredNavGroups)" :key="idx" class="mb-6">
+            <div v-if="!collapsed && (g.showLabel !== false)" class="px-4 mb-2 text-xs font-bold text-gray-400 uppercase tracking-widest">{{ g.label }}</div>
+            <a-menu v-if="!configStore.isEditMode" mode="vertical" :collapsed="collapsed" :selected-keys="selectedKeys" v-model:open-keys="openKeys" class="!bg-transparent !border-none">
+              <template v-for="i in g.items" :key="i.id">
+                <a-sub-menu v-if="i.items?.length" :key="'sub-'+i.id">
+                  <template #title><div class="flex items-center gap-1 w-full"><component :is="resolveIcon(i.icon)" class="size-4" /><span>{{ i.title }}</span><ChevronRight v-if="!collapsed" class="ml-auto size-4 transition-transform" :class="{'rotate-90': openKeys.includes('sub-'+i.id)}" /></div></template>
+                  <a-menu-item v-for="s in i.items" :key="s.id" class="!pl-8" @click="handleNavClick(i.title, s.name, s.id)">{{ s.name }}</a-menu-item>
                 </a-sub-menu>
-                <a-menu-item v-else :key="item.id" @click="handleNavClick(group.label, item.title, item.id)">
-                  <template #icon><component :is="resolveIcon(item.icon)" v-if="item.icon" class="w-4 h-4" /></template>
-                  {{ item.title }}
-                </a-menu-item>
+                <a-menu-item v-else :key="i.id" @click="handleNavClick(g.label, i.title, i.id)"><div class="flex items-center gap-1"><component :is="resolveIcon(i.icon)" class="size-4" /><span>{{ i.title }}</span></div></a-menu-item>
               </template>
             </a-menu>
-
-            <!-- 编辑模式视图 -->
-            <div v-else class="flex flex-col gap-2 px-2">
-                 <div class="flex items-center justify-between px-2 mb-1">
-                     <span class="text-xs font-bold text-muted-foreground">{{ group.label }}</span>
-                     <a-button size="mini" type="text" @click="openAddMainDialog(groupIdx)">
-                         <Plus class="w-3 h-3" />
-                     </a-button>
-                 </div>
-                 
-                 <div v-for="(item) in group.items" :key="item.id" class="border border-dashed border-[var(--color-border-3)] rounded-md p-2 bg-[var(--color-fill-1)]">
-                     <!-- 一级菜单行 -->
-                     <div class="flex items-center justify-between mb-2 group/main-edit">
-                         <div class="flex items-center gap-2">
-                             <component :is="resolveIcon(item.icon)" class="w-4 h-4 text-[var(--color-text-2)]" />
-                             <span class="text-sm font-medium">{{ item.title }}</span>
-                         </div>
-                         <div class="flex items-center gap-1 opacity-0 group-hover/main-edit:opacity-100 transition-opacity">
-                             <a-button size="mini" type="text" @click="openEditMainDialog(groupIdx, item)">
-                                 <Pencil class="w-3 h-3" />
-                             </a-button>
-                             <a-button size="mini" type="text" @click="openAddSubDialog(groupIdx, item.id)">
-                                 <Plus class="w-3 h-3" />
-                             </a-button>
-                              <a-popconfirm content="确定删除此一级导航及所有子项吗?" @ok="handleDeleteMain(groupIdx, item.id)">
-                                 <a-button size="mini" type="text" status="danger">
-                                     <Trash2 class="w-3 h-3" />
-                                 </a-button>
-                             </a-popconfirm>
-                         </div>
-                     </div>
-
-                     <!-- 二级菜单拖拽列表 -->
-                     <draggable 
-                        v-model="item.items"
-                        item-key="id"
-                        group="sub-items"
-                        ghost-class="ghost"
-                        handle=".drag-handle"
-                        class="flex flex-col gap-1 pl-4"
-                     >
-                        <template #item="{ element: sub }">
-                            <div 
-                                class="flex items-center justify-between p-1.5 bg-[var(--color-bg-2)] rounded border border-[var(--color-border-2)] group/sub-edit text-xs cursor-pointer hover:bg-[var(--color-fill-2)] transition-colors"
-                                @click="handleNavClick(item.title, sub.title || sub.name || '', sub.id)"
-                            >
-                                <div class="flex items-center gap-2 overflow-hidden">
-                                    <GripVertical class="w-3 h-3 text-[var(--color-text-4)] cursor-move drag-handle shrink-0" />
-                                    <span class="truncate">{{ sub.title || sub.name }}</span>
-                                </div>
-                                <div class="flex items-center gap-0.5 opacity-0 group-hover/sub-edit:opacity-100 transition-opacity shrink-0" @click.stop>
-                                     <a-button size="mini" type="text" class="!px-1" @click="openEditSubDialog(groupIdx, item.id, sub)">
-                                         <Pencil class="w-3 h-3" />
-                                     </a-button>
-                                     <a-popconfirm content="确定删除此子项吗?" @ok="handleDeleteSub(groupIdx, item.id, sub.id)">
-                                         <a-button size="mini" type="text" status="danger" class="!px-1">
-                                             <Trash2 class="w-3 h-3" />
-                                         </a-button>
-                                     </a-popconfirm>
-                                </div>
-                            </div>
-                        </template>
-                     </draggable>
-                 </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </a-layout-sider>
-    
-    <!-- 2. 主体框架 -->
-    <a-layout class="h-full overflow-hidden flex flex-col">
-        <a-layout-header class="h-14 px-4 bg-[var(--color-bg-2)] border-b border-[var(--color-border-2)] flex items-center justify-between shrink-0 z-10">
-            <!-- 页眉左侧 -->
-            <div class="flex items-center gap-4 flex-1">
-               <AButton shape="circle" size="small" @click="collapsed = !collapsed" class="mr-1">
-                   <IconMenuUnfold v-if="collapsed" />
-                   <IconMenuFold v-else />
-               </AButton>
-               
-               <!-- 面包屑 -->
-               <ABreadcrumb>
-                  <ABreadcrumbItem>{{ breadcrumbs.main }}</ABreadcrumbItem>
-                  <ABreadcrumbItem v-if="breadcrumbs.detail">
-                      <a class="cursor-pointer hover:text-[rgb(var(--primary-6))]" @click="handleSubNavClick">{{ breadcrumbs.sub }}</a>
-                  </ABreadcrumbItem>
-                  <ABreadcrumbItem v-else>{{ breadcrumbs.sub }}</ABreadcrumbItem>
-                  <ABreadcrumbItem v-if="breadcrumbs.detail">{{ breadcrumbs.detail }}</ABreadcrumbItem>
-               </ABreadcrumb>
-               
-               <div id="breadcrumb-actions" class="flex items-center gap-4 ml-4"></div>
-            </div>
-
-            <!-- 页眉右侧 -->
-            <div class="flex items-center gap-2">
-                <!-- 动态菜单按钮 -->
-                <!-- 动态菜单按钮 -->
-                <template v-if="!configStore.isEditMode">
-                    <template v-for="(item, index) in menuStore.menuConfig?.items || []" :key="index">
-                        <!-- 文字按钮 -->
-                        <a-button 
-                            v-if="item.type === 'text-button'" 
-                            type="text" 
-                            size="small" 
-                            class="text-[var(--color-text-2)] hover:text-[rgb(var(--primary-6))]"
-                        >
-                            {{ item.label }}
-                        </a-button>
-
-                        <!-- 下拉菜单 (Label + Select) -->
-                        <div v-else-if="item.type === 'dropdown'" class="flex items-center gap-2">
-                            <span class="text-xs text-[var(--color-text-2)]">{{ item.label }}</span>
-                            <a-select 
-                                :style="{width:'100px'}" 
-                                :default-value="item.options?.[0]" 
-                                placeholder="请选择" 
-                                size="small" 
-                                :trigger-props="{ autoFitPopupMinWidth: true }"
-                            >
-                                <a-option v-for="opt in item.options" :key="opt">{{ opt }}</a-option>
-                            </a-select>
-                        </div>
-                    </template>
-                </template>
-
-                <!-- 编辑模式下的动态菜单 -->
-                <div v-else class="flex items-center gap-2 p-1 border border-dashed border-primary/30 rounded bg-primary/5">
-                    <draggable 
-                        v-model="headerMenuList" 
-                        item-key="label" 
-                        group="header-menu"
-                        class="flex items-center gap-2"
-                        handle=".drag-handle"
-                    >
-                        <template #item="{ element, index }">
-                            <div class="relative group border border-[var(--color-border-2)] rounded px-2 py-1 bg-[var(--color-bg-1)] flex items-center gap-2 cursor-default">
-                                <GripVertical class="w-3 h-3 text-[var(--color-text-4)] cursor-move drag-handle" />
-                                
-                                <!-- Preview -->
-                                <span v-if="element.type === 'text-button'" class="text-xs">{{ element.label }}</span>
-                                <div v-else-if="element.type === 'dropdown'" class="flex items-center gap-1">
-                                    <span class="text-xs">{{ element.label }}</span>
-                                    <span class="text-[10px] text-muted-foreground">[下拉]</span>
-                                </div>
-
-                                <!-- Actions -->
-                                <div class="flex items-center gap-1 ml-1">
-                                    <a-button size="mini" type="text" class="!p-0.5" @click="openEditHeaderMenuDialog(index, element)">
-                                        <Pencil class="w-3 h-3" />
-                                    </a-button>
-                                    <a-popconfirm content="确定删除此菜单项吗?" @ok="handleHeaderMenuDelete(index)">
-                                        <a-button size="mini" type="text" status="danger" class="!p-0.5">
-                                            <Trash2 class="w-3 h-3" />
-                                        </a-button>
-                                    </a-popconfirm>
-                                </div>
+            <div v-else class="space-y-2 px-2">
+                <div class="flex items-center justify-between text-xs font-bold text-gray-400 mb-1"><span>{{ g.label }}</span><a-button size="mini" type="text" @click="_openNavDialog('add-main', {idx})"><Plus class="size-3" /></a-button></div>
+                <div v-for="i in g.items" :key="i.id" class="border border-dashed border-gray-300 rounded-md p-2 bg-gray-50/50">
+                    <div class="flex items-center justify-between group">
+                        <div class="flex items-center gap-2"><component :is="resolveIcon(i.icon)" class="size-4" /><span class="text-sm">{{ i.title }}</span></div>
+                        <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><a-button size="mini" type="text" @click="_openNavDialog('edit-main', {idx, mId: i.id, item: i})"><Pencil class="size-3" /></a-button><a-button size="mini" type="text" @click="_openNavDialog('add-sub', {idx, mId: i.id})"><Plus class="size-3" /></a-button><a-popconfirm content="确定删除?" @ok="pageStore.deleteNavMainItem(i.id)"><a-button size="mini" type="text" status="danger"><Trash2 class="size-3" /></a-button></a-popconfirm></div>
+                    </div>
+                    <draggable v-model="i.items" item-key="id" group="subs" handle=".drag-handle" class="mt-2 space-y-1 pl-4" @change="pageStore.savePageConfig(i.title, i as any)">
+                        <template #item="{ element: s }">
+                            <div class="flex items-center justify-between p-1.5 bg-white border border-gray-200 rounded text-xs group/sub cursor-pointer hover:bg-gray-50" @click="handleNavClick(i.title, s.name, s.id)">
+                                <div class="flex items-center gap-2 min-w-0"><GripVertical class="size-3 text-gray-400 drag-handle cursor-move" /><span class="truncate">{{ s.name }}</span></div>
+                                <div class="flex gap-0.5 opacity-0 group-hover/sub:opacity-100"><a-button size="mini" type="text" class="!px-1" @click.stop="_openNavDialog('edit-sub', {idx, mId: i.id, sId: s.id, item: s})"><Pencil class="size-3" /></a-button><a-popconfirm content="确定删除?" @ok="pageStore.deleteSubPage(i.id, s.id)"><a-button size="mini" type="text" status="danger" class="!px-1"><Trash2 class="size-3" /></a-button></a-popconfirm></div>
                             </div>
                         </template>
                     </draggable>
-                    <a-button size="mini" type="dashed" @click="openAddHeaderMenuDialog">
-                        <Plus class="w-3 h-3" />
-                    </a-button>
                 </div>
-                
-                <a-divider direction="vertical" class="mx-1 opacity-50" />
+            </div>
+          </div>
+        </a-scrollbar>
+      </div>
+    </a-layout-sider>
 
-                <!-- 用户头像 Dropdown -->
-                <a-dropdown @select="handleUserAction" trigger="click" position="br">
-                    <div id="user-avatar-trigger" class="p-0.5 rounded-full hover:bg-[var(--color-fill-2)] cursor-pointer transition-colors border border-[var(--color-border-2)] flex items-center justify-center">
-                        <a-avatar 
-                            :size="32" 
-                            :image-url="authStore.userAvatar"
-                            :style="{ backgroundColor: '#fff' }"
-                            class="shadow-sm font-bold text-[rgb(var(--primary-6))]"
-                        />
-                    </div>
-                    <template #content>
-                        <div class="py-1 min-w-[150px]">
-                            <a-doption value="profile" class="py-2.5" id="nav-profile">
-                                <template #icon><IconUser class="size-4 opacity-70"/></template>
-                                <span class="ml-1">用户中心</span>
-                            </a-doption>
-                            <a-doption value="toggle-edit" class="py-2.5" id="nav-edit-mode">
-                                <template #icon>
-                                    <Pencil v-if="!configStore.isEditMode" class="size-4 opacity-70"/>
-                                    <Eye v-else class="size-4 opacity-70"/>
-                                </template>
-                                <span class="ml-1">{{ configStore.isEditMode ? '预览模式' : '编辑模式' }}</span>
-                            </a-doption>
-
-                            <a-doption value="logout" class="text-red-500 py-2.5 font-medium">
-                                <template #icon><LogOut class="size-4"/></template>
-                                <span class="ml-1">退出登录</span>
-                            </a-doption>
-                        </div>
+    <a-layout class="overflow-hidden bg-[var(--color-fill-2)]">
+      <a-layout-header class="h-14 px-4 bg-white border-b border-gray-200 flex items-center justify-between shrink-0 z-10">
+        <div class="flex items-center gap-4 flex-1">
+          <a-button shape="circle" size="small" @click="collapsed = !collapsed"><ArcIcons.IconMenuUnfold v-if="collapsed" /><ArcIcons.IconMenuFold v-else /></a-button>
+          <a-breadcrumb><a-breadcrumb-item>{{ breadcrumbs.main }}</a-breadcrumb-item><a-breadcrumb-item v-if="breadcrumbs.detail" class="cursor-pointer" @click="setDetailTitle(null)">{{ breadcrumbs.sub }}</a-breadcrumb-item><a-breadcrumb-item v-else>{{ breadcrumbs.sub }}</a-breadcrumb-item><a-breadcrumb-item v-if="breadcrumbs.detail">{{ breadcrumbs.detail }}</a-breadcrumb-item></a-breadcrumb>
+          <div id="breadcrumb-actions" class="flex items-center gap-4 ml-4"></div>
+        </div>
+        <div class="flex items-center gap-2">
+            <template v-if="!configStore.isEditMode"><template v-for="(i, idx) in menuStore.menuConfig?.items" :key="idx"><a-button v-if="i.type==='text-button'" type="text" size="small">{{ i.label }}</a-button><div v-else class="flex items-center gap-2 text-xs"><span>{{ i.label }}</span><a-select size="small" style="width:100px" :default-value="i.options?.[0]"><a-option v-for="o in i.options" :key="o">{{ o }}</a-option></a-select></div></template></template>
+            <div v-else class="flex items-center gap-2 p-1 border border-dashed border-primary/30 rounded bg-primary/5">
+                <draggable v-model="menuStore.menuConfig.items" item-key="label" handle=".drag-handle" class="flex gap-2" @change="menuStore.updateMenu({items: menuStore.menuConfig.items})">
+                    <template #item="{ element, index }">
+                        <div class="flex items-center gap-2 bg-white border border-gray-200 rounded px-2 py-1 text-xs"><GripVertical class="size-3 text-gray-400 drag-handle" /><span>{{ element.label }}</span><a-button size="mini" type="text" class="!p-0.5" @click="_openHMenuDialog(index, element)"><Pencil class="size-3" /></a-button><a-popconfirm content="删除?" @ok="() => { menuStore.menuConfig.items.splice(index, 1); menuStore.updateMenu({items: menuStore.menuConfig.items}) }"><a-button size="mini" type="text" status="danger" class="!p-0.5"><Trash2 class="size-3" /></a-button></a-popconfirm></div>
                     </template>
-                </a-dropdown>
+                </draggable>
+                <a-button size="mini" type="dashed" @click="_openHMenuDialog()"><Plus class="size-3" /></a-button>
             </div>
-        </a-layout-header>
-        <!-- 2.1 主内容 -->
-        <a-layout-content class="flex-1 overflow-hidden min-h-0 bg-[var(--color-fill-2)]">
-          <a-scrollbar style="height: 100%; overflow: auto;" outer-style="height: 100%;">
-            <div class="p-3 min-h-full flex flex-col container-content">
-               <div class="bg-[var(--color-bg-2)] rounded-lg shadow-sm border border-[var(--color-border-2)] flex-1 relative min-h-full overflow-hidden">
-                   <slot></slot>
-               </div>
+            <a-divider direction="vertical" class="mx-1 opacity-50" />
+            <a-dropdown @select="handleUserAction" trigger="click" position="br">
+                <div class="p-0.5 rounded-full hover:bg-gray-100 cursor-pointer border border-gray-200"><a-avatar :size="32" :image-url="authStore.userAvatar" class="shadow-sm" /></div>
+                <template #content><div class="py-1 min-w-[150px]"><a-doption value="profile" class="py-2.5"><template #icon><ArcIcons.IconUser class="size-4 opacity-70"/></template>用户中心</a-doption><a-doption value="toggle-edit" class="py-2.5"><template #icon><component :is="configStore.isEditMode ? Eye : Pencil" class="size-4 opacity-70"/></template>{{ configStore.isEditMode ? '预览模式' : '编辑模式' }}</a-doption><a-doption value="logout" class="text-red-500 py-2.5 font-medium"><template #icon><LogOut class="size-4"/></template>退出登录</a-doption></div></template>
+            </a-dropdown>
+        </div>
+      </a-layout-header>
+      <a-layout-content class="flex-1 overflow-hidden bg-[var(--color-fill-2)]">
+        <div class="h-full overflow-y-auto arco-native-scrollbar">
+          <div class="p-3 min-h-full flex flex-col">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 relative min-h-full flex flex-col">
+              <slot></slot>
             </div>
-          </a-scrollbar>
-        </a-layout-content>
+          </div>
+        </div>
+      </a-layout-content>
     </a-layout>
 
-    <!-- AI 悬浮组件 -->
     <AIChatAssistant />
-
-    <!-- 编辑/添加导航弹窗 -->
-    <a-modal v-model:visible="editDialogVisible" :title="editDialogTitle" @ok="handleEditSubmit">
-        <a-form :model="editForm" layout="vertical">
-            <a-form-item field="title" label="标题" required>
-                <a-input v-model="editForm.title" placeholder="请输入标题" />
-            </a-form-item>
-            <a-form-item v-if="editDialogMode.includes('main')" field="icon" label="图标">
-                <a-select v-model="editForm.icon" placeholder="选择图标">
-                    <a-option v-for="icon in iconOptions" :key="icon.value" :value="icon.value">{{ icon.label }}</a-option>
-                </a-select>
-            </a-form-item>
-            <a-form-item v-if="editDialogMode.includes('main')" field="visible" label="菜单可见性">
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" id="nav-visible" v-model="editForm.visible" class="rounded" />
-                    <label for="nav-visible" class="text-sm">侧边栏可见</label>
-                </div>
-            </a-form-item>
-            <a-form-item v-if="editDialogMode.includes('sub')" field="url" label="URL (仅展示)">
-                 <a-input v-model="editForm.url" placeholder="#" />
-            </a-form-item>
-        </a-form>
-    </a-modal>
-
-    <!-- 顶部菜单编辑弹窗 -->
-    <a-modal v-model:visible="menuEditDialog.visible" :title="menuEditDialog.isEdit ? '编辑菜单项' : '新增菜单项'" @ok="handleHeaderMenuSave">
-        <a-form :model="menuEditDialog.form" layout="vertical">
-            <a-form-item field="type" label="类型">
-                <a-radio-group v-model="menuEditDialog.form.type" type="button">
-                    <a-radio value="text-button">文字按钮</a-radio>
-                    <a-radio value="dropdown">下拉菜单</a-radio>
-                </a-radio-group>
-            </a-form-item>
-            <a-form-item field="label" label="标题" required>
-                <a-input v-model="menuEditDialog.form.label" placeholder="例如：使用文档" />
-            </a-form-item>
-            <a-form-item v-if="menuEditDialog.form.type === 'dropdown'" field="options" label="选项 (逗号分隔)" required>
-                <a-textarea v-model="menuEditDialog.form.options" placeholder="例如：中文, English" />
-            </a-form-item>
-        </a-form>
-    </a-modal>
+    <a-modal v-model:visible="editDialog.visible" :title="editDialog.title" @ok="handleEditSubmit"><a-form :model="editDialog.form" layout="vertical"><a-form-item label="标题" required><a-input v-model="editDialog.form.title" /></a-form-item><a-form-item v-if="editDialog.mode.includes('main')" label="图标"><a-select v-model="editDialog.form.icon"><a-option v-for="i in iconOptions" :key="i.value" :value="i.value">{{ i.label }}</a-option></a-select></a-form-item><a-form-item v-if="editDialog.mode.includes('main')" label="可见性"><a-checkbox v-model="editDialog.form.visible">侧边栏可见</a-checkbox></a-form-item></a-form></a-modal>
+    <a-modal v-model:visible="hMenuDialog.visible" :title="hMenuDialog.isEdit ? '编辑菜单' : '新增菜单'" @ok="saveHMenu"><a-form :model="hMenuDialog.form" layout="vertical"><a-form-item label="类型"><a-radio-group v-model="hMenuDialog.form.type" type="button"><a-radio value="text-button">按钮</a-radio><a-radio value="dropdown">下拉</a-radio></a-radio-group></a-form-item><a-form-item label="标题" required><a-input v-model="hMenuDialog.form.label" /></a-form-item><a-form-item v-if="hMenuDialog.form.type === 'dropdown'" label="选项 (逗号分隔)" required><a-textarea v-model="hMenuDialog.form.options" /></a-form-item></a-form></a-modal>
   </a-layout>
 </template>
 
 <style scoped>
-.arco-layout {
-  height: 100vh;
-  background: var(--color-fill-2);
-}
+/* Arco Design Medium Scrollbar Style */
+.arco-native-scrollbar::-webkit-scrollbar { width: 10px; height: 10px; }
+.arco-native-scrollbar::-webkit-scrollbar-thumb { border: 2px solid transparent; background-clip: content-box; background-color: var(--color-fill-4); border-radius: 5px; }
+.arco-native-scrollbar::-webkit-scrollbar-thumb:hover { background-color: var(--color-fill-5); }
+.arco-native-scrollbar::-webkit-scrollbar-track { background-color: transparent; }
 
-.custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--color-fill-4);
-    border-radius: 2px;
-}
-.custom-scrollbar:hover::-webkit-scrollbar-thumb {
-    background: var(--color-text-4);
-}
-
-:deep(.arco-menu-inner) {
-    padding: 0 4px !important;
-}
-
-:deep(.arco-menu-item), :deep(.arco-menu-inline-header) {
-    background-color: transparent;
-    border-radius: 6px;
-    margin-bottom: 2px;
-    color: var(--color-text-2);
-    transition: all 0.2s;
-}
-
-:deep(.arco-menu-item:hover), :deep(.arco-menu-inline-header:hover) {
-    background-color: var(--color-fill-2) !important;
-    color: var(--color-text-1) !important;
-}
-
-:deep(.arco-menu-selected) {
-    background-color: var(--color-primary-light-1) !important;
-    color: rgb(var(--primary-6)) !important;
-    font-weight: 500;
-}
-
-:deep(.arco-menu-selected .arco-icon) {
-    color: rgb(var(--primary-6));
-}
-
-/* 一级导航图标与文字更紧凑 */
-:deep(.arco-menu-item .arco-icon), 
-:deep(.arco-menu-inline-header .arco-icon) {
-    margin-right: 6px !important;
-}
-
-/* 二级导航缩进 (比一级多 20px) */
-/* 一级默认 padding-left 通常在 16px-32px 左右，这里强制二级缩进更多 */
-:deep(.secondary-nav-item) {
-    padding-left: 30px !important;
-}
-
-:deep(.arco-menu-inline-header.arco-menu-selected) {
-    background-color: transparent !important;
-    color: rgb(var(--primary-6)) !important;
-}
-
-/* 隐藏 Arco 默认的展开箭头 */
-:deep(.arco-menu-icon-suffix) {
-    display: none !important;
-}
-
-/* 确保菜单项内容撑满 */
-:deep(.arco-menu-title) {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    padding-right: 4px;
-}
-
-/* 强制内容区滚动条为中等风格 */
-:deep(.arco-scrollbar-thumb-direction-vertical),
-:deep(.arco-scrollbar-track-direction-vertical) {
-    width: 10px !important;
-}
-
-:deep(.arco-scrollbar-thumb-bar) {
-    background-color: var(--color-fill-4) !important;
-    border-radius: 4px !important;
-}
-
-:deep(.arco-scrollbar-thumb-bar:hover) {
-    background-color: var(--color-text-3) !important;
-}
+:deep(.arco-menu-inner) { padding: 0 4px !important; }
+:deep(.arco-menu-item), :deep(.arco-menu-inline-header) { border-radius: 6px; margin-bottom: 2px; color: var(--color-text-2); transition: all 0.2s; }
+:deep(.arco-menu-selected) { color: rgb(var(--primary-6)) !important; font-weight: 600; }
+/* 一级导航：透明底 + 左侧指示条 */
+:deep(.arco-menu-item.arco-menu-selected) { background-color: transparent !important; }
+:deep(.arco-menu-item.arco-menu-selected)::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; background-color: rgb(var(--primary-6)); border-radius: 0 4px 4px 0; }
+/* 二级导航：恢复浅蓝底，移除指示条 */
+:deep(.arco-menu-inline-content .arco-menu-item.arco-menu-selected) { background-color: var(--color-primary-light-1) !important; }
+:deep(.arco-menu-inline-content .arco-menu-item.arco-menu-selected)::before { display: none; }
+:deep(.arco-menu-icon-suffix) { display: none !important; }
+:deep(.arco-scrollbar-thumb-bar) { background-color: var(--color-fill-4) !important; border-radius: 4px !important; }
 </style>

@@ -13,7 +13,7 @@ import type {
     CardAreaConfig,
     CardItemConfig
 } from '@/types/page-config'
-import type { NavSubItem, NavGroup, NavMainItem } from '@/types/navigation'
+import type { NavGroup, NavMainItem } from '@/types/navigation'
 import {
     setNavGroupsRef,
     initNavigation,
@@ -133,6 +133,36 @@ export const useConfigPageStore = defineStore('config-page', () => {
     const syncError = ref<string | null>(null)
     const CACHE_KEY = 'aigen_page_config_cache'
 
+    // ============================================
+    // 内部助手 (简化逻辑)
+    // ============================================
+
+    /**
+     * 获取组件上下文：返回一级记录、二级项和确保初始化的组件配置
+     */
+    function _getCompContext(navTitle: string, subId: string) {
+        const record = pageConfigs.value.get(navTitle)
+        if (!record) throw new Error(`一级导航 "${navTitle}" 不存在`)
+        const item = record.page_config.items.find(i => i.id === subId)
+        if (!item) throw new Error(`二级导航 "${subId}" 不存在`)
+        if (!item.component) item.component = { ...DEFAULT_PAGE_COMPONENT }
+        return { record, item, component: item.component }
+    }
+
+    /**
+     * 统一的组件修改器
+     * @param mutationFn 修改逻辑。若返回 false 则终止保存。
+     */
+    async function _mutateComp(navTitle: string, subId: string, mutationFn: (c: Page1ConfigData) => void | boolean) {
+        try {
+            const { record, component } = _getCompContext(navTitle, subId)
+            if (mutationFn(component) === false) return { success: false, message: '操作目标不存在' }
+            return await savePageConfig(navTitle, record.page_config)
+        } catch (e: any) {
+            return { success: false, message: e.message }
+        }
+    }
+
     /**
      * 从本地缓存加载 (同步)
      */
@@ -198,7 +228,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
                 visible: record.page_config?.visible ?? true,
                 items: (record.page_config?.items || []).map(sub => ({
                     id: sub.id,
-                    title: sub.name,
+                    name: sub.name,
                     url: '#',
                     component: sub.component
                 }))
@@ -497,69 +527,46 @@ export const useConfigPageStore = defineStore('config-page', () => {
     /**
      * 添加二级导航页面
      */
+    /**
+     * 添加二级导航页面
+     */
     async function addSubPage(navTitle: string, subItem: PageSubItem) {
         const record = pageConfigs.value.get(navTitle)
-        if (!record) {
-            return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-        }
+        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
+        if (record.page_config.items.some(i => i.id === subItem.id)) return { success: false, message: 'ID 已存在' }
 
-        if (record.page_config.items.some(item => item.id === subItem.id)) {
-            return { success: false, message: `二级导航 ID "${subItem.id}" 已存在` }
-        }
-
-        // 如果没有 component，添加默认的
-        if (!subItem.component) {
-            subItem.component = { ...DEFAULT_PAGE_COMPONENT }
-        }
-
+        subItem.component = subItem.component || { ...DEFAULT_PAGE_COMPONENT }
         record.page_config.items.push(subItem)
         return await savePageConfig(navTitle, record.page_config)
     }
 
     /**
-     * 更新二级导航页面配置
+     * 更新二级导航页面配置 (通用)
      */
     async function updateSubPage(navTitle: string, subId: string, updates: Partial<PageSubItem>) {
         const record = pageConfigs.value.get(navTitle)
-        if (!record) {
-            return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-        }
+        const items = record?.page_config?.items
+        const index = items?.findIndex(i => i.id === subId)
+        if (index === undefined || index === -1) return { success: false, message: '导航项不存在' }
 
-        const itemIndex = record.page_config.items.findIndex(item => item.id === subId)
-        if (itemIndex === -1) {
-            return { success: false, message: `二级导航 "${subId}" 不存在` }
-        }
-
-        record.page_config.items[itemIndex] = {
-            ...record.page_config.items[itemIndex],
-            ...updates
-        }
-        return await savePageConfig(navTitle, record.page_config)
+        Object.assign(items![index], updates)
+        return await savePageConfig(navTitle, record!.page_config)
     }
 
-    /**
-     * 更新二级导航页面的组件配置
-     */
-    async function updateSubPageComponent(navTitle: string, subId: string, component: Page1ConfigData) {
-        return await updateSubPage(navTitle, subId, { component })
-    }
+    const updateSubPageComponent = (navTitle: string, subId: string, component: Page1ConfigData) =>
+        updateSubPage(navTitle, subId, { component })
 
     /**
      * 删除二级导航页面
      */
     async function deleteSubPage(navTitle: string, subId: string) {
         const record = pageConfigs.value.get(navTitle)
-        if (!record) {
-            return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-        }
+        const items = record?.page_config?.items
+        const index = items?.findIndex(i => i.id === subId)
+        if (index === undefined || index === -1) return { success: false, message: '导航项不存在' }
 
-        const itemIndex = record.page_config.items.findIndex(item => item.id === subId)
-        if (itemIndex === -1) {
-            return { success: false, message: `二级导航 "${subId}" 不存在` }
-        }
-
-        record.page_config.items.splice(itemIndex, 1)
-        return await savePageConfig(navTitle, record.page_config)
+        items!.splice(index, 1)
+        return await savePageConfig(navTitle, record!.page_config)
     }
 
     /**
@@ -567,10 +574,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
      */
     async function reorderSubPages(navTitle: string, newItems: PageSubItem[]) {
         const record = pageConfigs.value.get(navTitle)
-        if (!record) {
-            return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-        }
-
+        if (!record) return { success: false, message: '记录不存在' }
         record.page_config.items = newItems
         return await savePageConfig(navTitle, record.page_config)
     }
@@ -582,228 +586,81 @@ export const useConfigPageStore = defineStore('config-page', () => {
     /**
      * 更新筛选区配置
      */
-    async function updateFilterArea(navTitle: string, subId: string, updates: Partial<FilterAreaConfig>) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
+    // --- 筛选区 ---
+    const updateFilterArea = (navTitle: string, subId: string, updates: Partial<FilterAreaConfig>) =>
+        _mutateComp(navTitle, subId, c => { Object.assign(c.filterArea, updates) })
 
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
+    const addFilter = (navTitle: string, subId: string, filter: FilterConfig) =>
+        _mutateComp(navTitle, subId, c => { c.filterArea.filters.push(filter) })
 
-        Object.assign(subItem.component.filterArea, updates)
-        return await savePageConfig(navTitle, record.page_config)
-    }
+    const updateFilter = (navTitle: string, subId: string, key: string, updates: Partial<FilterConfig>) =>
+        _mutateComp(navTitle, subId, c => {
+            const f = c.filterArea.filters.find(i => i.key === key)
+            f ? Object.assign(f, updates) : false
+        })
 
-    /**
-     * 添加筛选项
-     */
-    async function addFilter(navTitle: string, subId: string, filter: FilterConfig) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
+    const deleteFilter = (navTitle: string, subId: string, key: string) =>
+        _mutateComp(navTitle, subId, c => {
+            const i = c.filterArea.filters.findIndex(f => f.key === key)
+            i > -1 ? c.filterArea.filters.splice(i, 1) : false
+        })
 
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
+    // --- 表格区 ---
+    const updateTableArea = (navTitle: string, subId: string, updates: Partial<TableAreaConfig>) =>
+        _mutateComp(navTitle, subId, c => { Object.assign(c.tableArea, updates) })
 
-        subItem.component.filterArea.filters.push(filter)
-        return await savePageConfig(navTitle, record.page_config)
-    }
+    const addTableColumn = (navTitle: string, subId: string, column: TableColumn) =>
+        _mutateComp(navTitle, subId, c => { c.tableArea.columns.push(column) })
 
-    /**
-     * 更新筛选项
-     */
-    async function updateFilter(navTitle: string, subId: string, filterKey: string, updates: Partial<FilterConfig>) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
+    const updateTableColumn = (navTitle: string, subId: string, key: string, updates: Partial<TableColumn>) =>
+        _mutateComp(navTitle, subId, c => {
+            const col = c.tableArea.columns.find(i => i.key === key)
+            col ? Object.assign(col, updates) : false
+        })
 
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
+    const deleteTableColumn = (navTitle: string, subId: string, key: string) =>
+        _mutateComp(navTitle, subId, c => {
+            const i = c.tableArea.columns.findIndex(col => col.key === key)
+            i > -1 ? c.tableArea.columns.splice(i, 1) : false
+        })
 
-        const filter = subItem.component.filterArea.filters.find(f => f.key === filterKey)
-        if (!filter) return { success: false, message: `筛选项 "${filterKey}" 不存在` }
+    // --- 操作区 ---
+    const updateActionsArea = (navTitle: string, subId: string, updates: Partial<ActionsAreaConfig>) =>
+        _mutateComp(navTitle, subId, c => {
+            if (!c.actionsArea) c.actionsArea = { show: true, buttons: [] }
+            Object.assign(c.actionsArea, updates)
+        })
 
-        Object.assign(filter, updates)
-        return await savePageConfig(navTitle, record.page_config)
-    }
+    const addActionButton = (navTitle: string, subId: string, btn: ActionButtonConfig) =>
+        _mutateComp(navTitle, subId, c => {
+            if (!c.actionsArea) c.actionsArea = { show: true, buttons: [] }
+            c.actionsArea.buttons.push(btn)
+        })
 
-    /**
-     * 删除筛选项
-     */
-    async function deleteFilter(navTitle: string, subId: string, filterKey: string) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
+    const deleteActionButton = (navTitle: string, subId: string, key: string) =>
+        _mutateComp(navTitle, subId, c => {
+            const i = c.actionsArea?.buttons?.findIndex(b => b.key === key) ?? -1
+            i > -1 ? c.actionsArea!.buttons.splice(i, 1) : false
+        })
 
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
+    // --- 卡片区 ---
+    const updateCardArea = (navTitle: string, subId: string, updates: Partial<CardAreaConfig>) =>
+        _mutateComp(navTitle, subId, c => {
+            if (!c.cardArea) c.cardArea = { show: false, columns: 4, gap: '16px', cards: [] }
+            Object.assign(c.cardArea, updates)
+        })
 
-        const index = subItem.component.filterArea.filters.findIndex(f => f.key === filterKey)
-        if (index === -1) return { success: false, message: `筛选项 "${filterKey}" 不存在` }
+    const addCard = (navTitle: string, subId: string, card: CardItemConfig) =>
+        _mutateComp(navTitle, subId, c => {
+            if (!c.cardArea) c.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
+            c.cardArea.cards.push(card)
+        })
 
-        subItem.component.filterArea.filters.splice(index, 1)
-        return await savePageConfig(navTitle, record.page_config)
-    }
-
-    /**
-     * 更新表格区配置
-     */
-    async function updateTableArea(navTitle: string, subId: string, updates: Partial<TableAreaConfig>) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
-
-        Object.assign(subItem.component.tableArea, updates)
-        return await savePageConfig(navTitle, record.page_config)
-    }
-
-    /**
-     * 添加表格列
-     */
-    async function addTableColumn(navTitle: string, subId: string, column: TableColumn) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
-
-        subItem.component.tableArea.columns.push(column)
-        return await savePageConfig(navTitle, record.page_config)
-    }
-
-    /**
-     * 更新表格列
-     */
-    async function updateTableColumn(navTitle: string, subId: string, columnKey: string, updates: Partial<TableColumn>) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
-
-        const column = subItem.component.tableArea.columns.find(c => c.key === columnKey)
-        if (!column) return { success: false, message: `表格列 "${columnKey}" 不存在` }
-
-        Object.assign(column, updates)
-        return await savePageConfig(navTitle, record.page_config)
-    }
-
-    /**
-     * 删除表格列
-     */
-    async function deleteTableColumn(navTitle: string, subId: string, columnKey: string) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
-
-        const index = subItem.component.tableArea.columns.findIndex(c => c.key === columnKey)
-        if (index === -1) return { success: false, message: `表格列 "${columnKey}" 不存在` }
-
-        subItem.component.tableArea.columns.splice(index, 1)
-        return await savePageConfig(navTitle, record.page_config)
-    }
-
-    /**
-     * 更新操作区配置
-     */
-    async function updateActionsArea(navTitle: string, subId: string, updates: Partial<ActionsAreaConfig>) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
-
-        if (!subItem.component.actionsArea) {
-            subItem.component.actionsArea = { show: true, buttons: [] }
-        }
-        Object.assign(subItem.component.actionsArea, updates)
-        return await savePageConfig(navTitle, record.page_config)
-    }
-
-    /**
-     * 添加操作按钮
-     */
-    async function addActionButton(navTitle: string, subId: string, button: ActionButtonConfig) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
-
-        if (!subItem.component.actionsArea) {
-            subItem.component.actionsArea = { show: true, buttons: [] }
-        }
-        subItem.component.actionsArea.buttons.push(button)
-        return await savePageConfig(navTitle, record.page_config)
-    }
-
-    /**
-     * 删除操作按钮
-     */
-    async function deleteActionButton(navTitle: string, subId: string, buttonKey: string) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component?.actionsArea) return { success: false, message: `二级导航 "${subId}" 不存在或无操作区` }
-
-        const index = subItem.component.actionsArea.buttons.findIndex(b => b.key === buttonKey)
-        if (index === -1) return { success: false, message: `按钮 "${buttonKey}" 不存在` }
-
-        subItem.component.actionsArea.buttons.splice(index, 1)
-        return await savePageConfig(navTitle, record.page_config)
-    }
-
-    /**
-     * 更新卡片区配置
-     */
-    async function updateCardArea(navTitle: string, subId: string, updates: Partial<CardAreaConfig>) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
-
-        if (!subItem.component.cardArea) {
-            subItem.component.cardArea = { show: false, columns: 4, gap: '16px', cards: [] }
-        }
-        Object.assign(subItem.component.cardArea, updates)
-        return await savePageConfig(navTitle, record.page_config)
-    }
-
-    /**
-     * 添加卡片
-     */
-    async function addCard(navTitle: string, subId: string, card: CardItemConfig) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component) return { success: false, message: `二级导航 "${subId}" 不存在或无组件` }
-
-        if (!subItem.component.cardArea) {
-            subItem.component.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }
-        }
-        subItem.component.cardArea.cards.push(card)
-        return await savePageConfig(navTitle, record.page_config)
-    }
-
-    /**
-     * 删除卡片
-     */
-    async function deleteCard(navTitle: string, subId: string, cardKey: string) {
-        const record = pageConfigs.value.get(navTitle)
-        if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
-
-        const subItem = record.page_config.items.find(item => item.id === subId)
-        if (!subItem?.component?.cardArea) return { success: false, message: `二级导航 "${subId}" 不存在或无卡片区` }
-
-        const index = subItem.component.cardArea.cards.findIndex(c => c.key === cardKey)
-        if (index === -1) return { success: false, message: `卡片 "${cardKey}" 不存在` }
-
-        subItem.component.cardArea.cards.splice(index, 1)
-        return await savePageConfig(navTitle, record.page_config)
-    }
+    const deleteCard = (navTitle: string, subId: string, key: string) =>
+        _mutateComp(navTitle, subId, c => {
+            const i = c.cardArea?.cards?.findIndex(k => k.key === key) ?? -1
+            i > -1 ? c.cardArea!.cards.splice(i, 1) : false
+        })
 
     // ============================================
     // 批量操作与导入导出
@@ -924,51 +781,6 @@ export const useConfigPageStore = defineStore('config-page', () => {
         }))
     }
 
-    /**
-     * 从导航结构转换为页面配置 (V1/V2 迁移)
-     */
-    function convertFromNavItems(navTitle: string, icon: string, isOpen: boolean, items: NavSubItem[]): PageConfigContent {
-        return {
-            title: navTitle,
-            icon,
-            isOpen,
-            items: items.map(item => ({
-                id: item.id,
-                name: item.title,
-                component: item.component
-            }))
-        }
-    }
-
-    /**
-     * 从旧版 configStore 格式迁移
-     */
-    async function migrateFromConfigStore(navGroups: any[], page1Configs: Record<string, Page1ConfigData>) {
-        const newConfigs: PageConfigRecord[] = []
-
-        for (const group of navGroups) {
-            for (const mainItem of (group.items || [])) {
-                const content: PageConfigContent = {
-                    title: mainItem.title,
-                    icon: mainItem.icon || 'IconSettings',
-                    isOpen: mainItem.isOpen ?? true,
-                    items: (mainItem.items || []).map((subItem: any) => ({
-                        id: subItem.id,
-                        name: subItem.title,
-                        component: page1Configs[subItem.id] || subItem.component
-                    }))
-                }
-
-                newConfigs.push({
-                    title: mainItem.title,
-                    page_config: content
-                })
-            }
-        }
-
-        return await saveAllPageConfigs(newConfigs)
-    }
-
     // ============================================
     // 同步控制
     // ============================================
@@ -983,9 +795,6 @@ export const useConfigPageStore = defineStore('config-page', () => {
         }
     }, { deep: true, immediate: true })
 
-    /**
-     * 确保所有待处理的同步完成
-     */
     /**
      * 确保所有待处理的同步完成
      */
@@ -1013,9 +822,6 @@ export const useConfigPageStore = defineStore('config-page', () => {
         lastSyncTime,
         syncError,
 
-        // Computed
-
-
         // 加载
         loadPageConfigs,
         loadFromCache,
@@ -1024,7 +830,8 @@ export const useConfigPageStore = defineStore('config-page', () => {
         getPageConfigByTitle,
         getSubPageConfig,
         findNavTitleBySubId,
-        navGroups, // 暴露给 Layouts 使用
+        navGroups,
+
         // 导航 CRUD
         addNavMainItem,
         updateNavMainItem,
@@ -1042,6 +849,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
         updateSubPageComponent,
         deleteSubPage,
         reorderSubPages,
+
         // 组件区
         updateFilterArea,
         addFilter,
@@ -1057,16 +865,13 @@ export const useConfigPageStore = defineStore('config-page', () => {
         updateCardArea,
         addCard,
         deleteCard,
+
         // 批量 & Preview
         saveAllPageConfigs,
         setPreviewPageConfig,
         clearPreview,
         applyPreview,
         exportPageConfigs,
-
-        // 迁移辅助
-        convertFromNavItems,
-        migrateFromConfigStore,
 
         // 同步控制
         ensureSynced,

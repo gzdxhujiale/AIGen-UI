@@ -142,7 +142,7 @@ const handleActionClick = (action: string, record: any, e: Event) => {
 </script>
 
 <template>
-  <div class="arco-table-wrapper bg-background rounded-xl border border-border/60 shadow-sm overflow-hidden flex flex-col">
+  <div class="arco-table-wrapper bg-background rounded-xl border border-border/60 shadow-sm flex flex-col">
     <ATable
       :columns="arcoColumns"
       :data="props.data"
@@ -260,7 +260,6 @@ const handleActionClick = (action: string, record: any, e: Event) => {
 
 /* Ensure table expands to fill height */
 .arco-table-wrapper :deep(.arco-table-container) {
-  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -271,7 +270,6 @@ const handleActionClick = (action: string, record: any, e: Event) => {
 
 .arco-table-wrapper :deep(.arco-table-body) {
   flex: 1;
-  height: 100% !important; /* Force height to take remaining space */
   position: relative;
   min-height: 200px; /* Ensure minimum height for no-data state */
 }

@@ -50,8 +50,14 @@ const CurrentPageComponent = computed(() => pageComponents[currentPage.value])
 // Initialize auth on mount
 onMounted(async () => {
   await authStore.initialize()
+  // 如果未登录，直接关闭全局加载状态
+  if (!authStore.isAuthenticated) {
+    isConfigLoading.value = false
+    console.log('App: Unauthenticated, showing login page')
+    return
+  }
+  
   // 登录成功后并行加载所有配置
-  if (authStore.isAuthenticated) {
     console.log('App: Starting parallel bootstrap...')
     const startTime = performance.now()
     
@@ -97,8 +103,8 @@ onMounted(async () => {
     
     // 启动用户引导
     startOnboarding(authStore.userEmail)
-  }
-})// 监听认证状态变化，登录后加载配置
+})
+// 监听认证状态变化，登录后加载配置
 watch(() => authStore.isAuthenticated, async (isAuth) => {
   if (isAuth) {
     // For test accounts, always force Arco style

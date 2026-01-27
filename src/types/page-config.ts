@@ -105,7 +105,6 @@ export interface ActionButtonConfig {
         title?: string
         content?: string
         formItems?: FilterConfig[]
-        tableArea?: TableAreaConfig // 用于 'table' 效果的表格配置 (Deprecated: prefer targetNavId)
         targetNavId?: string        // 关联的目标页面 ID (用于 'table' 效果)
     }
 }

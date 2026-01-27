@@ -6,12 +6,11 @@ import type { Page1ConfigData } from './page-config'
 
 export interface NavSubItem {
     id: string
-    title: string
-    name?: string // V9 兼容
+    name: string
     url?: string
-    badge?: string // 可选徽章
-    template?: string // 显式指定的模板名称 (例如: 'Page1', 'Settings')
-    component?: Page1ConfigData // 内嵌页面配置 (运行时可能存在，但持久化时按 navId 分离)
+    badge?: string
+    template?: string
+    component?: Page1ConfigData
 }
 
 export interface NavMainItem {
@@ -19,17 +18,7 @@ export interface NavMainItem {
     title: string
     url?: string
     icon?: any
-    /**
-     * @deprecated 请使用 isOpen 代替
-     */
-    isActive?: boolean
-    /**
-     * 一级菜单是否默认展开
-     */
     isOpen?: boolean
-    /**
-     * 一级菜单是否可见
-     */
     visible?: boolean
     items?: NavSubItem[]
 }

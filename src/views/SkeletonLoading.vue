@@ -1,151 +1,108 @@
 <template>
-  <div class="skeleton-layout">
-    <!-- Skeleton Sidebar -->
-    <div class="skeleton-sidebar">
-      <div class="skeleton-logo"></div>
-      <div class="skeleton-nav">
-        <div v-for="i in 3" :key="i" class="skeleton-nav-item"></div>
+  <div class="flex h-screen w-full bg-white dark:bg-slate-950 overflow-hidden">
+    <!-- Sidebar Skeleton -->
+    <div class="hidden md:flex w-64 flex-col border-r border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 p-4 gap-6">
+      <!-- Logo Area -->
+      <div class="h-10 w-32 bg-gray-200 dark:bg-slate-800 rounded-lg shimmer"></div>
+      
+      <!-- Nav Items -->
+      <div class="flex flex-col gap-3 mt-4">
+        <div v-for="i in 6" :key="`nav-${i}`" class="h-10 w-full bg-gray-200 dark:bg-slate-800 rounded-md shimmer" :style="{ animationDelay: `${i * 100}ms` }"></div>
+      </div>
+
+      <!-- User Profile Area (Bottom) -->
+      <div class="mt-auto pt-4 border-t border-gray-100 dark:border-slate-800">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-full bg-gray-200 dark:bg-slate-800 shimmer"></div>
+          <div class="flex-1 flex flex-col gap-2">
+            <div class="h-4 w-24 bg-gray-200 dark:bg-slate-800 rounded shimmer"></div>
+            <div class="h-3 w-16 bg-gray-200 dark:bg-slate-800 rounded shimmer"></div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Skeleton Content -->
-    <div class="skeleton-content">
-      <!-- Skeleton Breadcrumb -->
-      <div class="skeleton-breadcrumb">
-        <div class="skeleton-breadcrumb-item"></div>
-        <div class="skeleton-breadcrumb-item"></div>
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden relative">
+      <!-- Header Skeleton -->
+      <div class="h-16 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between px-6 bg-white dark:bg-slate-950">
+        <div class="flex items-center gap-4">
+          <div class="h-8 w-8 bg-gray-200 dark:bg-slate-800 rounded shimmer md:hidden"></div>
+          <div class="flex flex-col gap-2">
+            <div class="h-5 w-32 bg-gray-200 dark:bg-slate-800 rounded shimmer"></div>
+            <div class="h-3 w-48 bg-gray-200 dark:bg-slate-800 rounded shimmer"></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="h-9 w-24 bg-gray-200 dark:bg-slate-800 rounded-full shimmer"></div>
+            <div class="h-9 w-9 bg-gray-200 dark:bg-slate-800 rounded-full shimmer"></div>
+        </div>
       </div>
 
-      <!-- Skeleton Filters -->
-      <div class="skeleton-filters">
-        <div v-for="i in 4" :key="i" class="skeleton-filter"></div>
-      </div>
+      <!-- Page Content Skeleton -->
+      <div class="flex-1 p-6 overflow-hidden flex flex-col gap-6">
+        <!-- Top Filters / Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+           <div v-for="j in 4" :key="`stat-${j}`" class="h-24 bg-gray-100 dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800 p-4 flex flex-col gap-3 shimmer">
+              <div class="h-4 w-8 bg-gray-200 dark:bg-slate-800 rounded"></div>
+              <div class="h-8 w-20 bg-gray-200 dark:bg-slate-800 rounded"></div>
+           </div>
+        </div>
 
-      <!-- Skeleton Table -->
-      <div class="skeleton-table">
-        <div class="skeleton-table-header"></div>
-        <div v-for="i in 8" :key="i" class="skeleton-table-row"></div>
+        <!-- Main Card / Table Area -->
+        <div class="flex-1 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800 p-6 flex flex-col gap-4 shadow-sm">
+           <!-- Toolbar -->
+           <div class="flex justify-between items-center mb-4">
+              <div class="h-8 w-40 bg-gray-200 dark:bg-slate-800 rounded shimmer"></div>
+              <div class="h-8 w-24 bg-gray-200 dark:bg-slate-800 rounded shimmer"></div>
+           </div>
+           
+           <!-- Table Rows -->
+           <div class="flex-1 flex flex-col gap-3">
+              <div class="h-10 w-full bg-gray-100 dark:bg-slate-800/50 rounded shimmer mb-2"></div>
+              <div v-for="k in 8" :key="`row-${k}`" class="h-12 w-full bg-gray-50 dark:bg-slate-800/30 rounded shimmer" :style="{ animationDelay: `${k * 50}ms`, opacity: 1 - (k * 0.05) }"></div>
+           </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.skeleton-layout {
-  display: flex;
-  height: 100vh;
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  background: hsl(var(--background));
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  animation: shimmer 1.5s infinite;
+  transform: translateX(-100%);
 }
 
-/* Sidebar */
-.skeleton-sidebar {
-  width: 280px;
-  border-right: 1px solid hsl(var(--border));
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+.dark .shimmer::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    transparent 100%
+  );
 }
 
-.skeleton-logo {
-  height: 48px;
-  background: hsl(var(--muted));
-  border-radius: 0.5rem;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.skeleton-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
-.skeleton-nav-item {
-  height: 40px;
-  background: hsl(var(--muted));
-  border-radius: 0.375rem;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.skeleton-nav-item:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.skeleton-nav-item:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-/* Content */
-.skeleton-content {
-  flex: 1;
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-/* Breadcrumb */
-.skeleton-breadcrumb {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.skeleton-breadcrumb-item {
-  height: 20px;
-  width: 80px;
-  background: hsl(var(--muted));
-  border-radius: 0.25rem;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Filters */
-.skeleton-filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.skeleton-filter {
-  height: 40px;
-  background: hsl(var(--muted));
-  border-radius: 0.375rem;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Table */
-.skeleton-table {
-  flex: 1;
-  border: 1px solid hsl(var(--border));
-  border-radius: 0.5rem;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.skeleton-table-header {
-  height: 48px;
-  background: hsl(var(--muted));
-  border-radius: 0.375rem;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.skeleton-table-row {
-  height: 60px;
-  background: hsl(var(--muted));
-  border-radius: 0.375rem;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
   }
 }
 </style>

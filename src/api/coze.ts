@@ -1,54 +1,120 @@
 import { jsonrepair } from 'jsonrepair'
 
 /**
- * Coze API 客户端
+ * Coze API Client
  * 
- * 此模块提供与 Coze API 交互的客户端。
- * 它支持使用 /v3/chat 接口的流式聊天响应。
- * 在开发环境下使用代理以避免跨域 (CORS) 问题。
+ * Provides interaction with the Coze API.
+ * Adheres to V9 Architecture: Type-First, Logic Abstraction, Redundancy Reduction.
  */
 
-// 开发环境下使用代理，生产环境下使用直接 URL
+// Use proxy in dev, direct URL in prod
 const COZE_API_BASE = import.meta.env.DEV ? '/api/coze' : 'https://api.coze.cn'
 
-// 从环境变量获取 API 配置
-const getCozeConfig = () => {
-    const apiKey = import.meta.env.VITE_COZE_API_KEY
-    const botId = import.meta.env.VITE_COZE_BOT_ID
+// --- Types ---
 
-    if (!apiKey || apiKey === 'your_coze_personal_access_token') {
-        console.warn('⚠️ Coze API Key 未配置。请在 .env 文件中设置 VITE_COZE_API_KEY。')
-        return null
-    }
-
-    if (!botId || botId === 'your_coze_bot_id') {
-        console.warn('⚠️ Coze Bot ID 未配置。请在 .env 文件中设置 VITE_COZE_BOT_ID。')
-        return null
-    }
-
-    return { apiKey, botId }
+interface CozeConfig {
+    apiKey: string
+    botId: string
 }
 
 export interface ChatMessage {
     role: 'user' | 'assistant'
     content: string
     type?: 'text' | 'config_preview'
-    configData?: any // 用于 config_json 响应
+    configData?: any // Used for config_json response
 }
 
-export interface CozeStreamEvent {
+interface CozeEvent {
     event: string
     data: string
 }
 
+interface CozeDetail {
+    type: 'answer' | 'function_call' | 'tool_response' | 'follow_up' | 'verbose'
+    content?: string
+    content_type?: 'text' | 'object_string'
+}
+
+// --- Configuration ---
+
+const getCozeConfig = (): CozeConfig | null => {
+    const apiKey = import.meta.env.VITE_COZE_API_KEY
+    const botId = import.meta.env.VITE_COZE_BOT_ID
+
+    if (!apiKey || apiKey === 'your_coze_personal_access_token') {
+        console.warn('⚠️ Coze API Key not configured. Please set VITE_COZE_API_KEY in .env.')
+        return null
+    }
+
+    if (!botId || botId === 'your_coze_bot_id') {
+        console.warn('⚠️ Coze Bot ID not configured. Please set VITE_COZE_BOT_ID in .env.')
+        return null
+    }
+
+    return { apiKey, botId }
+}
+
+export function isCozeConfigured(): boolean {
+    return getCozeConfig() !== null
+}
+
+// --- Helpers ---
+
 /**
- * 发送聊天消息到 Coze API 并处理流式响应
- * 
- * @param messages - 对话历史记录
- * @param onChunk - 每个响应分块的回调函数
- * @param onComplete - 流完成后调用的回调函数
- * @param onError - 发生错误时的回调函数
+ * Async Generator: Reads stream and parses SSE events
  */
+async function* readStreamEvents(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncGenerator<CozeEvent> {
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // Keep incomplete line
+
+        for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed) continue
+
+            if (trimmed.startsWith('event:')) {
+                // simple event capture, usually followed by data
+            } else if (trimmed.startsWith('data:')) {
+                yield {
+                    event: 'message',
+                    data: trimmed.slice(5).trim()
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Cleans response text: removes extracted JSON blocks or exposed JSON
+ */
+function sanitizeResponseText(fullResponse: string, hasConfig: boolean): string {
+    if (!hasConfig) return fullResponse
+
+    let finalText = fullResponse
+    // Remove markdown json code blocks
+    finalText = finalText.replace(/```json\s*[\s\S]*?```/gi, '')
+    // Remove generic code blocks if they look like json objects
+    finalText = finalText.replace(/```\s*(\{[\s\S]*?\})\s*```/gi, '')
+
+    // If the entire text looks like a JSON object, clear it
+    const trimmed = finalText.trim()
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        return ''
+    }
+
+    finalText = finalText.trim()
+    return finalText || '已为您生成如下配置：'
+}
+
+// --- Main Function ---
+
 export async function streamChat(
     messages: ChatMessage[],
     onChunk: (text: string) => void,
@@ -56,15 +122,14 @@ export async function streamChat(
     onError: (error: Error) => void
 ): Promise<void> {
     const config = getCozeConfig()
-
     if (!config) {
-        onError(new Error('Coze API 未配置。请在 .env 文件中设置 VITE_COZE_API_KEY 和 VITE_COZE_BOT_ID。'))
+        onError(new Error('Coze API not configured. Please set VITE_COZE_API_KEY and VITE_COZE_BOT_ID in .env.'))
         return
     }
 
     const { apiKey, botId } = config
 
-    // 将消息转换为 Coze 格式
+    // Convert messages to Coze format
     const cozeMessages = messages.map(msg => ({
         role: msg.role,
         content: msg.content,
@@ -80,7 +145,7 @@ export async function streamChat(
             },
             body: JSON.stringify({
                 bot_id: botId,
-                user_id: 'user_' + Date.now(), // 生成唯一的临时用户 ID
+                user_id: 'user_' + Date.now(),
                 stream: true,
                 auto_save_history: false,
                 additional_messages: cozeMessages
@@ -89,84 +154,44 @@ export async function streamChat(
 
         if (!response.ok) {
             const errorText = await response.text()
-            throw new Error(`Coze API 请求失败: ${response.status} - ${errorText}`)
+            throw new Error(`Coze API request failed: ${response.status} - ${errorText}`)
         }
 
-        if (!response.body) {
-            throw new Error('响应体为空')
-        }
+        if (!response.body) throw new Error('Response body is empty')
 
         const reader = response.body.getReader()
-        const decoder = new TextDecoder()
         let fullResponse = ''
-        let buffer = ''
         let configJson: any = null
 
-        while (true) {
-            const { done, value } = await reader.read()
+        // Process Stream Events
+        for await (const { data } of readStreamEvents(reader)) {
+            try {
+                const parsed: CozeDetail = JSON.parse(data)
 
-            if (done) break
-
-            buffer += decoder.decode(value, { stream: true })
-
-            // 处理完整的行
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || '' // 将不完整的行保留在缓冲区
-
-            for (const line of lines) {
-                if (!line.trim()) continue
-
-                // 解析 SSE 事件
-                if (line.startsWith('data:')) {
+                if (parsed.type === 'answer') {
+                    const content = parsed.content || ''
+                    fullResponse += content
+                    onChunk(content)
+                } else if (parsed.type === 'tool_response') {
+                    // Try to parse config_json from tool_response
                     try {
-                        const data = JSON.parse(line.slice(5).trim())
-
-                        // 处理不同的事件类型
-                        if (data.type === 'answer') {
-                            const content = data.content || ''
-                            fullResponse += content
-                            onChunk(content)
-                        } else if (data.type === 'tool_response') {
-                            // 工具响应可能包含 config_json
-                            try {
-                                const toolOutput = JSON.parse(data.content || '{}')
-                                if (toolOutput.config_json) {
-                                    configJson = toolOutput.config_json
-                                }
-                            } catch {
-                                // 非 JSON 内容，忽略
-                            }
+                        const toolOutput = JSON.parse(parsed.content || '{}')
+                        if (toolOutput.config_json) {
+                            configJson = toolOutput.config_json
                         }
-                    } catch {
-                        // 非 JSON 格式的数据行
-                    }
+                    } catch { /* ignore non-json tool response */ }
                 }
+            } catch {
+                // Ignore non-JSON data lines (e.g. stream end signals)
             }
         }
 
-        // 提取配置
+        // Fallback: Try to extract config from full text
         if (!configJson) {
             configJson = extractConfigJson(fullResponse)
         }
 
-        // 清理响应文本
-        let finalText = fullResponse
-        if (configJson) {
-            // 移除代码块
-            finalText = finalText.replace(/```json\s*[\s\S]*?```/gi, '')
-            finalText = finalText.replace(/```\s*(\{[\s\S]*?\})\s*```/gi, '')
-            // 尝试移除裸露的 JSON 字符串 (简单处理：如果全文看起来只是个 JSON，就清空)
-            const trimmed = finalText.trim()
-            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-                finalText = ''
-            }
-
-            finalText = finalText.trim()
-            if (!finalText) {
-                finalText = '已为您生成如下配置：'
-            }
-        }
-
+        const finalText = sanitizeResponseText(fullResponse, !!configJson)
         onComplete(finalText, configJson)
 
     } catch (error) {
@@ -175,13 +200,12 @@ export async function streamChat(
 }
 
 /**
- * 从文本中精准提取配置 JSON
- * 采用递归解包与括号平衡算法，彻底解决连体 JSON (}{) 问题
+ * Complex JSON Extractor (Robust Logic)
+ * Solves conjoined JSON (}{) and nested wrapper issues
  */
 function extractConfigJson(content: string): any {
     if (!content) return null;
 
-    // 内部极简解析器
     const minimalistParse = (str: string): any | null => {
         try {
             let s = str.trim();
@@ -189,12 +213,10 @@ function extractConfigJson(content: string): any {
                 s = s.replace(/^```[a-z]*\s*/i, '').replace(/```$/i, '').trim();
             }
             return JSON.parse(jsonrepair(s));
-        } catch {
-            return null;
-        }
+        } catch { return null; }
     };
 
-    // 括号平衡寻找第一个合法的 JSON 对象项
+    // Bracket balancing to find the first valid JSON object block
     const findFirstBlock = (str: string): any | null => {
         const start = Math.min(...[str.indexOf('{'), str.indexOf('[')].filter(i => i !== -1));
         if (start === Infinity || start === -1) return null;
@@ -226,27 +248,13 @@ function extractConfigJson(content: string): any {
         return null;
     };
 
-    // 1. 获取第一个完整的平衡块 (无视后续重复内容)
     let result = findFirstBlock(content);
     if (!result) result = minimalistParse(content);
 
-    // 2. 直取核心：如果是一个 OpenAI 风格的包装容器，直接深入递归获取 message.content
+    // Recursively unwrap OpenAI-style message containers
     if (result && result.choices?.[0]?.message?.content) {
-        console.log('📦 [CozeAPI] Diving into wrapped message content...');
         return extractConfigJson(result.choices[0].message.content);
     }
 
-    if (result) {
-        console.log('✅ [CozeAPI] Config extracted successfully');
-        return result;
-    }
-
-    return null;
-}
-
-/**
- * 检查 Coze API 是否已完成基本配置
- */
-export function isCozeConfigured(): boolean {
-    return getCozeConfig() !== null
+    return result;
 }

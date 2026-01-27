@@ -11,331 +11,195 @@ import 'vue-json-viewer/style.css'
 const aiStore = useAIStore()
 const configStore = useConfigStore()
 
-// --- Shared State from AIStore ---
+// --- State Proxies ---
 const isOpen = computed(() => aiStore.isOpen)
 const isMinimized = computed(() => aiStore.isMinimized)
 const isLoading = computed(() => aiStore.isLoading)
 const hasPreviewConfig = computed(() => aiStore.hasPreviewConfig)
-const position = computed(() => aiStore.buttonPosition)
 const messages = computed(() => aiStore.messages)
 const isConfigured = computed(() => aiStore.isConfigured)
 const previewMode = computed(() => aiStore.previewMode)
 const changeSummary = computed(() => aiStore.changeSummary)
 
-// --- Button Logic (Drag & Drop) ---
-const isDragging = ref(false)
-const dragStartTime = ref(0)
-const offset = ref({ x: 0, y: 0 })
-const isDocked = ref(false)
+// --- Constants & Configs (Data-Driven) ---
+const FIX_JSON_PROMPT = "The previous response was not valid JSON or had errors. Please correct it and output ONLY the valid JSON configuration, wrapped in \`\`\`json code blocks."
 
-// Window dimensions
-const windowWidth = ref(window.innerWidth)
-const windowHeight = ref(window.innerHeight)
+const SUGGESTION_CHIPS = [
+    { label: '添加新筛选项', text: '添加一个新的筛选项' },
+    { label: '修改表格列', text: '修改表格列配置' },
+    { label: '新增导航菜单', text: '新增一个导航菜单' }
+]
 
-const updateDimensions = () => {
-    windowWidth.value = window.innerWidth
-    windowHeight.value = window.innerHeight
-    // Ensure button stays on screen on resize
-    snapToEdge()
+const SUMMARY_ITEMS = computed(() => [
+    { key: 'addedNavItems', label: '新增导航项', type: 'added' },
+    { key: 'modifiedNavItems', label: '修改导航项', type: 'modified' },
+    { key: 'addedPageConfigs', label: '新增页面配置', type: 'added' },
+    { key: 'modifiedPageConfigs', label: '修改页面配置', type: 'modified' }
+])
+
+// --- Feature: Draggable Button Logic ---
+function useDraggableButton() {
+    const isDragging = ref(false)
+    const dragStartTime = ref(0)
+    const offset = ref({ x: 0, y: 0 })
+    const isDocked = ref(false)
+    const windowWidth = ref(window.innerWidth)
+    const windowHeight = ref(window.innerHeight)
+
+    const position = computed(() => aiStore.buttonPosition)
+
+    const updateDim = () => {
+        windowWidth.value = window.innerWidth
+        windowHeight.value = window.innerHeight
+        snapToEdge()
+    }
+
+    const snapToEdge = () => {
+        const { x: currX, y: currY } = position.value
+        const btnW = 64, threshold = 100
+        let newX = currX, docked = false
+
+        if (currX < threshold) { newX = -32; docked = true }
+        else if (windowWidth.value - (currX + btnW) < threshold) { newX = windowWidth.value - 32; docked = true }
+        else { newX = Math.max(0, Math.min(windowWidth.value - btnW, currX)); docked = false }
+
+        aiStore.setButtonPosition(newX, Math.max(20, Math.min(windowHeight.value - 84, currY)))
+        isDocked.value = docked
+    }
+
+    const handleStart = (clientX: number, clientY: number) => {
+        if (isOpen.value) return
+        isDragging.value = false
+        dragStartTime.value = Date.now()
+        offset.value = { x: clientX - position.value.x, y: clientY - position.value.y }
+    }
+
+    const handleMove = (clientX: number, clientY: number) => {
+         const dx = clientX - (position.value.x + offset.value.x)
+         const dy = clientY - (position.value.y + offset.value.y)
+         if (!isDragging.value && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+             isDragging.value = true; isDocked.value = false
+         }
+         if (isDragging.value) {
+             let nx = clientX - offset.value.x, ny = clientY - offset.value.y
+             aiStore.setButtonPosition(
+                 Math.max(0, Math.min(windowWidth.value - 64, nx)), 
+                 Math.max(10, Math.min(windowHeight.value - 74, ny))
+             )
+         }
+    }
+
+    const onMouseDown = (e: MouseEvent) => {
+        handleStart(e.clientX, e.clientY)
+        const onMove = (e: MouseEvent) => { e.preventDefault(); handleMove(e.clientX, e.clientY) }
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp)
+            if (isDragging.value) { snapToEdge(); setTimeout(() => isDragging.value = false, 50) }
+        }
+        window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
+    }
+
+    const onTouchStart = (e: TouchEvent) => {
+        const t = e.touches[0]; handleStart(t.clientX, t.clientY)
+        const onMove = (e: TouchEvent) => handleMove(e.touches[0].clientX, e.touches[0].clientY)
+        const onEnd = () => {
+            window.removeEventListener('touchmove', onMove); window.removeEventListener('touchend', onEnd)
+            if (isDragging.value) { snapToEdge(); setTimeout(() => isDragging.value = false, 50) }
+        }
+        window.addEventListener('touchmove', onMove); window.addEventListener('touchend', onEnd)
+    }
+
+    const onClick = () => {
+        if (isDragging.value) return
+        if (isOpen.value) { aiStore.toggleWindow(); return }
+        if (Date.now() - dragStartTime.value < 200) {
+            if (isDocked.value) {
+                aiStore.setButtonPosition(position.value.x < 0 ? 24 : windowWidth.value - 88, position.value.y)
+                isDocked.value = false
+            } else aiStore.toggleWindow()
+        }
+    }
+    
+    // Window Style Logic (Coupled with position)
+    const windowStyle = computed(() => {
+        const { x, y } = position.value
+        const W = windowWidth.value, H = windowHeight.value, size = 64, gap = 16
+        const s: Record<string, string> = {}
+        // H-Pos
+        if (x > W / 2) { s.right = `${Math.max(16, W - (x + size))}px`; s.left = 'auto'; s.transformOrigin = 'bottom right' }
+        else { s.left = `${Math.max(16, x)}px`; s.right = 'auto'; s.transformOrigin = 'bottom left' }
+        // V-Pos
+        if (y > H / 2) {
+            s.bottom = `${H - y + gap}px`; s.top = 'auto'
+            if (s.transformOrigin) s.transformOrigin = s.transformOrigin.replace('top', 'bottom')
+            s.maxHeight = isMinimized.value ? '80px' : `${y - gap - 20}px`
+        } else {
+            s.top = `${y + size + gap}px`; s.bottom = 'auto'
+            s.transformOrigin = s.transformOrigin.replace('bottom', 'top')
+            s.maxHeight = isMinimized.value ? '80px' : `${H - (y + size + gap) - 20}px`
+        }
+        return s
+    })
+
+    onMounted(() => { window.addEventListener('resize', updateDim); snapToEdge() })
+    onUnmounted(() => window.removeEventListener('resize', updateDim))
+
+    return { isDragging, isDocked, onMouseDown, onTouchStart, onClick, windowStyle, position }
 }
 
-// --- Window Logic ---
+const { isDragging, isDocked, onMouseDown, onTouchStart, onClick: handleButtonClick, windowStyle, position } = useDraggableButton()
+const buttonStyle = computed(() => ({ left: `${position.value.x}px`, top: `${position.value.y}px` }))
+
+// --- Feature: Auto Recovery ---
+function setupAutoRecovery() {
+    watch(isLoading, (newLoading, oldLoading) => {
+        if (!newLoading && oldLoading) {
+            const msgs = messages.value
+            const lastMsg = msgs[msgs.length - 1]
+            if (lastMsg?.role === 'assistant') {
+                const isFail = lastMsg.status === 'error' || (!lastMsg.configData && (lastMsg.content.includes('Sorry') || lastMsg.content.includes('抱歉')))
+                const lastUser = msgs[msgs.length - 2]
+                if (isFail && !lastUser?.content.includes('previous response was not valid JSON')) {
+                    setTimeout(() => handleRetry(), 500)
+                }
+            }
+        }
+    })
+}
+setupAutoRecovery()
+
+// --- UI Logic ---
 const inputValue = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
+watch(messages, async () => { await nextTick(); if(messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight }, { deep: true })
 
-// --- Lifecycle ---
-onMounted(() => {
-    window.addEventListener('resize', updateDimensions)
-    snapToEdge()
-})
-
-onUnmounted(() => {
-    window.removeEventListener('resize', updateDimensions)
-    window.removeEventListener('mousemove', handleMouseMove)
-    window.removeEventListener('mouseup', handleMouseUp)
-    window.removeEventListener('touchmove', handleTouchMove)
-    window.removeEventListener('touchend', handleTouchEnd)
-})
-
-// --- Button Handlers ---
-function handleMouseDown(e: MouseEvent) {
-    if (isOpen.value) return // Disable drag when chatting
-    startDrag(e.clientX, e.clientY)
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
+const handleSend = (content?: string) => {
+    const text = content || inputValue.value.trim()
+    if (!text || isLoading.value) return
+    aiStore.sendMessage(text); if (!content) inputValue.value = ''
 }
-
-function handleTouchStart(e: TouchEvent) {
-    if (isOpen.value) return
-    const touch = e.touches[0]
-    startDrag(touch.clientX, touch.clientY)
-    window.addEventListener('touchmove', handleTouchMove)
-    window.addEventListener('touchend', handleTouchEnd)
-}
-
-function startDrag(clientX: number, clientY: number) {
-    isDragging.value = false // Will be set to true on move
-    dragStartTime.value = Date.now()
-    offset.value = {
-        x: clientX - position.value.x,
-        y: clientY - position.value.y
-    }
-}
-
-function handleMouseMove(e: MouseEvent) {
-    e.preventDefault()
-    moveDrag(e.clientX, e.clientY)
-}
-
-function handleTouchMove(e: TouchEvent) {
-    const touch = e.touches[0]
-    moveDrag(touch.clientX, touch.clientY)
-}
-
-function moveDrag(clientX: number, clientY: number) {
-    if (!isDragging.value) {
-        const dx = clientX - (position.value.x + offset.value.x)
-        const dy = clientY - (position.value.y + offset.value.y)
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-            isDragging.value = true
-            isDocked.value = false
-        }
-    }
-    
-    if (isDragging.value) {
-        let newX = clientX - offset.value.x
-        let newY = clientY - offset.value.y
-        newY = Math.max(10, Math.min(windowHeight.value - 74, newY))
-        newX = Math.max(0, Math.min(windowWidth.value - 64, newX))
-        aiStore.setButtonPosition(newX, newY)
-    }
-}
-
-function handleMouseUp() {
-    window.removeEventListener('mousemove', handleMouseMove)
-    window.removeEventListener('mouseup', handleMouseUp)
-    endDrag()
-}
-
-function handleTouchEnd() {
-    window.removeEventListener('touchmove', handleTouchMove)
-    window.removeEventListener('touchend', handleTouchEnd)
-    endDrag()
-}
-
-function endDrag() {
-    if (isDragging.value) {
-        snapToEdge()
-        setTimeout(() => {
-            isDragging.value = false
-        }, 50)
-    }
-}
-
-function snapToEdge() {
-    const currentX = position.value.x
-    const currentY = position.value.y
-    const buttonWidth = 64
-    const threshold = 100
-    
-    let newX = currentX
-    let docked = false
-    
-    if (currentX < threshold) {
-        newX = -32
-        docked = true
-    } else if (windowWidth.value - (currentX + buttonWidth) < threshold) {
-        newX = windowWidth.value - 32
-        docked = true
-    } else {
-        newX = Math.max(0, Math.min(windowWidth.value - buttonWidth, currentX))
-        docked = false
-    }
-    
-    let newY = Math.max(20, Math.min(windowHeight.value - 84, currentY))
-    
-    aiStore.setButtonPosition(newX, newY)
-    isDocked.value = docked
-}
-
-function handleButtonClick() {
-    if (isDragging.value) return
-    if (isOpen.value) {
-        aiStore.toggleWindow()
-        return
-    }
-    if (Date.now() - dragStartTime.value < 200) {
-        if (isDocked.value) {
-            if (position.value.x < 0) {
-                aiStore.setButtonPosition(24, position.value.y)
-            } else {
-                aiStore.setButtonPosition(windowWidth.value - 88, position.value.y)
-            }
-            isDocked.value = false
-        } else {
-            aiStore.toggleWindow()
-        }
-    }
-}
-
-// --- Window Logic ---
-// Dynamic Window Position & Style
-const windowStyle = computed(() => {
-    const btnX = position.value.x
-    const btnY = position.value.y
-    const btnSize = 64
-    const gap = 16
-    const winW = windowWidth.value
-    const winH = windowHeight.value
-    
-    const style: any = {}
-    
-    // Horizontal Positioning
-    if (btnX > winW / 2) {
-        let right = winW - (btnX + btnSize)
-        right = Math.max(16, right)
-        style.right = `${right}px`
-        style.left = 'auto'
-        style.transformOrigin = 'bottom right'
-    } else {
-        let left = btnX
-        left = Math.max(16, left)
-        style.left = `${left}px`
-        style.right = 'auto'
-        style.transformOrigin = 'bottom left'
-    }
-    
-    // Vertical Positioning
-    if (btnY > winH / 2) {
-        style.bottom = `${winH - btnY + gap}px`
-        style.top = 'auto'
-        if (style.transformOrigin) style.transformOrigin = style.transformOrigin.replace('top', 'bottom')
-        style.maxHeight = isMinimized.value ? '80px' : `${btnY - gap - 20}px` 
-    } else {
-        style.top = `${btnY + btnSize + gap}px`
-        style.bottom = 'auto'
-        style.transformOrigin = style.transformOrigin.replace('bottom', 'top')
-        style.maxHeight = isMinimized.value ? '80px' : `${winH - (btnY + btnSize + gap) - 20}px`
-    }
-    return style
-})
-
-const buttonStyle = computed(() => ({
-    left: `${position.value.x}px`,
-    top: `${position.value.y}px`
-}))
-
-// Auto-scroll
-watch(messages, async () => {
-    await nextTick()
-    if (messagesContainer.value) {
-        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
-}, { deep: true })
-
-// Handlers
-function handleMinimize() {
-    aiStore.minimizeWindow()
-}
-
-function handleSend(content?: string) {
-    const textToSend = content || inputValue.value.trim()
-    if (!textToSend || isLoading.value) return
-    
-    aiStore.sendMessage(textToSend)
-    if (!content) inputValue.value = ''
-}
-
-function handleRetry(_messageId?: string) {
-    // specific retry logic that sends a fix prompt
-    const fixPrompt = "The previous response was not valid JSON or had errors. Please correct it and output ONLY the valid JSON configuration, wrapped in \`\`\`json code blocks."
-    aiStore.sendMessage(fixPrompt)
-}
-
-// L5: Auto-correction
-watch(isLoading, (newLoading, oldLoading) => {
-    if (!newLoading && oldLoading) {
-        const msgs = messages.value
-        const lastMsg = msgs[msgs.length - 1]
-        
-        // Check conditions: Assistant message, (Error status OR (No config + Apologetic/Refusal text))
-        if (lastMsg && lastMsg.role === 'assistant') {
-             const isFailure = lastMsg.status === 'error' || 
-                              (!lastMsg.configData && (lastMsg.content.includes('抱歉') || lastMsg.content.includes('Sorry') || lastMsg.content.includes('I cannot')))
-             
-             if (isFailure) {
-                  // Prevent infinite loop: check if we just retried
-                  const lastUserMsg = msgs[msgs.length - 2]
-                  // Check if the last user message was our fix prompt (heuristic match)
-                  if (lastUserMsg && lastUserMsg.content.includes('previous response was not valid JSON')) {
-                      // Already retried and failed again -> Stop to avoid loop
-                      return
-                  }
-                  
-                  // Trigger auto-retry
-                  // Use a small timeout to make it feel natural
-                  setTimeout(() => {
-                      handleRetry()
-                  }, 500)
-             }
-        }
-    }
-})
-
-function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        handleSend()
-    }
-}
-
-function handleClear() {
-    aiStore.clearMessages()
-    configStore.clearPreviewConfig()
-}
-
-
-
-function handleConfirmPreview() {
-    // V9 逻辑：直接调用 aiStore 进行后端同步和本地更新
-    aiStore.confirmPreview()
-}
-
-function handleCancelPreview() {
-    aiStore.cancelPreview()
-}
-
-function formatTime(date: Date): string {
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
+const handleRetry = () => aiStore.sendMessage(FIX_JSON_PROMPT)
+const handleClear = () => { aiStore.clearMessages(); configStore.clearPreviewConfig() }
+const handleConfirmPreview = () => aiStore.confirmPreview()
+const handleCancelPreview = () => aiStore.cancelPreview()
+const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 </script>
 
 <template>
-    <!-- Floating Button -->
-    <!-- Floating Button -->
-    <div 
-        class="fixed z-[2000] touch-none select-none"
-        :style="buttonStyle"
-    >
+    <!-- Floating Button is largely unchanged but uses new handlers -->
+    <div class="fixed z-[2000] touch-none select-none" :style="buttonStyle">
         <button
             class="ai-trigger-btn group"
-            :class="{ 
-                'is-open': isOpen,
-                'is-dragging': isDragging,
-                'is-docked': isDocked && !isOpen,
-                'has-pending': hasPreviewConfig && !isOpen
-            }"
+            :class="{ 'is-open': isOpen, 'is-dragging': isDragging, 'is-docked': isDocked && !isOpen, 'has-pending': hasPreviewConfig && !isOpen }"
             @click="handleButtonClick"
-            @mousedown="handleMouseDown"
-            @touchstart="handleTouchStart"
+            @mousedown="onMouseDown"
+            @touchstart="onTouchStart"
         >
             <div class="ai-trigger-content">
                 <XIcon v-if="isOpen" class="w-6 h-6 text-white transition-transform duration-300" />
                 <Loader2 v-else-if="isLoading" class="w-6 h-6 animate-spin text-white" />
                 <Sparkles v-else class="w-6 h-6 text-white group-hover:scale-110 transition-transform duration-300" />
             </div>
-            
-            <!-- Pulse ring effect when pending -->
             <span v-if="hasPreviewConfig && !isOpen" class="absolute -top-1 -right-1 flex h-4 w-4">
                 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                 <span class="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white"></span>
@@ -345,54 +209,37 @@ function formatTime(date: Date): string {
 
     <!-- Chat Window -->
     <Transition name="slide-up">
-        <div 
-            v-if="isOpen" 
-            class="ai-chat-window" 
-            :class="{ 'is-minimized': isMinimized }"
-            :style="windowStyle"
-        >
+        <div v-if="isOpen" class="ai-chat-window" :class="{ 'is-minimized': isMinimized }" :style="windowStyle">
             <!-- Header -->
             <div class="chat-header">
                 <div class="header-left">
-                    <div class="header-icon-box">
-                        <Sparkles :size="16" />
-                    </div>
-                    <div class="header-info">
-                        <div class="header-title">AI 助手</div>
-                        <div class="header-subtitle">INTELLIGENT ASSISTANT</div>
-                    </div>
+                    <div class="header-icon-box"><Sparkles :size="16" /></div>
+                    <div class="header-info"><div class="header-title">AI 助手</div><div class="header-subtitle">INTELLIGENT ASSISTANT</div></div>
                 </div>
-                
                 <div class="header-actions">
-                    <button class="header-action-btn" @click="handleClear" :disabled="messages.length === 0" title="清空消息">
-                        <Trash2 :size="15" />
-                    </button>
-                    <button class="header-action-btn" @click="handleMinimize" title="最小化">
-                        <Minus :size="16" />
-                    </button>
+                    <button class="header-action-btn" @click="handleClear" :disabled="messages.length === 0" title="清空消息"><Trash2 :size="15" /></button>
+                    <button class="header-action-btn" @click="aiStore.minimizeWindow" title="最小化"><Minus :size="16" /></button>
                 </div>
             </div>
 
-            <!-- Minimized state -->
             <div v-if="isMinimized" class="minimized-content">
                 <p v-if="isLoading">AI 正在处理中...</p>
                 <p v-else-if="hasPreviewConfig">有待审核的配置</p>
                 <p v-else>点击展开查看对话</p>
             </div>
 
-            <!-- Main content -->
             <template v-else>
                 <div ref="messagesContainer" class="content-area">
-                    <!-- Messages -->
                     <div class="chat-messages">
                         <div v-if="messages.length === 0" class="empty-state">
                             <Sparkles :size="48" class="empty-icon" />
                             <h3>您好！我是 AI 配置助手</h3>
                             <p>告诉我您想要如何修改配置，我会为您生成修改方案供您审批。</p>
+                            <!-- Data-Driven Suggestion Chips -->
                             <div class="suggestion-chips">
-                                <button class="suggestion-chip" @click="inputValue = '添加一个新的筛选项'">添加新筛选项</button>
-                                <button class="suggestion-chip" @click="inputValue = '修改表格列配置'">修改表格列</button>
-                                <button class="suggestion-chip" @click="inputValue = '新增一个导航菜单'">新增导航菜单</button>
+                                <button v-for="chip in SUGGESTION_CHIPS" :key="chip.text" class="suggestion-chip" @click="inputValue = chip.text">
+                                    {{ chip.label }}
+                                </button>
                             </div>
                         </div>
 
@@ -400,110 +247,54 @@ function formatTime(date: Date): string {
                             <p>⚠️ Coze API 未配置。请在 .env 文件中设置 VITE_COZE_API_KEY 和 VITE_COZE_BOT_ID。</p>
                         </div>
 
-                        <div 
-                            v-for="message in messages" 
-                            :key="message.id"
-                            class="message"
-                            :class="[message.role === 'user' ? 'user-message' : 'assistant-message', message.status]"
-                        >
+                        <div v-for="message in messages" :key="message.id" class="message" :class="[message.role === 'user' ? 'user-message' : 'assistant-message', message.status]">
                             <div class="message-content">
                                 <div class="message-text" v-if="message.content || message.status === 'error'">
-                                    <span v-if="message.status === 'error'" class="error-prefix">
-                                        <AlertCircle :size="16" class="inline-error-icon"/> 
-                                    </span>
+                                    <span v-if="message.status === 'error'" class="error-prefix"><AlertCircle :size="16" class="inline-error-icon"/></span>
                                     {{ message.content }}
                                 </div>
-
-                                <!-- Thinking/Streaming Indicator -->
                                 <div v-if="message.status === 'streaming'" class="streaming-indicator">
-                                    <template v-if="!message.content">
-                                        <Sparkles class="animate-pulse text-violet-500" :size="18" />
-                                        <span class="text-xs text-muted-foreground ml-2">正在思考配置方案...</span>
-                                    </template>
-                                    <template v-else>
-                                        <span class="typing-cursor">▋</span>
-                                    </template>
+                                    <template v-if="!message.content"><Sparkles class="animate-pulse text-violet-500" :size="18" /><span class="text-xs text-muted-foreground ml-2">正在思考配置方案...</span></template>
+                                    <template v-else><span class="typing-cursor">▋</span></template>
                                 </div>
-                                
-                                <!-- JSON Config Viewer -->
                                 <div v-if="message.configData" class="config-viewer mt-3">
-                                    <div class="viewer-header">
-                                        <span class="text-xs font-medium text-muted-foreground">配置详情</span>
-                                    </div>
-                                    <JsonViewer
-                                        :value="message.configData"
-                                        :expand-depth="0"
-                                        boxed
-                                        copyable
-                                        sort
-                                        theme="jv-light"
-                                        class="custom-json-viewer"
-                                    />
+                                    <div class="viewer-header"><span class="text-xs font-medium text-muted-foreground">配置详情</span></div>
+                                    <JsonViewer :value="message.configData" :expand-depth="0" boxed copyable sort theme="jv-light" class="custom-json-viewer"/>
                                 </div>
                             </div>
-                            <div class="message-meta">
-                                <span class="message-time">{{ formatTime(message.timestamp) }}</span>
-                            </div>
+                            <div class="message-meta"><span class="message-time">{{ formatTime(message.timestamp) }}</span></div>
                         </div>
                     </div>
 
-                    <!-- Preview Panel -->
+                    <!-- Preview Panel (Data-Driven Summary) -->
                     <div v-if="hasPreviewConfig" class="preview-panel">
-                        <div class="preview-header">
-                            <Sparkles :size="16" />
-                            <span>配置预览</span>
-                            <span class="preview-hint">← 在左侧实时查看效果</span>
-                        </div>
-
-                        <div class="mode-description">
-                            <p>➕ 追加模式 - 合并到现有配置</p>
-                        </div>
+                        <div class="preview-header"><Sparkles :size="16" /><span>配置预览</span><span class="preview-hint">← 在左侧实时查看效果</span></div>
+                        <div class="mode-description"><p>➕ 追加模式 - 合并到现有配置</p></div>
 
                         <div v-if="changeSummary && previewMode !== 'initial'" class="change-summary">
                             <div class="summary-title">变更摘要</div>
                             <div class="summary-items">
-                                <div v-if="changeSummary.addedNavItems > 0" class="summary-item added">
-                                    <span class="icon">+</span><span>新增导航项: {{ changeSummary.addedNavItems }} 个</span>
-                                </div>
-                                <div v-if="changeSummary.modifiedNavItems > 0" class="summary-item modified">
-                                    <span class="icon">~</span><span>修改导航项: {{ changeSummary.modifiedNavItems }} 个</span>
-                                </div>
-                                <div v-if="changeSummary.addedPageConfigs > 0" class="summary-item added">
-                                    <span class="icon">+</span><span>新增页面配置: {{ changeSummary.addedPageConfigs }} 个</span>
-                                </div>
-                                <div v-if="changeSummary.modifiedPageConfigs > 0" class="summary-item modified">
-                                    <span class="icon">~</span><span>修改页面配置: {{ changeSummary.modifiedPageConfigs }} 个</span>
-                                </div>
+                                <!-- Data-Driven Summary Loop -->
+                                <template v-for="item in SUMMARY_ITEMS" :key="item.key">
+                                    <div v-if="(changeSummary[item.key as keyof typeof changeSummary] as number) > 0" class="summary-item" :class="item.type">
+                                        <span class="icon">{{ item.type === 'added' ? '+' : '~' }}</span>
+                                        <span>{{ item.label }}: {{ changeSummary[item.key as keyof typeof changeSummary] }} 个</span>
+                                    </div>
+                                </template>
                             </div>
                         </div>
 
                         <div v-if="previewMode !== 'initial'" class="preview-actions">
-                            <Button variant="default" size="sm" class="confirm-btn" @click="handleConfirmPreview">
-                                <Check :size="16" />确认追加
-                            </Button>
-                            <Button variant="outline" size="sm" class="cancel-btn" @click="handleCancelPreview">
-                                <XIcon :size="16" />取消
-                            </Button>
+                            <Button variant="default" size="sm" class="confirm-btn" @click="handleConfirmPreview"><Check :size="16" />确认追加</Button>
+                            <Button variant="outline" size="sm" class="cancel-btn" @click="handleCancelPreview"><XIcon :size="16" />取消</Button>
                         </div>
                     </div>
                 </div>
 
                 <div class="chat-input">
                     <div class="input-wrapper">
-                        <Input
-                            v-model="inputValue"
-                            type="text"
-                            placeholder="描述您想要的配置修改..."
-                            class="input-field"
-                            :disabled="false"
-                            @keydown="handleKeydown"
-                        />
-                        <Button 
-                            class="send-btn" 
-                            size="icon"
-                            :disabled="!inputValue.trim() || isLoading"
-                            @click="() => handleSend()"
-                        >
+                        <Input v-model="inputValue" type="text" placeholder="描述您想要的配置修改..." class="input-field" @keydown.enter.prevent="handleSend()"/>
+                        <Button class="send-btn" size="icon" :disabled="!inputValue.trim() || isLoading" @click="() => handleSend()">
                             <Loader2 v-if="isLoading" :size="18" class="loading-icon" />
                             <Send v-else :size="18" />
                         </Button>

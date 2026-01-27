@@ -1,651 +1,193 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import {
-  Input as AInput,
-  Select as ASelect,
-  Option as AOption,
-  Textarea as ATextarea,
-  Button as AButton,
+  Input as AInput, Select as ASelect, Option as AOption,
+  Textarea as ATextarea, Button as AButton
 } from '@arco-design/web-vue'
 import { Button as ShadcnButton } from '@/components/ui/button'
 import { FormInput, Plus, Trash2 } from 'lucide-vue-next'
 import { useConfigPageStore } from '@/stores/config_page_Store'
 
-interface ConditionRule {
-  sourceColumn: string
-  operator: string
-  compareValue: string
-  displayValue: string
-}
-
 const props = defineProps<{
   type: 'filter' | 'column' | 'action' | 'card'
   modelValue: any
-  availableColumns?: Array<{ key: string; label: string }>  // 可用的列列表（用于条件格式）
+  availableColumns?: Array<{ key: string; label: string }>
 }>()
 
 const emit = defineEmits(['update:modelValue'])
-
+const configPageStore = useConfigPageStore()
 const formState = ref<any>({ ...props.modelValue })
 
-// 条件格式规则数组（用于可视化编辑）
-const conditionRulesArray = ref<ConditionRule[]>([])
+// ----------------------------------------------------------------------
+// 1. Data-Driven Schemas (配置化表单定义)
+// ----------------------------------------------------------------------
+const formSchemas = computed(() => ({
+  filter: [
+    { key: 'key', label: '字段名 (Key)', comp: 'input', props: { placeholder: '如: keyword' } },
+    { key: 'label', label: '显示标签 (Label)', comp: 'input', props: { placeholder: '如: 关键词' } },
+    { key: 'type', label: '类型 (Type)', comp: 'select', props: { options: [{value:'input',label:'输入框'},{value:'select',label:'下拉框'},{value:'date-range',label:'日期范围'},{value:'tree-select',label:'树形选择'}] } },
+    { key: 'placeholder', label: '占位文字', comp: 'input', props: { placeholder: '请输入...' } },
+    { key: 'options', label: '选项列表 (逗号分隔)', comp: 'textarea', showIf: (s:any) => s.type === 'select', props: { placeholder: 'A,B,C', autoSize: {minRows:2} } },
+    { key: 'treeOptions', label: '树形数据 JSON', comp: 'textarea', showIf: (s:any) => s.type === 'tree-select', props: { placeholder: '[{"key":"1",...}]', class: 'font-mono text-xs' } }
+  ],
+  column: [
+    { key: 'key', label: '字段名 (Key)', comp: 'input', props: { placeholder: '如: user_name' } },
+    { key: 'label', label: '显示标签', comp: 'input', props: { placeholder: '如: 用户名' } },
+    { key: 'width', label: '宽度', comp: 'input', props: { placeholder: '如: 120px' } },
+    { key: 'type', label: '类型', comp: 'select', props: { options: [{value:'text',label:'普通文本'},{value:'badge',label:'徽标'},{value:'status-badge',label:'状态点'},{value:'text-button',label:'文字按钮组'}] } },
+    { key: 'buttons', label: '按钮Action Key (逗号分隔)', comp: 'input', showIf: (s:any) => s.type === 'text-button', props: { placeholder: 'edit, delete' } },
+    { key: 'fixed', label: '固定方式', comp: 'select', props: { options: [{value:'none',label:'不固定'},{value:'left',label:'左侧固定'},{value:'right',label:'右侧固定'}] } },
+    { key: 'align', label: '对齐方式', comp: 'select', props: { options: [{value:'left',label:'左对齐'},{value:'center',label:'居中'},{value:'right',label:'右对齐'}] } },
+    { key: 'ellipsis', label: '内容过长省略', comp: 'checkbox' },
+    { key: 'tooltip', label: '显示提示', comp: 'checkbox' }
+  ],
+  action: [
+    { key: 'key', label: 'Key', comp: 'input', props: { placeholder: '如 search' } },
+    { key: 'label', label: '按钮文本', comp: 'input', props: { placeholder: '如 查询' } },
+    { key: 'variant', label: '样式', comp: 'select', props: { options: [{value:'primary',label:'Primary'},{value:'outline',label:'Outline'},{value:'text',label:'Text'},{value:'shadcn-outline',label:'Shadcn Outline'}] } },
+    { key: 'className', label: '自定义样式类', comp: 'input', props: { placeholder: '可选，如 bg-emerald-50' } },
+    { key: 'effectType', label: '交互效果', comp: 'select', props: { options: [{value:'none',label:'无反应'},{value:'modal',label:'弹窗-表单'},{value:'table',label:'弹窗-表格'}] }, fullWidth: true },
+    // Modal-specific fields defined separately in template for complexity
+  ],
+  card: [
+    { key: 'key', label: 'Key', comp: 'input', props: { placeholder: 'total_users' } },
+    { key: 'title', label: '标题', comp: 'input', props: { placeholder: '总用户数' } },
+    { key: 'data', label: '数据', comp: 'input', props: { placeholder: '1,234' }, fullWidth: true }
+  ]
+}))
 
-// 运算符选项
-const operatorOptions = [
-  { value: '==', label: '等于 (==)' },
-  { value: '!=', label: '不等于 (!=)' },
-  { value: '>', label: '大于 (>)' },
-  { value: '<', label: '小于 (<)' },
-  { value: '>=', label: '大于等于 (>=)' },
-  { value: '<=', label: '小于等于 (<=)' },
-  { value: 'contains', label: '包含 (contains)' }
-]
-
-// 初始化条件规则数组
-function initConditionRules() {
-  if (formState.value.conditionRules) {
-    try {
-      const parsed = JSON.parse(formState.value.conditionRules)
-      if (Array.isArray(parsed)) {
-        conditionRulesArray.value = parsed
-      }
-    } catch {
-      conditionRulesArray.value = []
-    }
-  } else {
-    conditionRulesArray.value = []
-  }
+const resolveComp = (type: string) => {
+  const map: any = { input: AInput, select: ASelect, textarea: ATextarea, checkbox: 'input' } // checkbox special handled
+  return map[type] || AInput
 }
 
-const configPageStore = useConfigPageStore()
+// ----------------------------------------------------------------------
+// 2. Logic Simplification (逻辑简化)
+// ----------------------------------------------------------------------
+// 自动代理 JSON 字段 (Condition Rules)
+const conditionRulesProxy = computed({
+  get: (): any[] => {
+    try { return JSON.parse(formState.value.conditionRules || '[]') } catch { return [] }
+  },
+  set: (val) => formState.value.conditionRules = JSON.stringify(val)
+})
 
+// 监听状态同步
+watch(() => props.modelValue, (v) => { if(JSON.stringify(v)!==JSON.stringify(formState.value)) formState.value = JSON.parse(JSON.stringify(v)) }, { deep: true })
+watch(formState, (v) => emit('update:modelValue', v), { deep: true })
+
+// 辅助数据
 const availablePages = computed(() => {
   const pages: { value: string; label: string }[] = []
-  // navGroups: [{ label: 'App', items: [{ title: 'Main1', items: [...] }] }]
-  configPageStore.navGroups.forEach((group: any) => {
-    group.items.forEach((mainItem: any) => {
-      if (mainItem.items) {
-        mainItem.items.forEach((subItem: any) => {
-          pages.push({
-            value: subItem.id,
-            label: subItem.title
-          })
-        })
-      }
-    })
-  })
+  configPageStore.navGroups.forEach((g: any) => g.items.forEach((m: any) => m.items?.forEach((s: any) => pages.push({ value: s.id, label: s.title }))))
   return pages
 })
 
-// 同步条件规则数组到 formState
-function syncConditionRulesToFormState() {
-  formState.value.conditionRules = JSON.stringify(conditionRulesArray.value)
-}
+const operatorOptions = [
+  { value: '==', label: '等于' }, { value: '!=', label: '不等于' }, { value: '>', label: '大于' },
+  { value: '<', label: '小于' }, { value: '>=', label: '大于等于' }, { value: '<=', label: '小于等于' }, { value: 'contains', label: '包含' }
+]
 
-// 添加条件规则
-function addConditionRule() {
-  conditionRulesArray.value.push({
-    sourceColumn: '',
-    operator: '==',
-    compareValue: '',
-    displayValue: ''
-  })
-  syncConditionRulesToFormState()
-}
-
-// 删除条件规则
-function removeConditionRule(index: number) {
-  conditionRulesArray.value.splice(index, 1)
-  syncConditionRulesToFormState()
-}
-
-// 监听规则变化并同步
-watch(conditionRulesArray, () => {
-  syncConditionRulesToFormState()
-}, { deep: true })
-
-// 监听 prop 变化，更新内部状态
-watch(() => props.modelValue, (newVal) => {
-  if (JSON.stringify(newVal) !== JSON.stringify(formState.value)) {
-    formState.value = JSON.parse(JSON.stringify(newVal))
-    initConditionRules()
-  }
-}, { deep: true })
-
-// 监听内部状态变化，emit 更新
-watch(formState, (newVal) => {
-  emit('update:modelValue', newVal)
-}, { deep: true })
-
-// Ensure effectConfig is initialized when effectType requires it
-watch(() => formState.value.effectType, (newType) => {
-  if ((newType === 'table' || newType === 'modal') && !formState.value.effectConfig) {
-    formState.value.effectConfig = {}
-  }
+// Modal/Table Effect Logic
+watch(() => formState.value.effectType, (type) => {
+  if ((type === 'modal' || type === 'table') && !formState.value.effectConfig) formState.value.effectConfig = {}
 })
 
-// 初始化
-initConditionRules()
+const addCondition = () => conditionRulesProxy.value = [...conditionRulesProxy.value, { sourceColumn: '', operator: '==', compareValue: '', displayValue: '' }]
+const removeCondition = (idx: number) => { const arr=[...conditionRulesProxy.value]; arr.splice(idx,1); conditionRulesProxy.value=arr }
 
-// --- Action Form Logic ---
-
-const addEffectFormItem = () => {
-  if (!formState.value.effectFormItems) {
-    formState.value.effectFormItems = []
-  }
-  const id = Math.random().toString(36).substring(2, 7)
-  formState.value.effectFormItems.push({
-    key: `f_${id}`,
-    label: '新字段',
-    type: 'input',
-    placeholder: '',
-    options: [],
-    defaultValue: ''
-  })
+const addEffectItem = () => {
+  if(!formState.value.effectFormItems) formState.value.effectFormItems = []
+  formState.value.effectFormItems.push({ key: `f_${Date.now().toString(36)}`, label: '新字段', type: 'input', placeholder: '', defaultValue: '' })
 }
-const removeEffectFormItem = (index: any) => {
-  if (formState.value.effectFormItems) {
-    formState.value.effectFormItems.splice(index, 1)
-  }
-}
-
-// --- Nested Column Config Logic ---
-// (Previously used for column editing, now removed)
 </script>
 
 <template>
-  <div class="config-form-container">
-    <!-- ========================================== -->
-    <!-- Filter Config Form                         -->
-    <!-- ========================================== -->
-    <div v-if="type === 'filter'" class="space-y-4">
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="text-sm font-medium mb-1.5 block">字段名 (Key)</label>
-          <AInput v-model="formState.key" placeholder="如: keyword" />
+  <div class="config-form-container space-y-4">
+    <!-- 1. 通用动态表单渲染 -->
+    <div class="grid grid-cols-2 gap-4">
+      <template v-for="field in (formSchemas[type] as any[])" :key="field.key">
+        <div v-if="!field.showIf || field.showIf(formState)" :class="field.fullWidth ? 'col-span-2' : ''">
+          <div v-if="field.comp === 'checkbox'" class="flex items-center gap-2 pt-6">
+             <input type="checkbox" v-model="formState[field.key]" class="rounded border-input text-primary focus:ring-primary w-4 h-4" :id="field.key"/>
+             <label :for="field.key" class="text-sm cursor-pointer">{{ field.label }}</label>
+          </div>
+          <div v-else>
+            <label class="text-sm font-medium mb-1.5 block">{{ field.label }}</label>
+            <component :is="resolveComp(field.comp)" v-model="formState[field.key]" v-bind="field.props" class="w-full" />
+          </div>
         </div>
-        <div>
-          <label class="text-sm font-medium mb-1.5 block">显示标签 (Label)</label>
-          <AInput v-model="formState.label" placeholder="如: 关键词" />
-        </div>
-      </div>
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="text-sm font-medium mb-1.5 block">类型 (Type)</label>
-          <ASelect v-model="formState.type" class="w-full">
-            <AOption value="input">输入框 (Input)</AOption>
-            <AOption value="select">下拉框 (Select)</AOption>
-            <AOption value="date-range">日期范围 (DateRange)</AOption>
-            <AOption value="tree-select">树形选择 (TreeSelect)</AOption>
-          </ASelect>
-        </div>
-        <div>
-          <label class="text-sm font-medium mb-1.5 block">占位文字 (Placeholder)</label>
-          <AInput v-model="formState.placeholder" placeholder="请输入..." />
-        </div>
-      </div>
-
-      <!-- 动态配置项 -->
-      <div v-if="formState.type === 'select'" class="space-y-2 animate-in fade-in slide-in-from-top-1">
-        <label class="text-sm font-medium block">
-          选项列表 (Options) <span class="text-xs text-muted-foreground font-normal ml-1">使用逗号分隔</span>
-        </label>
-        <ATextarea
-          v-model="formState.options"
-          placeholder="例如: 选项A,选项B,选项C"
-          :auto-size="{ minRows: 2, maxRows: 5 }"
-        />
-      </div>
-
-      <div v-if="formState.type === 'tree-select'" class="space-y-2 animate-in fade-in slide-in-from-top-1">
-        <label class="text-sm font-medium block">
-          树形数据 (Tree Options JSON)
-        </label>
-        <ATextarea
-          v-model="formState.treeOptions"
-          placeholder='[{"key": "1", "title": "Node 1", "children": [...]}]'
-          :auto-size="{ minRows: 4, maxRows: 8 }"
-          class="font-mono text-xs"
-        />
-      </div>
+      </template>
     </div>
 
-    <!-- ========================================== -->
-    <!-- Column Config Form                         -->
-    <!-- ========================================== -->
-    <div v-else-if="type === 'column'" class="space-y-4">
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="text-sm font-medium mb-1.5 block">字段名 (Key)</label>
-          <AInput v-model="formState.key" placeholder="如: user_name" />
-        </div>
-        <div>
-          <label class="text-sm font-medium mb-1.5 block">显示标签 (Label)</label>
-          <AInput v-model="formState.label" placeholder="如: 用户名" />
-        </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="text-sm font-medium mb-1.5 block">宽度 (Width)</label>
-          <AInput v-model="formState.width" placeholder="如: 120px" />
-        </div>
-        <div>
-          <label class="text-sm font-medium mb-1.5 block">类型 (Type)</label>
-          <ASelect v-model="formState.type" class="w-full">
-            <AOption value="text">普通文本 (Text)</AOption>
-            <AOption value="badge">徽标 (Badge)</AOption>
-            <AOption value="status-badge">状态点 (Status Badge)</AOption>
-            <AOption value="text-button">文字按钮组 (Text Button)</AOption>
-          </ASelect>
-        </div>
-      </div>
-
-      <!-- 模拟数据配置 -->
-      <div class="p-3 border rounded-md bg-muted/20 space-y-3">
-        <div class="grid grid-cols-2 gap-4">
-           <div>
+    <!-- 2. Column 特殊配置: Mock Data -->
+    <div v-if="type === 'column'" class="p-3 border rounded-md bg-muted/20 space-y-3">
+       <div class="grid grid-cols-2 gap-4">
+          <div>
             <label class="text-sm font-medium mb-1.5 block">Mock 格式</label>
-            <ASelect v-model="formState.mockFormat" class="w-full" placeholder="选择生成规则">
-              <AOption value="none">无</AOption>
-              <AOption value="text">随机文本</AOption>
-              <AOption value="datetime">随机时间</AOption>
-              <AOption value="number">随机数字</AOption>
-              <AOption value="list">从列表随机</AOption>
-              <AOption value="list-order">从列表顺序</AOption>
-              <AOption value="conditional">条件格式</AOption>
+            <ASelect v-model="formState.mockFormat" class="w-full" placeholder="选择规则">
+               <AOption v-for="o in ['none', 'text', 'datetime', 'number', 'list', 'list-order', 'conditional']" :key="o" :value="o">{{ o }}</AOption>
             </ASelect>
           </div>
-          <div v-if="formState.mockFormat === 'list' || formState.mockFormat === 'list-order'">
-            <label class="text-sm font-medium mb-1.5 block">
-              {{ formState.mockFormat === 'list-order' ? '顺序列表 (逗号隔开)' : '随机列表 (逗号隔开)' }}
-            </label>
-            <AInput 
-              :model-value="Array.isArray(formState.mockList) ? formState.mockList.join(',') : formState.mockList" 
-              @update:model-value="(v: string) => { formState.mockList = v.split(',').map((s: string) => s.trim()).filter(Boolean) }" 
-              placeholder="A, B, C" 
-            />
+          <div v-if="['list','list-order'].includes(formState.mockFormat)">
+             <label class="text-sm font-medium mb-1.5 block">列表值 (逗号隔开)</label>
+             <AInput :model-value="Array.isArray(formState.mockList)?formState.mockList.join(','):formState.mockList" @update:model-value="(v:string)=>formState.mockList=v.split(',').map(s=>s.trim()).filter(Boolean)" />
           </div>
+          <!-- 条件格式 (Condition Rules) -->
           <div v-if="formState.mockFormat === 'conditional'" class="col-span-2">
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-sm font-medium">
-                条件格式规则
-                <span class="text-xs text-muted-foreground font-normal ml-1">当其他列满足条件时显示指定值</span>
-              </label>
-              <AButton size="mini" type="outline" @click="addConditionRule">
-                <template #icon><Plus class="w-3 h-3" /></template>
-                添加条件
-              </AButton>
-            </div>
-            
-            <div v-if="conditionRulesArray.length === 0" class="text-xs text-muted-foreground text-center py-4 border border-dashed rounded bg-muted/10">
-              暂无条件规则，点击上方按钮添加
-            </div>
-            
-            <div v-else class="space-y-2">
-              <div
-                v-for="(rule, ruleIndex) in conditionRulesArray"
-                :key="ruleIndex"
-                class="p-3 border rounded-lg bg-background/50 relative group"
-              >
-                <AButton
-                  type="text"
-                  status="danger"
-                  size="mini"
-                  class="!absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                  @click="removeConditionRule(ruleIndex)"
-                >
-                  <Trash2 class="w-3 h-3" />
-                </AButton>
-                
-                <div class="text-xs text-muted-foreground mb-2">条件 {{ ruleIndex + 1 }}</div>
-                
-                <div class="grid grid-cols-4 gap-2">
-                  <!-- 源列选择 -->
-                  <div class="space-y-1">
-                    <label class="text-[10px] text-muted-foreground">检查列</label>
-                    <ASelect 
-                      v-model="rule.sourceColumn" 
-                      size="small" 
-                      class="w-full"
-                      placeholder="选择列"
-                      allow-search
-                    >
-                      <AOption 
-                        v-for="col in availableColumns" 
-                        :key="col.key" 
-                        :value="col.key"
-                      >
-                        {{ col.label }} ({{ col.key }})
-                      </AOption>
-                    </ASelect>
-                  </div>
-                  
-                  <!-- 运算符选择 -->
-                  <div class="space-y-1">
-                    <label class="text-[10px] text-muted-foreground">运算符</label>
-                    <ASelect v-model="rule.operator" size="small" class="w-full">
-                      <AOption 
-                        v-for="op in operatorOptions" 
-                        :key="op.value" 
-                        :value="op.value"
-                      >
-                        {{ op.label }}
-                      </AOption>
-                    </ASelect>
-                  </div>
-                  
-                  <!-- 比较值 -->
-                  <div class="space-y-1">
-                    <label class="text-[10px] text-muted-foreground">比较值</label>
-                    <AInput 
-                      v-model="rule.compareValue" 
-                      size="small" 
-                      class="w-full" 
-                      placeholder="如: 80"
-                    />
-                  </div>
-                  
-                  <!-- 显示值 -->
-                  <div class="space-y-1">
-                    <label class="text-[10px] text-muted-foreground">显示值</label>
-                    <AInput 
-                      v-model="rule.displayValue" 
-                      size="small" 
-                      class="w-full" 
-                      placeholder="如: 优秀"
-                    />
-                  </div>
-                </div>
+             <div class="flex justify-between items-center mb-2"><label class="text-sm font-medium">条件规则</label><AButton size="mini" type="outline" @click="addCondition"><Plus class="w-3 h-3"/> 添加</AButton></div>
+             <div class="space-y-2">
+               <div v-for="(rule, idx) in conditionRulesProxy" :key="idx" class="p-2 border rounded bg-background/50 relative group grid grid-cols-4 gap-2">
+                  <ASelect v-model="rule.sourceColumn" size="small" placeholder="列" allow-search><AOption v-for="c in availableColumns" :key="c.key" :value="c.key">{{c.label}}</AOption></ASelect>
+                  <ASelect v-model="rule.operator" size="small"><AOption v-for="o in operatorOptions" :key="o.value" :value="o.value">{{o.label}}</AOption></ASelect>
+                  <AInput v-model="rule.compareValue" size="small" placeholder="比较值" />
+                  <AInput v-model="rule.displayValue" size="small" placeholder="显示值" />
+                  <Trash2 class="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-100 text-red-500 rounded-full p-0.5 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity" @click="removeCondition(idx)" />
+               </div>
+             </div>
+          </div>
+       </div>
+    </div>
+
+    <!-- 3. Action 特殊配置: Modal/Table Config -->
+    <div v-if="type === 'action' && formState.effectType !== 'none'" class="p-3 border rounded-md bg-muted/20 space-y-3 animate-in fade-in">
+       <div><label class="text-xs font-medium">弹窗标题</label><AInput v-model="formState.effectTitle" /></div>
+       
+       <!-- Modal-Form -->
+       <template v-if="formState.effectType === 'modal'">
+          <div><label class="text-xs font-medium">内容描述</label><ATextarea v-model="formState.effectContent" :auto-size="{minRows:2}" /></div>
+          <div class="pt-2 border-t">
+            <div class="flex justify-between items-center mb-2"><label class="text-xs font-bold flex gap-1"><FormInput class="w-3" /> 表单项</label><AButton size="mini" type="outline" @click="addEffectItem"><Plus class="w-3"/> 添加</AButton></div>
+            <div class="space-y-2">
+              <div v-for="(item, idx) in formState.effectFormItems" :key="item.key" class="p-2 border rounded bg-muted/30 relative group grid grid-cols-3 gap-2">
+                 <AInput v-model="item.label" size="mini" placeholder="标签" />
+                 <AInput v-model="item.key" size="mini" placeholder="Key" />
+                 <ASelect v-model="item.type" size="mini"><AOption value="input">Input</AOption><AOption value="select">Select</AOption><AOption value="date-range">Date</AOption></ASelect>
+                 <ATextarea v-if="item.type==='select'" :model-value="item.options?.join(',')" @update:model-value="(v)=>item.options=String(v).split(/[，,]/).map(s=>s.trim()).filter(Boolean)" placeholder="选项A,选项B" class="col-span-3 text-[10px]" :auto-size="{minRows:1,maxRows:2}"/>
+                 <Trash2 class="absolute top-1 right-1 w-3 h-3 text-red-400 cursor-pointer opacity-0 group-hover:opacity-100" @click="formState.effectFormItems.splice(idx,1)" />
               </div>
             </div>
-            
-            <div class="text-xs text-muted-foreground mt-2">
-              提示: 条件按顺序匹配，第一个满足的条件生效。建议把更严格的条件放在前面。
-            </div>
           </div>
-        </div>
-      </div>
+       </template>
 
-      <!-- 按钮组配置 -->
-      <div v-if="formState.type === 'text-button'" class="space-y-2 animate-in fade-in slide-in-from-top-1">
-         <label class="text-sm font-medium block">
-          按钮列表 (包含的 Action Key) <span class="text-xs text-muted-foreground font-normal ml-1">逗号分隔</span>
-        </label>
-        <AInput v-model="formState.buttons" placeholder="edit, delete, view" />
-      </div>
-
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="text-sm font-medium mb-1.5 block">固定方式 (Fixed)</label>
-          <ASelect v-model="formState.fixed" class="w-full">
-            <AOption value="none">不固定</AOption>
-            <AOption value="left">左侧固定</AOption>
-            <AOption value="right">右侧固定</AOption>
-          </ASelect>
-        </div>
-         <div>
-          <label class="text-sm font-medium mb-1.5 block">对齐方式 (Align)</label>
-          <ASelect v-model="formState.align" class="w-full">
-            <AOption value="left">左对齐</AOption>
-            <AOption value="center">居中</AOption>
-            <AOption value="right">右对齐</AOption>
-          </ASelect>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-4">
-         <div class="flex items-center gap-2 pt-2">
-          <input
-            type="checkbox"
-            v-model="formState.ellipsis"
-            id="col-ellipsis"
-            class="rounded border-input text-primary focus:ring-primary w-4 h-4"
-          />
-          <label for="col-ellipsis" class="text-sm">内容过长省略 (Ellipsis)</label>
-        </div>
-        <div class="flex items-center gap-2 pt-2">
-          <input
-            type="checkbox"
-            v-model="formState.tooltip"
-            id="col-tooltip"
-            class="rounded border-input text-primary focus:ring-primary w-4 h-4"
-          />
-          <label for="col-tooltip" class="text-sm">显示提示 (Tooltip)</label>
-        </div>
-      </div>
+       <!-- Modal-Table -->
+       <div v-else-if="formState.effectType === 'table'">
+          <label class="text-xs font-medium">关联表格页面</label>
+          <ASelect v-if="formState.effectConfig" v-model="formState.effectConfig.targetNavId" placeholder="选择目标页面"><AOption v-for="p in availablePages" :key="p.value" :value="p.value">{{ p.label }}</AOption></ASelect>
+       </div>
     </div>
-
-    <!-- ========================================== -->
-    <!-- Action Config Form                         -->
-    <!-- ========================================== -->
-    <div v-else-if="type === 'action'" class="space-y-4">
-      <div class="grid grid-cols-2 gap-4">
-        <div class="space-y-2">
-          <label class="text-sm font-medium">Key</label>
-          <AInput v-model="formState.key" placeholder="如 search" />
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium">按钮文本</label>
-          <AInput v-model="formState.label" placeholder="如 查询" />
-        </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-4">
-        <div class="space-y-2">
-          <label class="text-sm font-medium">样式</label>
-          <ASelect v-model="formState.variant" class="w-full">
-            <AOption value="primary">Primary (主要)</AOption>
-            <AOption value="outline">Outline (线形)</AOption>
-            <AOption value="text">Text (文本)</AOption>
-            <AOption value="shadcn-outline">Shadcn Outline (Shadcn 边框)</AOption>
-          </ASelect>
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium">自定义样式类</label>
-          <AInput v-model="formState.className" placeholder="可选，如 bg-emerald-50" />
-        </div>
-      </div>
-
-      <!-- 交互效果配置 -->
-      <div class="space-y-4 pt-2 border-t">
-        <div class="space-y-2">
-          <label class="text-sm font-medium">交互效果</label>
-          <ASelect v-model="formState.effectType" class="w-full">
-            <AOption value="none">无反应 (默认)</AOption>
-            <AOption value="modal">弹窗-表单 (Modal-Form)</AOption>
-            <AOption value="table">弹窗-表格 (Modal-Table)</AOption>
-          </ASelect>
-        </div>
-
-        <!-- 弹窗配置项 -->
-        <div v-if="formState.effectType === 'modal'" class="space-y-4 p-3 border rounded-md bg-muted/20 animate-in fade-in slide-in-from-top-1">
-          <div class="space-y-2">
-            <label class="text-xs font-medium">弹窗标题</label>
-            <AInput v-model="formState.effectTitle" placeholder="请输入弹窗标题" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-medium">弹窗内容</label>
-            <ATextarea
-              v-model="formState.effectContent"
-              :auto-size="{ minRows: 3, maxRows: 6 }"
-              placeholder="请输入弹窗展示的详细信息"
-            />
-          </div>
-
-          <!-- 弹窗表单项配置 -->
-          <div class="space-y-3 pt-2 border-t mt-2">
-            <div class="flex items-center justify-between">
-              <label class="text-xs font-bold flex items-center gap-1">
-                <FormInput class="w-3 h-3" />
-                弹窗表单项 (可选)
-              </label>
-              <AButton size="mini" type="outline" @click="addEffectFormItem">
-                <template #icon><Plus class="w-3 h-3" /></template>
-                添加项
-              </AButton>
-            </div>
-
-            <div v-if="!formState.effectFormItems || formState.effectFormItems.length === 0" class="text-[10px] text-muted-foreground text-center py-6 border border-dashed rounded bg-muted/5">
-              暂无表单项，点击右上方按钮添加
-            </div>
-
-            <div v-else class="space-y-3">
-              <div 
-                v-for="(item, index) in formState.effectFormItems" 
-                :key="item.key" 
-                class="border rounded-md p-3 bg-muted/30 hover:bg-muted/50 transition-colors space-y-3 relative group"
-              >
-                <!-- Row 1: Basic Info -->
-                <div class="grid grid-cols-[1fr_1fr_90px_32px] gap-2 items-start">
-                  <!-- Label -->
-                  <div class="space-y-1">
-                    <label class="text-[10px] text-muted-foreground">显示标签</label>
-                    <AInput v-model="item.label" size="mini" placeholder="标签" />
-                  </div>
-                  <!-- Key -->
-                  <div class="space-y-1">
-                    <label class="text-[10px] text-muted-foreground">字段 Key</label>
-                    <AInput v-model="item.key" size="mini" placeholder="Key" />
-                  </div>
-                  <!-- Type -->
-                  <div class="space-y-1">
-                    <label class="text-[10px] text-muted-foreground">类型</label>
-                    <ASelect v-model="item.type" size="mini">
-                      <AOption value="input">输入框</AOption>
-                      <AOption value="select">下拉框</AOption>
-                      <AOption value="date-range">日期</AOption>
-                      <AOption value="tree-select">树形</AOption>
-                    </ASelect>
-                  </div>
-                  <!-- Delete -->
-                  <div class="pt-5 flex justify-end">
-                    <AButton type="text" status="danger" size="mini" @click="removeEffectFormItem(index)" class="!px-1">
-                      <template #icon><Trash2 class="w-4 h-4" /></template>
-                    </AButton>
-                  </div>
-                </div>
-
-                <!-- Row 2: Placeholder -->
-                <div class="space-y-1">
-                  <label class="text-[10px] text-muted-foreground">占位提示</label>
-                  <AInput v-model="item.placeholder" size="mini" placeholder="请输入..." />
-                </div>
-
-                <!-- Row 3: Options (Conditional) -->
-                <div v-if="item.type === 'select'" class="space-y-1 pt-2 border-t border-dashed">
-                  <label class="text-[10px] text-muted-foreground">选项 (逗号分隔)</label>
-                  <ATextarea 
-                    :model-value="item.options?.join(',')" 
-                    @update:model-value="(v) => item.options = String(v).split(/[，,]/).map(s => s.trim()).filter(Boolean)" 
-                    :auto-size="{ minRows: 2, maxRows: 4 }" 
-                    class="text-xs"
-                    placeholder="例如: 选项A,选项B" 
-                  />
-                </div>
-
-                <div v-if="item.type === 'tree-select'" class="space-y-1 pt-2 border-t border-dashed">
-                  <label class="text-[10px] text-muted-foreground">树形数据 JSON</label>
-                  <ATextarea 
-                    v-model="item.treeOptions"
-                    :auto-size="{ minRows: 3, maxRows: 6 }" 
-                    class="text-xs font-mono"
-                    placeholder='[{"key":"1","title":"Node"}]' 
-                  />
-                </div>
-              </div>
-            </div>
-        </div>
-      </div>
-
-        <!-- 表格弹窗配置项 -->
-        <div v-if="formState.effectType === 'table'" class="space-y-4 p-3 border rounded-md bg-muted/20 animate-in fade-in slide-in-from-top-1">
-          <div class="space-y-2">
-            <label class="text-xs font-medium">弹窗标题</label>
-            <AInput v-model="formState.effectTitle" placeholder="请输入弹窗标题" />
-          </div>
-
-          <!-- 关联页面选择 -->
-           <div class="space-y-2">
-            <label class="text-xs font-medium">关联表格页面</label>
-            <ASelect 
-              v-if="formState.effectConfig"
-              v-model="formState.effectConfig.targetNavId" 
-              placeholder="请选择要展示表格的目标页面"
-            >
-              <AOption v-for="page in availablePages" :key="page.value" :value="page.value">{{ page.label }}</AOption>
-            </ASelect>
-            <div v-else class="text-red-500 text-xs">配置数据异常，请重新添加此按钮</div>
-            <div class="text-[10px] text-muted-foreground">
-              * 选择后，弹窗将展示该页面的表格内容作为详情列表
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- Preview Section -->
-      <div class="space-y-2 pt-2 border-t">
-        <label class="text-sm font-medium text-muted-foreground">预览</label>
-        <div class="flex items-center gap-3 p-3 rounded-md bg-muted/30">
-          <ShadcnButton
-            v-if="formState.variant === 'shadcn-outline'"
-            variant="outline"
-            class="h-9 px-5"
-            :class="formState.className"
-          >
-            {{ formState.label || '按钮文本' }}
-          </ShadcnButton>
-          <AButton
-            v-else
-            :type="formState.variant as any"
-            :class="formState.className"
-          >
-            {{ formState.label || '按钮文本' }}
-          </AButton>
-          <span class="text-xs text-muted-foreground">← 按钮实际样式</span>
-        </div>
-      </div>
+    
+    <!-- Preview -->
+    <div v-if="type === 'action'" class="pt-2 border-t flex items-center gap-3">
+       <span class="text-xs text-muted-foreground mr-auto">预览:</span>
+       <ShadcnButton v-if="formState.variant==='shadcn-outline'" variant="outline" class="h-8 text-xs" :class="formState.className">{{ formState.label||'按钮' }}</ShadcnButton>
+       <AButton v-else :type="formState.variant" size="small" :class="formState.className">{{ formState.label||'按钮' }}</AButton>
     </div>
-
-    <!-- ========================================== -->
-    <!-- Card Config Form                           -->
-    <!-- ========================================== -->
-    <div v-else-if="type === 'card'" class="space-y-4">
-      <div class="grid grid-cols-2 gap-4">
-        <div class="space-y-2">
-          <label class="text-sm font-medium">Key</label>
-          <AInput v-model="formState.key" placeholder="如 total_users" />
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium">标题</label>
-          <AInput v-model="formState.title" placeholder="如 总用户数" />
-        </div>
-      </div>
-      <div class="space-y-2">
-        <label class="text-sm font-medium">数据</label>
-        <AInput v-model="formState.data" placeholder="如 1,234 或动态值" />
-      </div>
-    </div>
-
   </div>
 </template>
 
 <style scoped>
-.config-form-container {
-  max-height: 70vh;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-/* 自定义滚动条样式，使其更精美 */
-.config-form-container::-webkit-scrollbar {
-  width: 4px;
-}
-.config-form-container::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-}
-.config-form-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
-}
+.config-form-container { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
+.config-form-container::-webkit-scrollbar { width: 4px; }
+.config-form-container::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 4px; }
 </style>
