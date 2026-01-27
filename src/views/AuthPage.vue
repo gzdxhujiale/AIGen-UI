@@ -55,7 +55,7 @@ const switchView = (v: any) => { currentView.value = v; form.password = ''; form
       <div class="bg-white/80 backdrop-blur-xl border border-white p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-black/5">
         <!-- Logo & Header -->
         <div class="text-center mb-8">
-          <div class="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-lg mb-4 animate-in fade-in zoom-in duration-700 p-2 overflow-hidden border border-slate-100">
+          <div class="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-lg mb-0 animate-in fade-in zoom-in duration-700 p-2 overflow-hidden border border-slate-100">
             <img :src="logoUrl" alt="AIGen Logo" class="w-full h-full object-contain" />
           </div>
           <h1 class="text-2xl font-bold tracking-tight text-slate-900">AIGen UI</h1>
@@ -71,7 +71,7 @@ const switchView = (v: any) => { currentView.value = v; form.password = ''; form
             <div class="space-y-1.5">
               <label class="text-xs font-semibold text-slate-700 ml-1">邮箱地址</label>
               <div class="relative group">
-                <Mail class="absolute left-3 top-2.5 size-4 text-slate-400 group-focus-within:text-primary transition-colors" />
+                <Mail class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400 group-focus-within:text-primary transition-colors" />
                 <Input v-model="form.email" type="email" placeholder="name@example.com" class="pl-10 h-11 bg-slate-50/50 border-slate-200 rounded-xl focus:ring-primary" :class="{ 'border-red-400': !isEmailValid }" />
               </div>
             </div>
@@ -82,9 +82,9 @@ const switchView = (v: any) => { currentView.value = v; form.password = ''; form
                 <button type="button" @click="switchView('forgot-password')" class="text-xs text-primary hover:underline font-medium">忘记密码?</button>
               </div>
               <div class="relative group">
-                <Lock class="absolute left-3 top-2.5 size-4 text-slate-400 group-focus-within:text-primary transition-colors" />
+                <Lock class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400 group-focus-within:text-primary transition-colors" />
                 <Input v-model="form.password" :type="form.show ? 'text' : 'password'" placeholder="••••••••" class="pl-10 h-11 bg-slate-50/50 border-slate-200 rounded-xl" />
-                <button type="button" @click="form.show = !form.show" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
+                <button type="button" @click="form.show = !form.show" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                   <Eye v-if="!form.show" class="size-4" /> <EyeOff v-else class="size-4" />
                 </button>
               </div>
@@ -112,7 +112,7 @@ const switchView = (v: any) => { currentView.value = v; form.password = ''; form
              <div class="space-y-1.5">
               <label class="text-xs font-semibold text-slate-700 ml-1">姓名</label>
               <div class="relative group">
-                <UserIcon class="absolute left-3 top-2.5 size-4 text-slate-400 group-focus-within:text-primary transition-colors" />
+                <UserIcon class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400 group-focus-within:text-primary transition-colors" />
                 <Input v-model="form.name" placeholder="您的姓名" class="pl-10 h-11 bg-slate-50/50 rounded-xl" />
               </div>
             </div>
