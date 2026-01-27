@@ -270,6 +270,14 @@ export const useConfigPageStore = defineStore('config-page', () => {
      * 根据二级导航 ID 获取页面配置
      */
     function getSubPageConfig(navTitle: string, subId: string): PageSubItem | undefined {
+        // 1. 优先从预览配置中获取
+        const previewRecord = previewPageConfigs.value.get(navTitle)
+        if (previewRecord?.page_config?.items) {
+            const item = previewRecord.page_config.items.find(i => i.id === subId)
+            if (item) return item
+        }
+
+        // 2. 从正式配置中获取
         const record = pageConfigs.value.get(navTitle)
         if (!record?.page_config?.items) return undefined
         return record.page_config.items.find(item => item.id === subId)
@@ -279,6 +287,14 @@ export const useConfigPageStore = defineStore('config-page', () => {
      * 根据二级导航 ID 查找所属的一级导航标题
      */
     function findNavTitleBySubId(subId: string): string | undefined {
+        // 1. 优先从预览配置中查找
+        for (const [title, record] of previewPageConfigs.value.entries()) {
+            if (record.page_config.items.some(item => item.id === subId)) {
+                return title
+            }
+        }
+
+        // 2. 从正式配置中查找
         for (const [title, record] of pageConfigs.value.entries()) {
             if (record.page_config.items.some(item => item.id === subId)) {
                 return title

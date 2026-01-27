@@ -297,12 +297,11 @@ function handleClear() {
 
 
 function handleConfirmPreview() {
-    configStore.applyPreviewConfig()
+    // V9 逻辑：直接调用 aiStore 进行后端同步和本地更新
     aiStore.confirmPreview()
 }
 
 function handleCancelPreview() {
-    configStore.clearPreviewConfig()
     aiStore.cancelPreview()
 }
 
@@ -480,7 +479,7 @@ function formatTime(date: Date): string {
 
                         <div v-if="previewMode !== 'initial'" class="preview-actions">
                             <Button variant="default" size="sm" class="confirm-btn" @click="handleConfirmPreview">
-                                <Check :size="16" />确认{{ previewMode === 'override' ? '覆盖' : '追加' }}
+                                <Check :size="16" />确认追加
                             </Button>
                             <Button variant="outline" size="sm" class="cancel-btn" @click="handleCancelPreview">
                                 <XIcon :size="16" />取消

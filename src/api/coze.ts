@@ -1,28 +1,28 @@
 import { jsonrepair } from 'jsonrepair'
 
 /**
- * Coze API Client
+ * Coze API 客户端
  * 
- * This module provides a client for interacting with the Coze API.
- * It supports streaming chat responses using the /v3/chat endpoint.
- * Uses proxy in development to avoid CORS issues.
+ * 此模块提供与 Coze API 交互的客户端。
+ * 它支持使用 /v3/chat 接口的流式聊天响应。
+ * 在开发环境下使用代理以避免跨域 (CORS) 问题。
  */
 
-// Use proxy in development, direct URL in production
+// 开发环境下使用代理，生产环境下使用直接 URL
 const COZE_API_BASE = import.meta.env.DEV ? '/api/coze' : 'https://api.coze.cn'
 
-// Get API credentials from environment
+// 从环境变量获取 API 配置
 const getCozeConfig = () => {
     const apiKey = import.meta.env.VITE_COZE_API_KEY
     const botId = import.meta.env.VITE_COZE_BOT_ID
 
     if (!apiKey || apiKey === 'your_coze_personal_access_token') {
-        console.warn('⚠️ Coze API key not configured. Please set VITE_COZE_API_KEY in .env file.')
+        console.warn('⚠️ Coze API Key 未配置。请在 .env 文件中设置 VITE_COZE_API_KEY。')
         return null
     }
 
     if (!botId || botId === 'your_coze_bot_id') {
-        console.warn('⚠️ Coze Bot ID not configured. Please set VITE_COZE_BOT_ID in .env file.')
+        console.warn('⚠️ Coze Bot ID 未配置。请在 .env 文件中设置 VITE_COZE_BOT_ID。')
         return null
     }
 
@@ -33,7 +33,7 @@ export interface ChatMessage {
     role: 'user' | 'assistant'
     content: string
     type?: 'text' | 'config_preview'
-    configData?: any // For config_json responses
+    configData?: any // 用于 config_json 响应
 }
 
 export interface CozeStreamEvent {
@@ -42,12 +42,12 @@ export interface CozeStreamEvent {
 }
 
 /**
- * Send a chat message to Coze API with streaming response
+ * 发送聊天消息到 Coze API 并处理流式响应
  * 
- * @param messages - The conversation history
- * @param onChunk - Callback for each response chunk
- * @param onComplete - Callback when stream is complete
- * @param onError - Callback for errors
+ * @param messages - 对话历史记录
+ * @param onChunk - 每个响应分块的回调函数
+ * @param onComplete - 流完成后调用的回调函数
+ * @param onError - 发生错误时的回调函数
  */
 export async function streamChat(
     messages: ChatMessage[],
@@ -64,7 +64,7 @@ export async function streamChat(
 
     const { apiKey, botId } = config
 
-    // Convert messages to Coze format
+    // 将消息转换为 Coze 格式
     const cozeMessages = messages.map(msg => ({
         role: msg.role,
         content: msg.content,
@@ -80,7 +80,7 @@ export async function streamChat(
             },
             body: JSON.stringify({
                 bot_id: botId,
-                user_id: 'user_' + Date.now(), // Generate a unique user ID
+                user_id: 'user_' + Date.now(), // 生成唯一的临时用户 ID
                 stream: true,
                 auto_save_history: false,
                 additional_messages: cozeMessages
@@ -109,60 +109,59 @@ export async function streamChat(
 
             buffer += decoder.decode(value, { stream: true })
 
-            // Process complete lines
+            // 处理完整的行
             const lines = buffer.split('\n')
-            buffer = lines.pop() || '' // Keep incomplete line in buffer
+            buffer = lines.pop() || '' // 将不完整的行保留在缓冲区
 
             for (const line of lines) {
                 if (!line.trim()) continue
 
-                // Parse SSE event
+                // 解析 SSE 事件
                 if (line.startsWith('data:')) {
                     try {
                         const data = JSON.parse(line.slice(5).trim())
 
-                        // Handle different event types
+                        // 处理不同的事件类型
                         if (data.type === 'answer') {
                             const content = data.content || ''
                             fullResponse += content
                             onChunk(content)
                         } else if (data.type === 'tool_response') {
-                            // Tool responses might contain config_json
+                            // 工具响应可能包含 config_json
                             try {
                                 const toolOutput = JSON.parse(data.content || '{}')
                                 if (toolOutput.config_json) {
                                     configJson = toolOutput.config_json
                                 }
                             } catch {
-                                // Not JSON, ignore
+                                // 非 JSON 内容，忽略
                             }
-                        } else if (data.type === 'follow_up') {
-                            // Follow up suggestions, can be displayed later
                         }
                     } catch {
-                        // Not JSON data line, might be event name
+                        // 非 JSON 格式的数据行
                     }
                 }
             }
         }
 
-        // Try to extract config_json from the full response if not found in tool_response
+        // 提取配置
         if (!configJson) {
             configJson = extractConfigJson(fullResponse)
         }
 
-        // Clean up the response text if we have a config object
-        // This prevents showing the raw JSON code block in the chat bubble
+        // 清理响应文本
         let finalText = fullResponse
         if (configJson) {
-            // Remove ```json ... ``` blocks
+            // 移除代码块
             finalText = finalText.replace(/```json\s*[\s\S]*?```/gi, '')
-            // Remove generic code blocks that look like the config
             finalText = finalText.replace(/```\s*(\{[\s\S]*?\})\s*```/gi, '')
-            finalText = finalText.trim()
+            // 尝试移除裸露的 JSON 字符串 (简单处理：如果全文看起来只是个 JSON，就清空)
+            const trimmed = finalText.trim()
+            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                finalText = ''
+            }
 
-            // If the response becomes empty after cleaning (AI only returned JSON), 
-            // add a default message so the bubble isn't empty
+            finalText = finalText.trim()
             if (!finalText) {
                 finalText = '已为您生成如下配置：'
             }
@@ -176,246 +175,77 @@ export async function streamChat(
 }
 
 /**
- * 从消息内容中提取 config_json
- * 检测以下格式的配置：
- * 1. 标记为 ```json ... ``` 的 JSON 代码块
- * 2. 包含配置相关键的 JSON 对象
- * 
- * 配置标识符包括：
- * - 完整配置: pageConfigs, items
- * - 页面组件: filterArea, tableArea, cardArea, actionsArea, topBar
- * - 导航属性: navId, component, icon, title
- * - 内容细节: filters, columns, buttons, cards, mockFormat
+ * 从文本中精准提取配置 JSON
+ * 采用递归解包与括号平衡算法，彻底解决连体 JSON (}{) 问题
  */
 function extractConfigJson(content: string): any {
-    console.log('🔍 [CozeAPI] Extracting config from content length:', content.length)
+    if (!content) return null;
 
-    // 配置标识符键 - 出现任何这些键都暗示这是一个配置对象
-    const configIndicators = [
-        'pageConfigs', 'version',  // 完整配置
-        'filterArea', 'tableArea', 'cardArea', 'actionsArea', 'topBar', // 页面部分
-        'filters', 'columns', 'buttons', 'cards',  // 内容部分
-        'navId', 'template', 'subItems', 'items', 'component', // 导航
-        'mockFormat', 'mockList', 'conditionRules', // 特定 mock 标识
-        'show', 'visible', 'label', 'key', 'type' // 通用字段
-    ]
-
-    // 验证对象是否像配置的辅助函数
-    const isValidConfig = (parsed: any): boolean => {
-        if (typeof parsed !== 'object' || parsed === null) return false
-
-        // 允许数组
-        if (Array.isArray(parsed)) {
-            if (parsed.length === 0) return false
-            return isValidConfig(parsed[0])
-        }
-
-        // 强校验：如果是 V9 结构 (含 items 和 icon/title)，必须包含 component
-        if ('items' in parsed && Array.isArray(parsed.items)) {
-            const hasComponent = parsed.items.some((item: any) => item && item.component)
-            if (hasComponent) return true
-        }
-
-        // 转换为字符串以递归检查键（简单检查）
-        const jsonStr = JSON.stringify(parsed)
-        const hasIndicator = configIndicators.some(key => key in parsed || jsonStr.includes(`"${key}"`))
-
-        if (!hasIndicator) {
-            console.log('⚠️ [CozeAPI] JSON parsed but no config indicators found:', Object.keys(parsed))
-        }
-        return hasIndicator
-    }
-
-    // V9 结构标准化 (将 V9 结构转换为 Store 可识别的 pageConfigs)
-    const normalizeConfig = (parsed: any): any => {
-        // 检测是否为 V9 结构: { items: [ { component: ... } ] }
-        if (parsed && !parsed.pageConfigs && Array.isArray(parsed.items) && parsed.items.length > 0) {
-            const firstItem = parsed.items[0]
-            if (firstItem && firstItem.component) {
-                console.log('🔄 [CozeAPI] V9 Structure detected, normalizing to pageConfigs...')
-                const pageConfigs: Record<string, any> = {}
-
-                parsed.items.forEach((item: any) => {
-                    if (item.id && item.component) {
-                        pageConfigs[item.id] = item.component
-                    }
-                })
-
-                // 返回原始对象，不再强制注入 pageConfigs
-                return parsed
-            }
-        }
-        return parsed
-    }
-
-    // 辅助函数：尝试修复并解析 JSON
-    const tryParse = (str: string): any | null => {
+    // 内部极简解析器
+    const minimalistParse = (str: string): any | null => {
         try {
-            // 简单预处理：移除 markdown 标记
-            const cleaned = str.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim()
-            // 使用 jsonrepair 修复
-            const repaired = jsonrepair(cleaned)
-            const parsed = JSON.parse(repaired)
-            return parsed
-        } catch (e) {
-            return null
-        }
-    }
-
-    // 1. 首先尝试查找 JSON 代码块（最可靠）
-    const jsonBlockMatch = content.match(/```json\s*([\s\S]*?)```/i)
-    if (jsonBlockMatch) {
-        let parsed = tryParse(jsonBlockMatch[1])
-        if (parsed && isValidConfig(parsed)) {
-            console.log('✅ [CozeAPI] Found config in ```json block')
-            return normalizeConfig(parsed)
-        }
-    }
-
-    // 2. 尝试查找任何 JSON 代码块（较不严格）
-    const anyJsonBlock = content.match(/```(?:json)?\s*([\{\[][\s\S]*?[\}\]])\s*```/i)
-    if (anyJsonBlock) {
-        let parsed = tryParse(anyJsonBlock[1])
-        if (parsed && isValidConfig(parsed)) {
-            console.log('✅ [CozeAPI] Found config in generic code block')
-            return normalizeConfig(parsed)
-        }
-    }
-
-    // 3. 尝试查找看起来像配置的原始 JSON 对象或数组
-    const configPatterns = [
-        /\{[\s\S]*"items"\s*:\s*\[[\s\S]*"component"[\s\S]*\]/, // 针对 V9 结构的优化正则
-        /\{[\s\S]*"navGroups"[\s\S]*\}/,
-        /\{[\s\S]*"pageConfigs"[\s\S]*\}/,
-        /\{[\s\S]*"filterArea"[\s\S]*\}/,
-        /\{[\s\S]*"tableArea"[\s\S]*\}/,
-        /\{[\s\S]*"filters"\s*:\s*\[[\s\S]*\]/,
-        /\{[\s\S]*"columns"\s*:\s*\[[\s\S]*\]/
-    ]
-
-    for (const pattern of configPatterns) {
-        const match = content.match(pattern)
-        if (match) {
-            let parsed = tryParse(match[0])
-            if (parsed) {
-                console.log('✅ [CozeAPI] Found config via regex pattern')
-                return normalizeConfig(parsed)
+            let s = str.trim();
+            if (s.startsWith('```')) {
+                s = s.replace(/^```[a-z]*\s*/i, '').replace(/```$/i, '').trim();
             }
+            return JSON.parse(jsonrepair(s));
+        } catch {
+            return null;
+        }
+    };
 
-            // JSON 无效 - 尝试平衡括号
-            const extracted = extractBalancedJson(match[0])
-            if (extracted) {
-                const parsedExt = tryParse(extracted)
-                if (parsedExt) {
-                    console.log('✅ [CozeAPI] Found config via regex + balanced extraction')
-                    return normalizeConfig(parsedExt)
+    // 括号平衡寻找第一个合法的 JSON 对象项
+    const findFirstBlock = (str: string): any | null => {
+        const start = Math.min(...[str.indexOf('{'), str.indexOf('[')].filter(i => i !== -1));
+        if (start === Infinity || start === -1) return null;
+
+        const opener = str[start];
+        const closer = opener === '{' ? '}' : ']';
+        let stack = 0;
+        let inString = false;
+        let escaped = false;
+
+        for (let i = start; i < str.length; i++) {
+            const char = str[i];
+            if (char === '"' && !escaped) inString = !inString;
+            if (inString) {
+                escaped = (char === '\\' && !escaped);
+                continue;
+            }
+            if (char === opener) stack++;
+            else if (char === closer) {
+                stack--;
+                if (stack === 0) {
+                    const candidate = str.substring(start, i + 1);
+                    const parsed = minimalistParse(candidate);
+                    if (parsed) return parsed;
                 }
             }
+            escaped = (char === '\\' && !escaped);
         }
+        return null;
+    };
+
+    // 1. 获取第一个完整的平衡块 (无视后续重复内容)
+    let result = findFirstBlock(content);
+    if (!result) result = minimalistParse(content);
+
+    // 2. 直取核心：如果是一个 OpenAI 风格的包装容器，直接深入递归获取 message.content
+    if (result && result.choices?.[0]?.message?.content) {
+        console.log('📦 [CozeAPI] Diving into wrapped message content...');
+        return extractConfigJson(result.choices[0].message.content);
     }
 
-    // 4. 兜底方案：搜索最大的平衡 { ... } 或 [ ... ] 块
-    const allJsonCandidates = extractAllBalancedJsons(content)
-
-    // 增加调试日志
-    console.log(`🔍 [CozeAPI] Found ${allJsonCandidates.length} JSON candidates via balanced search`)
-
-    for (const candidate of allJsonCandidates) {
-        // 尝试修复常见格式问题 (如未闭合的 Markdown 标记)
-        let cleanCandidate = candidate
-        // 如果候选以 { 或 [ 开头之前有 ```json，去除
-        if (cleanCandidate.trim().startsWith('```')) {
-            cleanCandidate = cleanCandidate.replace(/^```json\s*/i, '').replace(/```$/i, '')
-        }
-
-        let parsed = tryParse(cleanCandidate)
-        if (parsed && isValidConfig(parsed)) {
-            console.log('✅ [CozeAPI] Found config via balanced bracket search (length: ' + cleanCandidate.length + ')')
-            return normalizeConfig(parsed)
-        }
+    if (result) {
+        console.log('✅ [CozeAPI] Config extracted successfully');
+        return result;
     }
 
-    // 5. 最后的尝试：如果只有一个非空的 { } 块，且长度足够大，尝试强制修复
-    if (allJsonCandidates.length > 0) {
-        const largest = allJsonCandidates[0]
-        if (largest.length > 100) { // 假设有效配置至少 100 字符
-            console.log('⚠️ [CozeAPI] Trying force repair on largest candidate')
-            const repaired = jsonrepair(largest)
-            try {
-                const parsed = JSON.parse(repaired)
-                // 放宽校验
-                if (typeof parsed === 'object' && parsed !== null) {
-                    // 只要包含任何一个指标
-                    const str = JSON.stringify(parsed)
-                    if (configIndicators.some(k => str.includes(k))) {
-                        console.log('✅ [CozeAPI] Recovered config via soft validation')
-                        return normalizeConfig(parsed)
-                    }
-                }
-            } catch (e) {
-                // ignore
-            }
-        }
-    }
-
-    console.log('❌ [CozeAPI] No valid config found in response')
-    // 打印前 200 个字符以供调试
-    console.log('First 200 chars:', content.substring(0, 200))
-
-    return null
+    return null;
 }
 
 /**
- * 尝试从字符串中提取平衡的 JSON 对象或数组
- * 改进版：更能容忍中间的噪声
- */
-function extractBalancedJson(str: string): string | null {
-    const candidates = extractAllBalancedJsons(str)
-    return candidates.length > 0 ? candidates[0] : null
-}
-
-/**
- * 提取所有可能的平衡 JSON 对象/数组以找到正确的那个
- */
-function extractAllBalancedJsons(str: string): string[] {
-    const results: string[] = []
-
-    // Stack specifically for braces/brackets
-    const stack: string[] = []
-    let start = -1
-
-    for (let i = 0; i < str.length; i++) {
-        const char = str[i]
-
-        if (char === '{' || char === '[') {
-            if (stack.length === 0) start = i
-            stack.push(char)
-        } else if (char === '}' || char === ']') {
-            if (stack.length > 0) {
-                const last = stack[stack.length - 1]
-                if ((last === '{' && char === '}') || (last === '[' && char === ']')) {
-                    stack.pop()
-                    if (stack.length === 0 && start !== -1) {
-                        results.push(str.substring(start, i + 1))
-                        // Don't reset start here if we want to find distinct blocks
-                        // But for nested, this logic finds the outermost
-                        start = -1
-                    }
-                } else {
-                    // Mismatched, reset (simple error handling)
-                    stack.length = 0
-                    start = -1
-                }
-            }
-        }
-    }
-
-    // returning longest first as it's likely the full config
-    return results.sort((a, b) => b.length - a.length)
-}
-
-/**
- * Check if Coze API is configured
+ * 检查 Coze API 是否已完成基本配置
  */
 export function isCozeConfigured(): boolean {
     return getCozeConfig() !== null

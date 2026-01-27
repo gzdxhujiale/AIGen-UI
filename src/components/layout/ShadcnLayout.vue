@@ -129,22 +129,35 @@ const filteredNavGroups = computed(() => {
   const team = activeTeam.value
   const navGroups = pageStore.navGroups.flat()
   
+  // Helper to filter visible:false items
+  const applyVisibleFilter = (groups: any[]) => {
+    return groups.map(group => ({
+      ...group,
+      items: group.items.filter((item: any) => item.visible !== false)
+    })).filter(group => group.items.length > 0)
+  }
+
   // 如果没有导航组数据，直接返回空数组
   if (!navGroups || navGroups.length === 0) return []
+
+  // 1. 如果处于预览模式，显示所有可见项 (跳过权限检查)
+  if (configStore.isInPreviewMode) {
+    return applyVisibleFilter(navGroups)
+  }
   
-  // 如果没有团队配置，直接返回所有导航
-  if (!team) return navGroups
+  // 2. 如果没有团队配置，直接返回所有可见导航
+  if (!team) return applyVisibleFilter(navGroups)
   
-  // 检查 permissions 是否为有效的对象格式 (防止 Supabase 数据格式异常)
+  // 检查 permissions 是否为有效的对象格式
   const permissions = team.permissions
   if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) {
-    return navGroups
+    return applyVisibleFilter(navGroups)
   }
   
   const { navMain, navItems } = permissions
   
   // 如果是全部权限且没有细粒度控制，直接返回
-  if (navMain === 'all' && !navItems) return navGroups
+  if (navMain === 'all' && !navItems) return applyVisibleFilter(navGroups)
 
   return navGroups.map(group => {
     const filteredItems = group.items.filter(item => {

@@ -2,7 +2,7 @@
 // 导航状态管理 Composable
 // ============================================
 import { ref, computed } from 'vue'
-import type { NavGroup, NavSubItem } from '@/types'
+import type { NavGroup } from '@/types'
 
 // 内部状态
 const currentMainNav = ref('')

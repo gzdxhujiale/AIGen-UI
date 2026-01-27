@@ -54,54 +54,23 @@ const currentNavTitle = computed(() => pageStore.findNavTitleBySubId(currentNavI
 const pageConfig = computed<Page1Config | undefined>(() => {
   const navId = currentNavId.value
 
-  // 1. 预览模式逻辑
-  if (configStore.isInPreviewMode) {
-      // 优先从预览的完整导航结构中查找（支持多页面预览）
-      if (configStore.previewNavGroups) {
-          console.log('[Page1] Searching previewNavGroups for ID:', navId)
-          for (const group of configStore.previewNavGroups) {
-              for (const item of group.items || []) {
-                  for (const sub of item.items || []) {
-                      if (sub.id === navId) {
-                          console.log('[Page1] Found ID match:', sub.id)
-                          console.log('[Page1] Has component?', !!sub.component)
-                          if (sub.component) {
-                              // Basic validation
-                              if (!sub.component.filterArea && !sub.component.tableArea) {
-                                  console.warn('[Page1] Component found but appears empty (no filter/table area)', sub.component)
-                              }
-                              return {
-                                  ...sub.component,
-                                  mockData: () => []
-                              } as Page1Config
-                          } else {
-                               console.warn('[Page1] ID matched but component is missing!', sub)
-                          }
-                      }
-                  }
-              }
-          }
-          console.log('[Page1] ID not found in previewNavGroups')
-      }
-      
-      // 如果没找到具体 ID（比如 ID 变了）或者只是单页面预览，使用全局预览配置
-      if (configStore.previewConfig) {
-          return configStore.previewConfig
-      }
-  }
-
-  // 2. 常规模式：从 pageStore 获取组件配置 
+  // 1. 尝试从 pageStore 获取（已包含预览逻辑）
   const navTitle = currentNavTitle.value
   if (navTitle) {
       const subItem = pageStore.getSubPageConfig(navTitle, navId)
       if (subItem?.component) {
         return {
           ...subItem.component,
-          mockData: () => []  //  不存储 mockData
+          mockData: () => []  // 不存储 mockData
         } as Page1Config
       }
   }
-  
+
+  // 2. 兜底逻辑：处理非 V9 或单页预览
+  if (configStore.isInPreviewMode && configStore.previewConfig) {
+      return configStore.previewConfig
+  }
+
   return undefined
 })
 
