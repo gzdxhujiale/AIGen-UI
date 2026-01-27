@@ -146,7 +146,18 @@ const isSectionVisible = (s: string) => props.visibleSections?.includes(s as any
 const visibleFilters = computed(() => pageConfig.value?.filterArea.filters.filter(f => f.visible !== false) || [])
 const visibleColumns = computed(() => pageConfig.value?.tableArea.columns.filter(c => c.visible !== false) || [])
 const visibleActions = computed(() => pageConfig.value?.actionsArea?.buttons?.filter((a: any) => a.visible !== false) || [])
-const actionButtonSpan = computed(() => { if (!pageConfig.value) return 1; const cols = pageConfig.value.filterArea.columns, count = visibleFilters.value.length, rem = count % cols; if (rem === 0) return cols; const avail = cols - rem; return (avail < 1) ? cols : avail })
+const actionButtonSpan = computed(() => {
+  if (!pageConfig.value) return 1
+  const cols = pageConfig.value.filterArea.columns
+  // 如果按钮超过2个，强制换行（占满整行）
+  if (visibleActions.value.length > 2) return cols
+  
+  const count = visibleFilters.value.length
+  const rem = count % cols
+  if (rem === 0) return cols
+  const avail = cols - rem
+  return (avail < 1) ? cols : avail 
+})
 const availableColumns = computed(() => pageConfig.value?.tableArea.columns.map(c => ({ key: c.key, label: c.label || c.key })) || [])
 
 watch(currentNavId, () => mockHelper.load(), { immediate: true })
