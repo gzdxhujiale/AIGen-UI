@@ -1,29 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-// 导入页面模板
 import Page1 from '@/views/Page1.vue'
 import AuthPage from '@/views/AuthPage.vue'
 import Profile from '@/views/Profile.vue'
 import SkeletonLoading from '@/views/SkeletonLoading.vue'
-
-
-
-// Composables
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { useOnboarding } from '@/composables/useOnboarding'
-
-// Auth Store
 import { useAuthStore } from '@/stores/authStore'
-// Config Store
 import { useConfigStore } from '@/stores/configStore'
 import { useConfigTeamStore } from '@/stores/config_team_Store'
 import { useConfigMenuStore } from '@/stores/config_menu_Store'
 import { useConfigPageStore } from '@/stores/config_page_Store'
-
-// Import layouts
 import ArcoLayout from '@/components/layout/ArcoLayout.vue'
 import ShadcnLayout from '@/components/layout/ShadcnLayout.vue'
-
 import { useNavigation, initNavigation } from '@/composables/useNavigation'
 
 const { currentPage } = useNavigation() 
@@ -33,168 +22,89 @@ const teamStore = useConfigTeamStore()
 const menuStore = useConfigMenuStore()
 const pageStore = useConfigPageStore()
 const { startOnboarding } = useOnboarding()
+
 const isConfigLoading = ref(true)
 
-// 页面模板映射
-const pageComponents: Record<string, any> = {
-  Page1,
-  profile: Profile,
-  // Page2, // 后续添加更多模板时，在此注册...
-}
+// Page Mapping
+const pageComponents: Record<string, any> = { Page1, profile: Profile }
+const CurrentPageComponent = computed(() => pageComponents[currentPage.value] || Page1)
 
-// 当前显示的组件 - 如果未找到模板则显示空白占位
-const CurrentPageComponent = computed(() => pageComponents[currentPage.value])
+// Dynamic Layout
+const LayoutComponent = computed(() => configStore.navigationStyle === 'arco' ? ArcoLayout : ShadcnLayout)
 
+// Unified Bootstrap Logic
+const bootstrapApp = async () => {
+  isConfigLoading.value = true
+  console.log('App: Bootstrapping...')
+  const startTime = performance.now()
 
-
-// Initialize auth on mount
-onMounted(async () => {
-  await authStore.initialize()
-  // 如果未登录，直接关闭全局加载状态
-  if (!authStore.isAuthenticated) {
-    isConfigLoading.value = false
-    console.log('App: Unauthenticated, showing login page')
-    return
+  // 1. Force styles for test accounts
+  if (authStore.userEmail.toLowerCase().includes('test')) {
+    configStore.navigationStyle = 'arco'
   }
-  
-  // 登录成功后并行加载所有配置
-    console.log('App: Starting parallel bootstrap...')
-    const startTime = performance.now()
-    
-    // 并行加载所有配置
-    
 
-
-
-    // 1. 立即从本地缓存加载 (同步)
-    // 这样 UI 可以立刻渲染，无需等待网络请求
+  // 2. Load from Cache (Sync & Fast)
+  try {
     teamStore.loadFromCache()
     menuStore.loadFromCache()
     pageStore.loadFromCache()
     
-    // 尝试初始化导航 (如果有缓存)
     if (pageStore.navGroups.length > 0) {
       initNavigation(pageStore.navGroups)
-      isConfigLoading.value = false
+      isConfigLoading.value = false // Early interactive
+      console.log(`App: Cache loaded in ${(performance.now() - startTime).toFixed(2)}ms`)
     }
+  } catch (e) {
+    console.warn('App: Cache load failed', e)
+  }
 
-    console.log(`App: Cache loaded in ${(performance.now() - startTime).toFixed(2)}ms`)
-
-    // 2. 后台并行同步最新配置
-    Promise.all([
-        teamStore.loadTeams(),
-        menuStore.loadMenu(),
-        pageStore.loadPageConfigs()
-    ]).then(() => {
-        // 数据更新后再次初始化导航 (确保没有缓存时也能选中)
-        initNavigation(pageStore.navGroups)
-        isConfigLoading.value = false
-        console.log(`App: Background sync finished in ${(performance.now() - startTime).toFixed(2)}ms`)
-    })
-
-    
-    // For test accounts, always force Arco style
-    if (authStore.userEmail.toLowerCase().includes('test')) {
-        configStore.navigationStyle = 'arco'
-    } else if (localStorage.getItem('shadcn_nav_style_pref')) {
-        // Sync style preference from local storage (already handled in configStore init, but ensuring here)
-        // configStore.navigationStyle = ... 
-    }
-    
-    // 启动用户引导
-    startOnboarding(authStore.userEmail)
-})
-// 监听认证状态变化，登录后加载配置
-watch(() => authStore.isAuthenticated, async (isAuth) => {
-  if (isAuth) {
-    // For test accounts, always force Arco style
-    if (authStore.userEmail.toLowerCase().includes('test')) {
-        configStore.navigationStyle = 'arco'
-    }
-
-    // Load configs
-    isConfigLoading.value = true
+  // 3. Background Sync (Async)
+  try {
     await Promise.all([
-        teamStore.loadTeams(),
-        menuStore.loadMenu(),
-        pageStore.loadPageConfigs()
+      teamStore.loadTeams(),
+      menuStore.loadMenu(),
+      pageStore.loadPageConfigs()
     ])
-    
+    // Re-init navigation with fresh data
     initNavigation(pageStore.navGroups)
+  } catch (e) {
+    console.error('App: Sync failed', e)
+  } finally {
     isConfigLoading.value = false
-    
-    // 启动用户引导
+    console.log(`App: Ready in ${(performance.now() - startTime).toFixed(2)}ms`)
     startOnboarding(authStore.userEmail)
   }
+}
+
+onMounted(async () => {
+  useNetworkStatus() // Init network monitoring
+  await authStore.initialize()
+  
+  if (!authStore.isAuthenticated) {
+    isConfigLoading.value = false
+    return
+  }
+  await bootstrapApp()
 })
 
-// Cleanup on unmount
-onUnmounted(() => {
-  authStore.cleanup()
+watch(() => authStore.isAuthenticated, async (isAuth) => {
+  if (isAuth) await bootstrapApp()
 })
 
-// Network status monitoring
-useNetworkStatus()
+onUnmounted(() => authStore.cleanup())
 </script>
 
 <template>
-  <!-- Loading state: show skeleton while auth or config is loading -->
   <SkeletonLoading v-if="authStore.isLoading || isConfigLoading" />
-
-  <!-- Not authenticated: show login page -->
   <AuthPage v-else-if="!authStore.isAuthenticated" />
-
-  <!-- Authenticated: show main app -->
-  <template v-else>
-      <ArcoLayout v-if="configStore.navigationStyle === 'arco'">
-          <Transition name="fade-slide" mode="out-in" appear>
-            <component :is="CurrentPageComponent" :key="currentPage" />
-          </Transition>
-      </ArcoLayout>
-
-      <ShadcnLayout v-else>
-          <Transition name="fade-slide" mode="out-in" appear>
-            <component :is="CurrentPageComponent" :key="currentPage" />
-          </Transition>
-      </ShadcnLayout>
-
-  </template>
+  <component :is="LayoutComponent" v-else>
+    <Transition name="fade-slide" mode="out-in" appear>
+      <component :is="CurrentPageComponent" :key="currentPage" />
+    </Transition>
+  </component>
 </template>
 
 <style>
-/* Loading state styles */
-.loading-container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: hsl(var(--background));
-}
-
-.loading-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.loading-spinner {
-  width: 2.5rem;
-  height: 2.5rem;
-  color: hsl(var(--primary));
-  animation: spin 1s linear infinite;
-}
-
-.loading-text {
-  color: hsl(var(--muted-foreground));
-  font-size: 0.875rem;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 /* Page transition effects */
 .fade-slide-enter-active,
 .fade-slide-leave-active {
