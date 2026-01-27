@@ -26,7 +26,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   showCheckbox: true,
   showCheckedAll: true,
-  pageSize: 15,
+  pageSize: 10,
   height: '500px',
   scrollX: true,
   scrollY: true,

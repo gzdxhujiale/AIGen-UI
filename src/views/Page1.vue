@@ -113,7 +113,7 @@ const actions = {
     uiState.area.type = type
     const cfg = pageConfig.value
     if (!cfg) return
-    uiState.area.config = type === 'filter' ? { columns: cfg.filterArea.columns, gap: cfg.filterArea.gap, showActions: cfg.actionsArea?.show !== false } : type === 'card' ? { show: cfg.cardArea?.show ?? false, columns: cfg.cardArea?.columns ?? 4, gap: cfg.cardArea?.gap ?? '16px' } : { height: cfg.tableArea.height ?? '400px', pageSize: cfg.tableArea.pageSize ?? 15, scrollX: !!cfg.tableArea.scrollX, scrollY: !!cfg.tableArea.scrollY, showCheckbox: !!cfg.tableArea.showCheckbox, stickyHeader: cfg.tableArea.stickyHeader !== false }
+    uiState.area.config = type === 'filter' ? { columns: cfg.filterArea.columns, gap: cfg.filterArea.gap, showActions: cfg.actionsArea?.show !== false } : type === 'card' ? { show: cfg.cardArea?.show ?? false, columns: cfg.cardArea?.columns ?? 4, gap: cfg.cardArea?.gap ?? '16px' } : { height: cfg.tableArea.height ?? '400px', pageSize: cfg.tableArea.pageSize ?? 10, scrollX: !!cfg.tableArea.scrollX, scrollY: !!cfg.tableArea.scrollY, showCheckbox: !!cfg.tableArea.showCheckbox, stickyHeader: cfg.tableArea.stickyHeader !== false }
     uiState.area.visible = true
   },
   async saveAreaConfig() {
@@ -310,7 +310,7 @@ const editor = {
           <div v-if="isEditMode" class="flex items-center justify-between px-4 py-2 border-b bg-muted/30 rounded-t-xl">
             <div class="flex items-center gap-3">
               <span class="text-sm font-medium text-muted-foreground">表格区 ({{ visibleColumns.length }} 列)</span>
-              <span class="text-xs text-muted-foreground/70">({{ pageConfig.tableArea.pageSize || 15 }}条/页, {{ pageConfig.tableArea.scrollY ? '纵滚' : '无纵滚' }})</span>
+              <span class="text-xs text-muted-foreground/70">({{ pageConfig.tableArea.pageSize || 10 }}条/页, {{ pageConfig.tableArea.scrollY ? '纵滚' : '无纵滚' }})</span>
             </div>
             <div class="flex items-center gap-2">
               <AButton size="mini" type="text" @click="actions.openAreaConfig('table')"><Pencil class="w-3 h-3 mr-1" />配置</AButton>
