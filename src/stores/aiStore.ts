@@ -95,7 +95,7 @@ export const useAIStore = defineStore('ai', () => {
 
             // 3. 单个页面组件
             if (item.component) {
-                const title = 'AI 生成页面'
+                const title = item.title || 'AI 生成页面'
                 return {
                     title: title,
                     page_config: {
@@ -114,7 +114,15 @@ export const useAIStore = defineStore('ai', () => {
             return null
         }
 
-        const rawList = Array.isArray(config) ? config : (config.items && Array.isArray(config.items) ? config.items : [config])
+        let rawList: any[]
+        if (Array.isArray(config)) {
+            rawList = config
+        } else if (config.items && Array.isArray(config.items) && !config.title && !config.page_config) {
+            // Treat as wrapper only if it doesn't look like a single record (no title/page_config)
+            rawList = config.items
+        } else {
+            rawList = [config]
+        }
         return rawList.map(wrap).filter(Boolean)
     }
 
