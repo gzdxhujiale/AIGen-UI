@@ -27,7 +27,7 @@ export const useConfigStore = defineStore('config', () => {
     const isInPreviewMode = computed(() => previewMode.value !== null)
 
     // --- 临时/项目状态 ---
-    const projectGroups = ref<any[]>([])
+
 
     // ============================================
     // 基本操作
@@ -109,7 +109,7 @@ export const useConfigStore = defineStore('config', () => {
 
     return {
         navigationStyle, filterActionFusion, isEditMode,
-        previewMode, previewConfig, previewNavGroups, isInPreviewMode, projectGroups,
+        previewMode, previewConfig, previewNavGroups, isInPreviewMode,
         setEditMode, setNavigationStyle, setFilterActionFusion,
         setPreviewConfig, setPreviewNav, clearPreviewConfig,
         exportFullConfig, importFullConfig, saveToSupabase,

@@ -184,6 +184,8 @@ export const EFFECT_TYPES = {
     NONE: 'none',
     /** 打开弹窗 */
     MODAL: 'modal',
+    /** 打开表格弹窗 */
+    TABLE: 'table',
 } as const
 
 /** 交互效果类型的联合类型 */

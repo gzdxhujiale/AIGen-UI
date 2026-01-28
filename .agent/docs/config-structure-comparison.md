@@ -1,6 +1,6 @@
-# 配置结构演进：Legacy (V1) vs Future (V9)
+# 配置结构演进：Legacy (V1) vs Current (V9)
 
-本文档对比了 AIGen-UI 项目的旧版配置结构 **Legacy (V1)** 与未来的目标架构 **V9 (Module-Clustered)**。
+本文档对比了 AIGen-UI 项目的旧版配置结构 **Legacy (V1)** 与当前的架构 **V9 (Module-Clustered)**。
 
 ---
 
@@ -47,7 +47,7 @@
 
 ---
 
-## 2. V9 方案：基于模块的聚合存储 (Module-Clustered Architecture)
+## 2. V9 架构：基于模块的聚合存储 (Module-Clustered Architecture)
 
 V9 方案融合了 V1 的原子性优势和按需加载的理念，旨在解决单体应用膨胀和过度拆分带来的问题。
 
@@ -77,7 +77,7 @@ V9 方案融合了 V1 的原子性优势和按需加载的理念，旨在解决�
 
 ## 3. V1 与 V9 核心对比
 
-| 维度 | Legacy (V1) | Future (V9) | 解析 |
+| 维度 | Legacy (V1) | Current (V9) | 解析 |
 | :--- | :--- | :--- | :--- |
 | **存储方式** | 单体 JSON (Monolithic) | 模块聚类 (Module Clustered) | V9 避免了单文件无限膨胀，同时避免了碎片化。 |
 | **数据粒度** | 整个应用一个大对象 | 按一级导航 (Module) 聚合 | V9 的粒度适中，既方便管理又提升性能。 |

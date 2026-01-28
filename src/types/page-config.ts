@@ -1,6 +1,15 @@
 // ============================================
 // 页面配置相关类型定义
 // ============================================
+import type {
+    FilterType,
+    ColumnType,
+    FixedPosition,
+    AlignOption,
+    MockFormat,
+    ButtonVariant,
+    EffectType
+} from './config'
 
 /**
  * 树形选择节点类型
@@ -16,7 +25,7 @@ export interface TreeNode {
  */
 export interface FilterConfig {
     key: string
-    type: 'input' | 'select' | 'date-range' | 'tree-select'
+    type: FilterType
     label: string
     placeholder?: string
     options?: string[]
@@ -64,13 +73,13 @@ export interface TableColumn {
     label: string
     width?: string                    // 列宽，如 '100px'
     minWidth?: string                 // 最小宽度
-    type?: 'text' | 'badge' | 'status-badge' | 'text-button'
-    fixed?: 'left' | 'right'          // 列固定位置
-    align?: 'left' | 'center' | 'right' // 对齐方式
+    type?: ColumnType
+    fixed?: FixedPosition             // 列固定位置
+    align?: AlignOption               // 对齐方式
     ellipsis?: boolean                // 是否显示省略号
     tooltip?: boolean                 // 是否显示提示
     visible?: boolean
-    mockFormat?: 'text' | 'datetime' | 'number' | 'list' | 'list-order' | 'conditional' // 虚拟数据格式
+    mockFormat?: MockFormat           // 虚拟数据格式
     mockList?: string[] // 当格式为 'list' 或 'list-order' 时的候选数据
     conditionRules?: Array<{ sourceColumn: string; operator: string; compareValue: string; displayValue: string; color?: string }> // 条件格式规则（基于其他列的值）
     buttons?: string[] // 文字按钮列表
@@ -97,10 +106,10 @@ export interface TableAreaConfig {
 export interface ActionButtonConfig {
     key: string
     label: string
-    variant?: 'primary' | 'outline' | 'text' | 'shadcn-outline'
+    variant?: ButtonVariant
     className?: string       // 自定义样式类
     visible?: boolean
-    effectType?: 'none' | 'modal' | 'table'
+    effectType?: EffectType
     effectConfig?: {
         title?: string
         content?: string

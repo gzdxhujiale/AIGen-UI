@@ -9,7 +9,7 @@ const DEFAULT_TEAM_CONFIG: TeamItem[] = [{
     name: 'AIGen-UI',
     logo: Icons.GalleryVerticalEnd as any,
     plan: 'online',
-    permissions: { navMain: 'all', projects: 'all' }
+    permissions: { navMain: 'all' }
 }]
 
 export const useConfigTeamStore = defineStore('config-team', () => {

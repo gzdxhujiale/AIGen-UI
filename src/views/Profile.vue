@@ -83,7 +83,7 @@ const addTeam = async () => {
     name: '新团队',
     logo: IconUser as any, 
     plan: 'free',
-    permissions: { navMain: [], projects: [] } 
+    permissions: { navMain: [] } 
   })
   await performSave()
 }

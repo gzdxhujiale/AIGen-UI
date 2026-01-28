@@ -1,7 +1,7 @@
 // ============================================
 // 导航相关类型定义
 // ============================================
-import type { LucideIcon } from 'lucide-vue-next'
+import type { Component } from 'vue'
 import type { Page1ConfigData } from './page-config'
 
 export interface NavSubItem {
@@ -10,6 +10,7 @@ export interface NavSubItem {
     url?: string
     badge?: string
     template?: string
+    visible?: boolean
     component?: Page1ConfigData
 }
 
@@ -17,7 +18,7 @@ export interface NavMainItem {
     id: string
     title: string
     url?: string
-    icon?: any
+    icon?: string | Component
     isOpen?: boolean
     visible?: boolean
     items?: NavSubItem[]
@@ -30,24 +31,8 @@ export interface NavGroup {
     items: NavMainItem[]
 }
 
-export interface ProjectItem {
-    id: string
-    name: string
-    url: string
-    icon: LucideIcon
-}
-
-export interface ProjectGroup {
-    id?: string
-    label: string
-    showLabel?: boolean
-    projects: ProjectItem[]
-    showMoreButton?: boolean
-}
-
 export interface TeamPermissions {
     navMain: 'all' | string[]
-    projects: 'all' | string[]
     /**
      * 细粒度控制某个导航下的子项
      * 格式: { 导航id: [子项id数组] }
@@ -57,7 +42,7 @@ export interface TeamPermissions {
 
 export interface TeamItem {
     name: string
-    logo: LucideIcon
+    logo: Component
     plan: string
     permissions: TeamPermissions
 }
@@ -72,7 +57,6 @@ export interface SidebarConfig {
     user: UserInfo,
     teams: TeamItem[],
     navGroups: NavGroup[],
-    projectGroups: ProjectGroup[],
 }
 
 // --- 菜单与顶部栏配置 ---

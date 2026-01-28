@@ -22,12 +22,12 @@
 
 | Store 文件 | 优化前行数 | 优化后行数 | 缩减比例 | 核心改进点 |
 | :--- | :---: | :---: | :---: | :--- |
-| `config_page_Store.ts` | 1076 | ~700 | 35% | 封装 `_mutateComp` 简化 40+ 个 CRUD 方法 |
-| `aiStore.ts` | 578 | ~230 | 60% | 异构数据标准化解析, 消息流助手化更新 |
+| `config_page_Store.ts` | 1076 | ~880 | 18% | 封装 `_mutateComp` 简化 40+ 个 CRUD 方法 |
+| `aiStore.ts` | 578 | ~270 | 53% | 异构数据标准化解析, 消息流助手化更新 |
 | `authStore.ts` | 318 | ~100 | 68% | 引入通用 auth action 包装器, 精简监听器 |
-| `configStore.ts` | 236 | ~130 | 45% | Watch 驱动持久化, 配置导入/导出函数式化 |
-| `config_team_Store.ts` | 151 | ~65 | 57% | 统一 Action 助手, 极简 CRUD 定义 |
-| `config_menu_Store.ts` | 128 | ~50 | 61% | 移除样板代码, 统一服务端同步逻辑 |
+| `configStore.ts` | 236 | ~120 | 49% | Watch 驱动持久化, 配置导入/导出函数式化 |
+| `config_team_Store.ts` | 151 | ~66 | 56% | 统一 Action 助手, 极简 CRUD 定义 |
+| `config_menu_Store.ts` | 128 | ~56 | 56% | 移除样板代码, 统一服务端同步逻辑 |
 
 ---
 

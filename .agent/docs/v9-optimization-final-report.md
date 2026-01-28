@@ -5,13 +5,17 @@
 
 ## 2. 核心优化策略
 
-### 2.1 布局组件重构 (ArcoLayout.vue)
-**成果：代码从 936 行压缩至约 230 行 (缩减率 ~70%)**
+### 2.1 布局组件重构 (Layout Architecture)
+**核心变革：ArcoLayout → ShadcnLayout**
 
-*   **弹窗逻辑统合 (Dialog Consolidation)**：使用单个响应式对象 `editDialog` 和 `_openNavDialog(mode, params)` 函数，替代了原本 4-5 套重复的控制逻辑方案。
-*   **导航过滤管道化 (Logic Flattening)**：将深层嵌套的 `if-else` 判断重构为扁平的数组过滤流，极大提升了渲染性能和可读性。
-*   **动作字典映射 (Action Mapping)**：使用 Actions 对象映射替代冗长的 `switch-case` 分发逻辑。
-*   **图标动态动态解析**：利用 `import * as ArcIcons` 实现图标的自动化定位，移除了数轮繁琐的手动维护 Map。
+*   **ShadcnLayout (New Standard)**: 全新的布局组件，基于 `radix-vue` 和 `tailwindcss`，提供了更现代的 Sidebar 交互体验。
+    *   **Drag & Drop Navigation**: 直接在侧边栏支持导航项的拖拽排序。
+    *   **Unified Sidebar Provider**: 统一管理侧边栏状态，支持折叠/展开/移动端响应式。
+    *   **Edit Mode Integration**: 深度集成了编辑模式开关，支持对 Header Menu 的可视化配置。
+
+*   **ArcoLayout (Legacy)**: 保留作为备用布局，但移除了大部分冗余逻辑。
+    *   **弹窗逻辑统合 (Dialog Consolidation)**: 使用单个响应式对象 `editDialog`。
+    *   **图标动态解析**: 利用 `lucide-vue-next` (Shadcn) 或 `ArcIcons` (Arco) 实现图标自动化。
 
 ### 2.2 Store 逻辑抽象
 **成果：全项目 Store 行数大幅下降，业务逻辑更加纯粹**

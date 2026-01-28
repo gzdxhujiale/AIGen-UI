@@ -6,7 +6,6 @@ export interface UserTeam {
     plan: 'free' | 'online' | 'enterprise'
     permissions: {
         navMain: string[]
-        projects: string[]
     }
 }
 

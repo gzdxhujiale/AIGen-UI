@@ -22,8 +22,7 @@ export type {
     NavSubItem,
     NavMainItem,
     NavGroup,
-    ProjectItem,
-    ProjectGroup,
+
     TeamPermissions,
     TeamItem,
     UserInfo,

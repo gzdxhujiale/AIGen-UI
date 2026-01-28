@@ -1,246 +1,140 @@
 # 用户编程操作手册 (User Programming Manual)
 
-本文档旨在指导开发者如何基于现有的配置化架构（以 `Withdraw.vue` 为例）快速扩展和维护页面功能，特别是如何新增筛选条件（输入框、下拉框、时间段选择）。
+> **版本**: V9 (Current)
+> **更新日期**: 2026-01-28
+> **状态**: 现行有效
+
+本文档旨在指导开发者如何使用 AIGen-UI 的 **V9 配置系统** 快速构建和维护页面功能。
 
 ---
 
-## 核心架构说明
+## 核心架构变革：从 "代码驱动" 到 "配置驱动"
 
-目前的筛选区域采用 **配置驱动 (Configuration Driven)** 的设计模式。这意味着 UI 的渲染是由数据配置决定的，而不是硬编码在 HTML 模板中。
+在旧版 (V1) 中，开发一个带有筛选和表格的页面需要编写大量的 TypeScript 代码来定义常量、状态和逻辑。
+在 **V9 架构** 中，我们引入了可视化的 **配置模式 (Edit Mode)**。大部分页面元素（筛选条件、表格列、操作按钮、卡片）都可以直接通过 UI 进行增删改查，配置会自动同步到云端数据库 (Supabase)。
 
-主要涉及三个核心部分：
-1. **选项常量**：定义下拉框的内容。
-2. **响应式状态 (`filters`)**：存储用户当前选择或输入的值。
-3. **筛选配置 (`filterConfigs`)**：定义界面上显示哪些控件、什么类型以及它们的标签。
-
----
-
-## 快速上手：如何新增筛选条件
-
-假设我们需要新增一个筛选条件：**“支付渠道”** (Payment Channel)。
-
-### 第一步：定义选项常量 (仅适用于下拉框)
-
-如果新增的是下拉框，首先在 `<script setup>` 顶部定义选项数组。
-
-```typescript
-// ... 其他常量
-const PAY_CHANNEL_OPTIONS = ['全部', '微信', '支付宝', '银行卡']
-```
-
-### 第二步：在 `filters` 中声明状态
-
-在 `reactive` 定义的 `filters` 对象中添加一个新的字段，用于存储该筛选条件的值。关键是 `key` 的命名（例如 `payChannel`）。
-
-```typescript
-const filters = reactive({
-  // ... 原有字段
-  userId: '',
-  // ...
-  
-  // [新增] 支付渠道，默认为 '全部'
-  payChannel: '全部', 
-})
-```
-
-> **注意**：
-> - 文本输入框 (Input) 默认值建议为空字符串 `''`。
-> - 下拉框 (Select) 默认值建议为 `'全部'`。
-> - 时间段 (DateRange) 默认值建议为 `undefined`，但在类型定义中需要注意（见下文）。
-
-### 第三步：在 `filterConfigs` 中添加配置
-
-在 `filterConfigs` 数组中添加一个配置对象。这个对象决定了控件在界面上的显示位置和类型。
-
-```typescript
-const filterConfigs: FilterConfig[] = [
-  // ... 原有配置
-  
-  // [新增] 支付渠道配置
-  { 
-    key: 'payChannel',          // 必须与 filters 中的 key 一致
-    type: 'select',             // 类型支持: 'input' | 'select' | 'date-range'
-    label: '支付渠道',           // 界面显示的标签名
-    options: PAY_CHANNEL_OPTIONS // 下拉框的选项数据
-  },
-]
-```
-
-**完成以上三步后，界面上就已经会出现新的筛选框了！**
+### 适用场景
+本手册适用于基于通用模板 (如 `Page1.vue`) 构建的页面。
 
 ---
 
-### 第四步：关联数据过滤逻辑
+## 1. 开启编辑模式 (Edit Mode)
 
-为了让筛选真正生效（即不仅仅是显示控件，而是能过滤表格数据），需要在 `filteredData` 计算属性中添加对应的判断逻辑。
+要配置当前页面，首先需要进入编辑模式。
 
-找到 `filteredData` 的定义处：
-
-```typescript
-const filteredData = computed(() => {
-  return withdrawData.value.filter((item) => {
-    // ... 原有逻辑
+1.  **方法 A (通过顶部菜单)**:
+    - 点击右上角的用户头像。
+    - 在下拉菜单中选择 **"编辑模式"** (Toggle Edit Mode)。
     
-    // [新增] 支付渠道筛选逻辑
-    // 假设 item 数据中有一个字段叫 payMethod 对应支付渠道
-    if (filters.payChannel !== '全部' && item.payMethod !== filters.payChannel) {
-      return false
+2.  **方法 B (快捷键)**:
+    - (如果已配置快捷键/开发环境下) 通常在 `ShadcnLayout` 或 `ArcoLayout` 中有相应的 Developer Mode 开关。
+
+进入编辑模式后，页面上会出现蓝色的虚线框和编辑图标 (Pencil Icon)，表示各个区域现在是可配置的。
+
+---
+
+## 2. 配置筛选区域 (Filter Area)
+
+### 2.1 新增筛选条件
+1.  找到筛选区域（页面顶部），点击 **"添加筛选"** (+ Add Filter) 按钮。
+2.  在弹出的表单中填写配置：
+    - **Key**: 字段名 (对应 API 查询参数，如 `status`, `created_at`)。
+    - **标签 (Label)**: 显示在界面上的名称 (如 "订单状态")。
+    - **类型 (Type)**:
+        - `Input`: 文本输入框。
+        - `Select`: 下拉选择框。
+        - `DateRange`: 日期范围选择。
+        - `TreeSelect`: 树形选择（支持层级数据）。
+    - **占位符 (Placeholder)**: 输入框提示语。
+    - **选项 (Options)**: (仅 Select) 以逗号分隔的字符串，如 `全部,启用,禁用`。
+    - **树形选项 (Tree Options JSON)**: (仅 TreeSelect) 符合 JSON 格式的树形数据结构。
+    
+3.  点击 **"确认"** 保存。
+
+### 2.2 编辑/删除筛选
+- **编辑**: 鼠标悬停在某个筛选项上，点击出现的 **编辑 (Pencil)** 图标。
+- **删除**: 鼠标悬停在筛选项上，点击出现的 **删除 (Trash)** 图标。
+- **排序**: 在编辑模式下，直接拖拽筛选项即可调整顺序。
+
+---
+
+## 3. 配置表格列 (Table Columns)
+
+### 3.1 新增列
+1.  在表格区域顶部，点击 **"添加列"** (+ Add Column) 按钮。
+2.  填写列配置：
+    - **Key**: 数据源字段名 (如 `id`, `amount`)。
+    - **表头 (Label)**: 列显示名称。
+    - **宽度 (Width)**: CSS 宽度 (如 `120px` 或 `auto`)。
+    - **类型 (Type)**:
+        - `Text`: 普通文本。
+        - `Tag`: 标签样式 (常用于状态)。
+        - `Button`: 操作按钮组。
+        - `Image`: 图片展示。
+    - **Mock 格式**: 选择生成模拟数据的规则 (如 `name`, `date`, `money`, `conditional`)。
+    
+### 3.2 动态模拟数据 (Smart Mock Data)
+V9 系统内置了强大的 Mock 引擎。当你配置好列的 `Mock 格式` 后，系统会自动为每一行生成逼真的测试数据，无需后端接口即可预览页面效果。
+- **Conditional Mock**: 可以配置根据其他列的值生成不同的数据（例如：当 Status=Failed 时，Remark 显示错误原因）。
+
+---
+
+## 4. 配置操作按钮 (Action Buttons)
+
+### 4.1 按钮类型与效果
+在筛选区右侧或表格行内，我们可以添加操作按钮。
+
+1.  **Variant (样式)**: `Solid` (实心), `Outline` (描边), `Text` (仅文字)。
+2.  **Effect Type (交互效果)**:
+    - `None`: 无内置效果 (仅触发事件，供代码调用)。
+    - `Modal`: 弹出一个信息/表单弹窗。
+    - `Table`: (嵌套表格) 弹出一个包含另一个页面表格数据的弹窗。
+    
+### 4.2 配置联动 (Linking)
+如果是 `Table` 类型的按钮，你可以指定 **Target Page ID**。点击该按钮时，会加载目标页面的表格配置并展示在模态框中，实现 "查看详情 -> 关联列表" 的钻取交互。
+
+---
+
+## 5. 高级：自定义代码扩展
+
+虽然 UI 配置能覆盖 90% 的需求，但有时我们需要特殊的逻辑。
+
+### 5.1 获取配置数据
+在代码中，你可以通过 Pinia Store 获取当前页面的完整配置：
+
+```typescript
+import { useConfigStore } from '@/stores/configStore'
+import { useConfigPageStore } from '@/stores/config_page_Store'
+
+const pageStore = useConfigPageStore()
+// 获取特定页面的配置
+const config = pageStore.getSubPageConfig(navTitle, navId)
+```
+
+### 5.2 监听事件
+在 `Page1.vue` 或其他模板中，所有 UI 配置的按钮点击都会派发统一的事件，你可以在组件中拦截这些事件处理自定义业务逻辑（如调用特殊 API）。
+
+```typescript
+// 在 actions 对象中扩展 custom handlers
+const actions = {
+  handleAction(key: string, record?: any) {
+    if (key === 'btn_export') {
+      // 处理导出逻辑
+      exportService.download(...)
     }
-    
-    return true
-  })
-})
-```
-
----
-
-## 进阶：新增时间段筛选
-
-新增时间段筛选（如“审核时间”）稍有不同，主要在于类型的处理。
-
-1. **更新 `filters`**：
-   ```typescript
-   import type { DateRange } from 'radix-vue'
-   
-   const filters = reactive({
-     // ...
-     auditTime: undefined as DateRange | undefined, // 必须显式声明类型
-   })
-   ```
-
-2. **更新 `filterConfigs`**：
-   ```typescript
-   { 
-     key: 'auditTime', 
-     type: 'date-range', 
-     label: '审核时间' 
-   }
-   ```
-
-3. **更新过滤逻辑**：
-   在 `filteredData` 中，你需要使用 `date-fns` 或其他库来比较时间。
-   ```typescript
-   // 伪代码示例
-   if (filters.auditTime?.start && filters.auditTime?.end) {
-     const itemDate = new Date(item.auditTime)
-     // 注意处理时区和日期比较边界
-     if (itemDate < filters.auditTime.start || itemDate > filters.auditTime.end) {
-       return false
-     }
-   }
-   ```
-
----
-
-## 常见问题
-
-**Q: 为什么我加了配置，输入框没出来？**
-A: 请检查 `filterConfigs` 是否正确添加了对象，且没有语法错误。
-
-**Q: 为什么下拉框选了没反应？**
-A: 检查 `filters` 对象中是否定义了对应的 `key`。如果没有定义，Vue 无法进行双向绑定。
-
-**Q: 为什么会有 TypeScript 类型报错？**
-A: 由于 `filters` 同时存储字符串和日期对象，有时在模板中直接使用 `filters[key]` 会导致类型推断错误。建议使用我们封装好的辅助函数：
-- `getStringValue(key)`：用于 Input 和 Select。
-- `getDateRangeValue(key)`：用于 DateRange。
-- `setDateRangeValue(key, val)` / `setStringValue(key, val)`：用于更新值。
-
----
-
-## 2026-01-12 更新：低代码配置与新型筛选组件
-
-本次更新引入了可视化的配置管理页面 (`Settings.vue`) 和新的树形选择组件 (`FilterTreeSelect.vue`)，大大简化了页面开发流程。
-
-### 1. 使用 Settings 页面进行可视化配置
-
-现在，您可以直接在运行时的 `Settings` 页面（侧边栏配置入口）进行页面的配置，所有配置将自动同步到云端数据库 (Supabase)，实现多用户隔离的持久化存储。
-
-**工作流：**
-
-1.  **可视化编辑**：在 Settings 页面选择对应的导航项。
-2.  **实时预览**：添加/编辑筛选条件、修改表格列配置，页面会自动保存到本地存储 (`localStorage`) 并实时生效。
-3.  **保存到云端**：配置满意后，点击页面顶部面包屑区域的 **"保存"** 按钮，将当前配置同步到 Supabase 云数据库。
-4.  **多端加载**：用户登录后，系统会自动优先从云端加载配置，确保在不同设备上拥有一致的体验。
-
-**配置加载优先级：**
-`Supabase 云端配置` > `localStorage 本地缓存` > `代码默认配置 (page1.ts)`
-
-**导入/导出功能：**
-- **导出**：将当前配置导出为 JSON 文件，用于备份或分享。
-- **导入**：加载 JSON 配置文件，系统会提示确认覆盖，确认后将自动同步保存到云端。
-
-### 2. 新增 TreeSelect (树形下拉框) 筛选类型
-
-我们新增了 `tree-select` 类型，用于处理层级数据的筛选。
-
-#### 配置结构 (`FilterConfig`)
-
-在 `FilterConfig` 接口中，新增了 `treeOptions` 字段：
-
-```typescript
-export interface TreeNode {
-    value: string
-    label: string
-    children?: TreeNode[]
-}
-
-export interface FilterConfig {
-    // ...
-    type: 'input' | 'select' | 'date-range' | 'tree-select' // 新增 tree-select
-    treeOptions?: TreeNode[]                                // 仅用于 tree-select 类型
-}
-```
-
-#### 在 Settings 中配置 TreeSelect
-
-在添加/编辑筛选项时：
-1.  **类型**选择 "树形下拉框"。
-2.  **树形选项配置 (JSON)**：在文本框中输入符合 `TreeNode[]` 结构的 JSON 数据。
-
-**JSON 示例：**
-```json
-[
-  {
-    "value": "1",
-    "label": "一级部门 A",
-    "children": [
-      {
-        "value": "1-1",
-        "label": "二级部门 A-1",
-        "children": []
-      }
-    ]
-  },
-  {
-    "value": "2",
-    "label": "一级部门 B"
+    // ... default handler
   }
-]
+}
 ```
 
-### 3. 组件实现细节
+---
 
-*   **FilterTreeSelect.vue**：基于 `Popover` 实现，支持无限层级递归渲染，但建议层级不要超过 3 层以保证体验。
-*   **TreeSelect UI**：支持节点展开/折叠，选中状态会有 Check 图标提示。如果不选择，默认显示 Placeholder 或第一个节点的 Label（逻辑可定制）。
+## 附录：配置文件结构 (TypeScript Interface)
 
-### 4. 数据流变动
+参见 `src/types/page-config.ts` 获取最新的类型定义。
 
-*   **ConfigStore**：现在全权管理页面配置，支持从 `localStorage` 恢复状态。
-*   **Page1.vue**：完全响应式地根据 `ConfigStore` 中的配置渲染 UI，包括动态加载 `FilterTreeSelect` 组件。
-### 5. 2026-01-22 更新：配置系统 V2 重构 (分布式存储)
-
-为了进一步提升性能和可维护性，我们对配置系统进行了 **V2 重构**。
-
-**主要变化：**
-
-*   **完全解耦**：导航结构 (`navigation`) 与页面具体配置 (`page`) 在存储和逻辑上完全分离。
-*   **分布式加载**：系统不再一次性加载包含所有页面细节的巨大 JSON，而是先加载轻量级的导航树，当进入特定页面时才按需（或并行地按 navId）加载对应的页面配置。
-*   **存储路径**：
-    *   导航：`category: 'navigation'`, `resource_id: 'nav-main'`
-    *   页面：`category: 'page'`, `resource_id: 'page-{navId}'`
-*   **开发建议**：
-    *   在编写代码引用配置时，使用 `useConfigStore().page1Configs[navId]` 获取特定页面配置。
-    *   导航节点中的 `component` 属性已标记为过时，建议通过 `template` 字段显式指定页面模板名（如 `'Page1'`, `'Settings'`）。
-
-通过这一改进，项目在页面规模扩大到数十个甚至上百个时，依然能保持流畅的首屏加载速度和稳健的数据同步。
+- `Page1Config`
+    - `filterArea`: `FilterAreaConfig`
+    - `tableArea`: `TableAreaConfig`
+    - `actionsArea`: `ActionsAreaConfig`
+    - `cardArea`: `CardAreaConfig`
