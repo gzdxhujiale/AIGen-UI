@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { streamChat, isCozeConfigured, type ChatMessage } from '@/api/coze'
-import { supabase } from '@/api/supabase'
+
 import { useConfigStore } from './configStore'
 import { useConfigPageStore } from './config_page_Store'
 import { toast } from 'vue-sonner'
@@ -62,34 +62,52 @@ export const useAIStore = defineStore('ai', () => {
     function _normalizeAIConfig(config: any): any[] {
         const wrap = (item: any) => {
             if (!item) return null
-            // 已经是标准的 V9 记录格式 ({ title, page_config })
-            if (item.title && item.page_config) return item
 
-            // 只有 items 的 PageContent 格式
-            if (Array.isArray(item.items)) {
+            // Helper to clean page_config
+            const cleanPageConfig = (pc: any, defaultTitle: string) => ({
+                title: pc.title || defaultTitle,
+                icon: pc.icon || 'IconSettings',
+                isOpen: pc.isOpen !== false, // default true
+                visible: pc.visible !== false, // default true
+                items: Array.isArray(pc.items) ? pc.items.map((sub: any) => ({
+                    id: sub.id || sub.name || `node_${Math.random().toString(36).substr(2, 5)}`,
+                    name: sub.name || '未命名',
+                    component: sub.component
+                })) : []
+            })
+
+            // 1. 已经是标准的 V9 记录格式 ({ title, page_config })
+            if (item.title && item.page_config) {
                 return {
-                    title: item.title || 'AI 生成导航',
-                    page_config: {
-                        title: item.title || 'AI 生成导航',
-                        icon: item.icon || 'IconSettings',
-                        isOpen: true,
-                        items: item.items.map((s: any) => ({
-                            id: s.id || s.name,
-                            name: s.name,
-                            component: s.component
-                        }))
-                    }
+                    title: item.title,
+                    page_config: cleanPageConfig(item.page_config, item.title)
                 }
             }
-            // 单个页面组件
-            if (item.component) {
+
+            // 2. 只有 items 的 PageContent 格式
+            if (Array.isArray(item.items)) {
+                const title = item.title || 'AI 生成导航'
                 return {
-                    title: 'AI 生成页面',
+                    title: title,
+                    page_config: cleanPageConfig(item, title)
+                }
+            }
+
+            // 3. 单个页面组件
+            if (item.component) {
+                const title = 'AI 生成页面'
+                return {
+                    title: title,
                     page_config: {
-                        title: 'AI 生成页面',
+                        title: title,
                         icon: 'IconSettings',
                         isOpen: true,
-                        items: [{ id: item.id || item.name || 'temp', name: item.name || '新页面', component: item.component }]
+                        visible: true,
+                        items: [{
+                            id: item.id || item.name || 'temp',
+                            name: item.name || '新页面',
+                            component: item.component
+                        }]
                     }
                 }
             }
@@ -191,26 +209,23 @@ export const useAIStore = defineStore('ai', () => {
         if (!pendingConfig.value) return
         isLoading.value = true
         try {
-            const items = _normalizeAIConfig(pendingConfig.value)
-            let successCount = 0
+            // Use the client-side store method to apply changes directly to Supabase
+            // This bypasses the 'config-ops' Edge Function which was causing 400 errors
+            const result = await configPageStore.applyPreview()
 
-            for (const item of items) {
-                const { error } = await supabase.functions.invoke('config-ops', {
-                    body: { action: 'append_ai_result', page_title: item.title, ai_result: item }
-                })
-                if (!error) successCount++
-            }
-
-            if (successCount > 0) {
-                await configPageStore.loadPageConfigs()
+            if (result.success) {
                 messages.value.push({
                     id: _generateId(), role: 'assistant', timestamp: new Date(), status: 'complete',
-                    content: `✅ 成功同步了 ${successCount} 个配置项！`
+                    content: `✅ 配置已成功应用！`
                 })
                 toast.success('配置已更新')
+                // No need to call clearPreview here as applyPreview likely handles cleanup or we follow standard flow
                 clearPreview()
+            } else {
+                throw new Error(result.message || 'Unknown error during save')
             }
         } catch (e: any) {
+            console.error('Failed to apply preview:', e)
             toast.error('同步失败', { description: e.message })
         } finally {
             isLoading.value = false
