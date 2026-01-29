@@ -186,6 +186,8 @@ export const EFFECT_TYPES = {
     MODAL: 'modal',
     /** 打开表格弹窗 */
     TABLE: 'table',
+    /** 打开抽屉表格 */
+    DRAWER: 'drawer',
 } as const
 
 /** 交互效果类型的联合类型 */

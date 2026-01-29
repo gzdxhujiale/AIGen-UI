@@ -30,14 +30,17 @@ export function generateMockValue(col: any, index: number): string | number {
             return `${label}${index + 1}`
         case 'datetime':
             const now = new Date()
-            const randomDays = Math.floor(Math.random() * 30)
-            const randomHours = Math.floor(Math.random() * 24)
-            const randomMinutes = Math.floor(Math.random() * 60)
-            const randomSeconds = Math.floor(Math.random() * 60)
-            const date = new Date(now.getTime() - randomDays * 24 * 60 * 60 * 1000)
+            // 逆序生成：基于当前时间，每一行递减一天
+            const date = new Date(now.getTime() - index * 24 * 60 * 60 * 1000)
+
             const year = date.getFullYear()
             const month = date.getMonth() + 1
             const day = date.getDate()
+
+            const randomHours = Math.floor(Math.random() * 24)
+            const randomMinutes = Math.floor(Math.random() * 60)
+            const randomSeconds = Math.floor(Math.random() * 60)
+
             const h = String(randomHours).padStart(2, '0')
             const m = String(randomMinutes).padStart(2, '0')
             const s = String(randomSeconds).padStart(2, '0')

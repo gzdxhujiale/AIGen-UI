@@ -46,7 +46,7 @@ const formSchemas = computed(() => ({
     { key: 'label', label: '按钮文本', comp: 'input', props: { placeholder: '如 查询' } },
     { key: 'variant', label: '样式', comp: 'select', props: { options: [{value:'primary',label:'Primary'},{value:'outline',label:'Outline'},{value:'text',label:'Text'},{value:'shadcn-outline',label:'Shadcn Outline'}] } },
     { key: 'className', label: '自定义样式类', comp: 'input', props: { placeholder: '可选，如 bg-emerald-50' } },
-    { key: 'effectType', label: '交互效果', comp: 'select', props: { options: [{value:'none',label:'无反应'},{value:'modal',label:'弹窗-表单'},{value:'table',label:'弹窗-表格'}] }, fullWidth: true },
+    { key: 'effectType', label: '交互效果', comp: 'select', props: { options: [{value:'none',label:'无反应'},{value:'modal',label:'弹窗-表单'},{value:'table',label:'弹窗-表格'},{value:'drawer',label:'抽屉-表格'}] }, fullWidth: true },
     // Modal-specific fields defined separately in template for complexity
   ],
   card: [
@@ -79,7 +79,7 @@ watch(formState, (v) => emit('update:modelValue', v), { deep: true })
 // 辅助数据
 const availablePages = computed(() => {
   const pages: { value: string; label: string }[] = []
-  configPageStore.navGroups.forEach((g: any) => g.items.forEach((m: any) => m.items?.forEach((s: any) => pages.push({ value: s.id, label: s.title }))))
+  configPageStore.navGroups.forEach((g: any) => g.items.forEach((m: any) => m.items?.forEach((s: any) => pages.push({ value: s.id, label: s.name }))))
   return pages
 })
 
@@ -90,7 +90,7 @@ const operatorOptions = [
 
 // Modal/Table Effect Logic
 watch(() => formState.value.effectType, (type) => {
-  if ((type === 'modal' || type === 'table') && !formState.value.effectConfig) formState.value.effectConfig = {}
+  if ((type === 'modal' || type === 'table' || type === 'drawer') && !formState.value.effectConfig) formState.value.effectConfig = {}
 })
 
 const addCondition = () => conditionRulesProxy.value = [...conditionRulesProxy.value, { sourceColumn: '', operator: '==', compareValue: '', displayValue: '' }]
@@ -170,8 +170,8 @@ const addEffectItem = () => {
           </div>
        </template>
 
-       <!-- Modal-Table -->
-       <div v-else-if="formState.effectType === 'table'">
+       <!-- Modal-Table / Drawer-Table -->
+       <div v-else-if="['table', 'drawer'].includes(formState.effectType)">
           <label class="text-xs font-medium">关联表格页面</label>
           <ASelect v-if="formState.effectConfig" v-model="formState.effectConfig.targetNavId" placeholder="选择目标页面"><AOption v-for="p in availablePages" :key="p.value" :value="p.value">{{ p.label }}</AOption></ASelect>
        </div>
