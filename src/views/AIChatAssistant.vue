@@ -22,13 +22,30 @@ const previewMode = computed(() => aiStore.previewMode)
 const changeSummary = computed(() => aiStore.changeSummary)
 
 // --- Constants & Configs (Data-Driven) ---
+
+
 const FIX_JSON_PROMPT = "The previous response was not valid JSON or had errors. Please correct it and output ONLY the valid JSON configuration, wrapped in \`\`\`json code blocks."
 
-const SUGGESTION_CHIPS = [
-    { label: '添加新筛选项', text: '添加一个新的筛选项' },
-    { label: '修改表格列', text: '修改表格列配置' },
-    { label: '新增导航菜单', text: '新增一个导航菜单' }
+const TABS_CONFIG = [
+    { 
+        label: '✏️ 修改当前页', 
+        template: '用户指令：{{用户指令}}。需要修改的页面json配置：{{当前页面json配置}}。' 
+    },
+    { 
+        label: '📝 创建新页面', 
+        template: '用户指令：{{用户指令}}。需要创建一个新页面' 
+    }
 ]
+
+// Default to the first tab if no template is selected
+if (!aiStore.contextTemplate) {
+    aiStore.contextTemplate = TABS_CONFIG[0].template
+}
+
+const activeTabLabel = computed(() => {
+    const found = TABS_CONFIG.find(t => t.template === aiStore.contextTemplate)
+    return found ? found.label : TABS_CONFIG[0].label
+})
 
 const SUMMARY_ITEMS = computed(() => [
     { key: 'addedNavItems', label: '新增导航项', type: 'added' },
@@ -229,18 +246,26 @@ const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit',
             </div>
 
             <template v-else>
+                <!-- Dynamic Mode Switching Tabs -->
+                <div class="mode-tabs">
+                    <button 
+                        v-for="tab in TABS_CONFIG"
+                        :key="tab.label"
+                        class="mode-tab" 
+                        :class="{ active: aiStore.contextTemplate === tab.template }"
+                        @click="aiStore.contextTemplate = tab.template"
+                    >
+                        <span>{{ tab.label }}</span>
+                    </button>
+                </div>
+
                 <div ref="messagesContainer" class="content-area">
                     <div class="chat-messages">
                         <div v-if="messages.length === 0" class="empty-state">
                             <Sparkles :size="48" class="empty-icon" />
                             <h3>您好！我是 AI 配置助手</h3>
-                            <p>告诉我您想要如何修改配置，我会为您生成修改方案供您审批。</p>
-                            <!-- Data-Driven Suggestion Chips -->
-                            <div class="suggestion-chips">
-                                <button v-for="chip in SUGGESTION_CHIPS" :key="chip.text" class="suggestion-chip" @click="inputValue = chip.text">
-                                    {{ chip.label }}
-                                </button>
-                            </div>
+                            <!-- We can infer the active label for display text -->
+                            <p>{{ activeTabLabel === '📝 创建新页面' ? '告诉我您想创建什么样的页面，我会为您生成配置。' : '告诉我您想如何修改当前页面，我会基于现有配置进行调整。' }}</p>
                         </div>
 
                         <div v-if="!isConfigured && messages.length === 0" class="config-warning">
@@ -415,6 +440,60 @@ const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit',
 }
 
 /* --- Header --- */
+.mode-tabs {
+    display: flex;
+    padding: 8px 16px;
+    background: #ffffff;
+    gap: 8px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.dark .mode-tabs {
+    background: #1e293b;
+    border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+
+.mode-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.dark .mode-tab {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+}
+
+.mode-tab:hover {
+    background: #f1f5f9;
+    color: #334155;
+}
+.dark .mode-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+}
+
+.mode-tab.active {
+    background: #f5f3ff;
+    border-color: #8b5cf6;
+    color: #7c3aed;
+    font-weight: 600;
+}
+.dark .mode-tab.active {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: #8b5cf6;
+    color: #a78bfa;
+}
+
 .chat-header {
     height: 64px;
     padding: 0 20px;
@@ -541,34 +620,7 @@ const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit',
     filter: drop-shadow(0 8px 16px rgba(139, 92, 246, 0.2));
 }
 
-.suggestion-chips {
-    margin-top: 32px;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
-}
-.suggestion-chip {
-    padding: 8px 16px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    color: #334155;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.dark .suggestion-chip {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
-    color: #cbd5e1;
-}
-.suggestion-chip:hover {
-    background: #f5f3ff;
-    border-color: #ddd6fe;
-    color: #7c3aed;
-    transform: translateY(-1px);
-}
+
 
 .message {
     display: flex;

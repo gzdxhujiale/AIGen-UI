@@ -4,6 +4,7 @@ import { streamChat, isCozeConfigured, type ChatMessage } from '@/api/coze'
 
 import { useConfigStore } from './configStore'
 import { useConfigPageStore } from './config_page_Store'
+import { useNavigation } from '@/composables/useNavigation'
 import { toast } from 'vue-sonner'
 
 export interface AIMessage extends ChatMessage {
@@ -39,6 +40,10 @@ export const useAIStore = defineStore('ai', () => {
     const changeSummary = ref<ChangeSummary | null>(null)
     const buttonPosition = ref({ x: window.innerWidth - 88, y: window.innerHeight - 144 })
 
+    // 上下文模板: 用于控制发送给 AI 的额外上下文信息
+    // 支持占位符 {{当前页面json配置}} 和 {{用户指令}}
+    const contextTemplate = ref<string>('')
+
     // --- 计算属性 ---
     const isConfigured = computed(() => isCozeConfigured())
     const hasMessages = computed(() => messages.value.length > 0)
@@ -63,7 +68,7 @@ export const useAIStore = defineStore('ai', () => {
         const wrap = (item: any) => {
             if (!item) return null
 
-            // Helper to clean page_config
+            // 清理 page_config 的助手函数
             const cleanPageConfig = (pc: any, defaultTitle: string) => ({
                 title: pc.title || defaultTitle,
                 icon: pc.icon || 'IconSettings',
@@ -137,6 +142,36 @@ export const useAIStore = defineStore('ai', () => {
     const setButtonPosition = (x: number, y: number) => { buttonPosition.value = { x, y } }
 
     // ============================================
+    // 上下文注入助手
+    // ============================================
+
+    function _getCurrentPageContext(): string | null {
+        // 使用 useNavigation 组合式函数获取当前导航 ID
+        // 注意：useNavigation 依赖于模块级 refs，所以在这里应该可以工作
+        const { currentNavId } = useNavigation()
+        const navId = currentNavId.value
+
+        if (!navId) return null
+
+        // 查找父级一级导航标题
+        const title = configPageStore.findNavTitleBySubId(navId)
+        if (!title) return null
+
+        // 获取完整的一级页面配置记录
+        const record = configPageStore.getPageConfigByTitle(title)
+        if (!record || !record.page_config) return null
+
+        // 序列化完整的 page_config (包含所有子页面项)
+        try {
+            // 目前发送完整配置以提供最完整的上下文
+            return JSON.stringify(record.page_config, null, 2)
+        } catch (e) {
+            console.error('序列化页面上下文失败', e)
+            return null
+        }
+    }
+
+    // ============================================
     // 聊天动作
     // ============================================
 
@@ -157,8 +192,42 @@ export const useAIStore = defineStore('ai', () => {
         streamingContent.value = ''
 
         try {
+            // 构建发送给 API 的消息
+            const messagesToSend = messages.value
+                .filter(m => m.status === 'complete')
+                .map(m => ({ role: m.role, content: m.content }))
+
+            // 将上下文模板注入到最后一条用户消息中
+            if (contextTemplate.value) {
+                const lastIdx = messagesToSend.length - 1
+                if (lastIdx >= 0 && messagesToSend[lastIdx].role === 'user') {
+                    const originalInput = messagesToSend[lastIdx].content
+                    let processedTemplate = contextTemplate.value
+
+                    // 1. 处理页面配置占位符
+                    if (processedTemplate.includes('{{当前页面json配置}}')) {
+                        const context = _getCurrentPageContext()
+                        if (context) {
+                            processedTemplate = processedTemplate.replace('{{当前页面json配置}}', context)
+                        } else {
+                            processedTemplate = processedTemplate.replace('{{当前页面json配置}}', '{}')
+                        }
+                    }
+
+                    // 2. 处理用户指令占位符
+                    if (processedTemplate.includes('{{用户指令}}')) {
+                        // 如果模板包含用户指令占位符，则替换占位符并覆盖原有消息
+                        // 这允许模板完全控制消息结构
+                        messagesToSend[lastIdx].content = processedTemplate.replace('{{用户指令}}', originalInput)
+                    } else {
+                        // 否则（兼容旧模式），将模板追加到用户消息后面
+                        messagesToSend[lastIdx].content += processedTemplate
+                    }
+                }
+            }
+
             await streamChat(
-                messages.value.filter(m => m.status === 'complete').map(m => ({ role: m.role, content: m.content })),
+                messagesToSend,
                 (chunk) => {
                     streamingContent.value += chunk
                     _updateLastMessage({ content: streamingContent.value })
@@ -217,8 +286,8 @@ export const useAIStore = defineStore('ai', () => {
         if (!pendingConfig.value) return
         isLoading.value = true
         try {
-            // Use the client-side store method to apply changes directly to Supabase
-            // This bypasses the 'config-ops' Edge Function which was causing 400 errors
+            // 使用客户端 store 方法直接向 Supabase 应用更改
+            // 这绕过了导致 400 错误的 'config-ops' Edge Function
             const result = await configPageStore.applyPreview()
 
             if (result.success) {
@@ -233,7 +302,7 @@ export const useAIStore = defineStore('ai', () => {
                 throw new Error(result.message || 'Unknown error during save')
             }
         } catch (e: any) {
-            console.error('Failed to apply preview:', e)
+            console.error('应用预览失败:', e)
             toast.error('同步失败', { description: e.message })
         } finally {
             isLoading.value = false
@@ -262,7 +331,7 @@ export const useAIStore = defineStore('ai', () => {
 
     return {
         messages, isOpen, isLoading, pendingConfig, streamingContent, buttonPosition,
-        previewMode, isMinimized, changeSummary,
+        previewMode, isMinimized, changeSummary, contextTemplate,
         isConfigured, hasMessages, hasPendingConfig, hasPreviewConfig,
         toggleWindow, openWindow, closeWindow, sendMessage, clearMessages,
         minimizeWindow, generatePreviewConfigs, confirmPreview, cancelPreview, clearPreview, setButtonPosition
