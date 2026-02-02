@@ -76,7 +76,7 @@ watch(filteredNavGroups, (gs) => {
         gs.forEach(g => g.items.forEach(i => i.isOpen && openKeys.value.push('sub-' + i.id)))
         isNavInitialized.value = true
     }
-    const allIds = gs.flatMap(g => g.items.flatMap(m => m.items?.map(s => s.id) || []))
+    const allIds = gs.flatMap(g => g.items.flatMap(m => [m.id, ...(m.items?.map(s => s.id) || [])]))
     if (!currentNavId.value || (!allIds.includes(currentNavId.value) && !['settings', 'profile'].includes(currentNavId.value))) {
         const first = gs[0]?.items[0]; if (first) handleNavClick(first.title, first.items?.[0]?.name || first.title, first.items?.[0]?.id || first.id)
     }

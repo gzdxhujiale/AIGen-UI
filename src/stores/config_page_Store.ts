@@ -262,11 +262,12 @@ export const useConfigPageStore = defineStore('config-page', () => {
             if (error) throw error
 
             // 清空并重新填充
-            pageConfigs.value.clear()
             if (data && data.length > 0) {
+                const newMap = new Map<string, PageConfigRecord>()
                 data.forEach((record: PageConfigRecord) => {
-                    pageConfigs.value.set(record.title, record)
+                    newMap.set(record.title, record)
                 })
+                pageConfigs.value = newMap
                 // 更新缓存
                 updateCache()
             } else {

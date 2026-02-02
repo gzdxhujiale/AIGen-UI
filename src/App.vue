@@ -15,7 +15,7 @@ import ArcoLayout from '@/components/layout/ArcoLayout.vue'
 import ShadcnLayout from '@/components/layout/ShadcnLayout.vue'
 import { useNavigation, initNavigation } from '@/composables/useNavigation'
 
-const { currentPage } = useNavigation() 
+const { currentPage, currentNavId } = useNavigation() 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
 const teamStore = useConfigTeamStore()
@@ -65,8 +65,10 @@ const bootstrapApp = async () => {
       menuStore.loadMenu(),
       pageStore.loadPageConfigs()
     ])
-    // Re-init navigation with fresh data
-    initNavigation(pageStore.navGroups)
+    // Only init navigation if not already set (preserve user selection or cache)
+    if (!currentNavId.value) {
+      initNavigation(pageStore.navGroups)
+    }
   } catch (e) {
     console.error('App: Sync failed', e)
   } finally {
