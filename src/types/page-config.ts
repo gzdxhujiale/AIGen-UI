@@ -98,6 +98,7 @@ export interface TableAreaConfig {
     fixedLayout?: boolean   // 是否使用固定布局
     pageSize?: number       // 每页显示行数
     columns: TableColumn[]
+    isEmptyData?: boolean   // 是否空数据
 }
 
 /**

@@ -63,7 +63,11 @@ const mockHelper = {
     })
   },
   load() {
-    uiState.tableData = pageConfig.value?.mockData?.().length ? pageConfig.value.mockData() : this.generate(pageConfig.value!)
+    if (pageConfig.value?.tableArea?.isEmptyData) {
+      uiState.tableData = []
+    } else {
+      uiState.tableData = pageConfig.value?.mockData?.().length ? pageConfig.value.mockData() : this.generate(pageConfig.value!)
+    }
     uiState.currentPage = 1
   }
 }
@@ -119,7 +123,7 @@ const actions = {
     uiState.area.type = type
     const cfg = pageConfig.value
     if (!cfg) return
-    uiState.area.config = type === 'filter' ? { columns: cfg.filterArea.columns, gap: cfg.filterArea.gap, showActions: cfg.actionsArea?.show !== false } : type === 'card' ? { show: cfg.cardArea?.show ?? false, columns: cfg.cardArea?.columns ?? 4, gap: cfg.cardArea?.gap ?? '16px' } : { height: cfg.tableArea.height ?? '400px', pageSize: cfg.tableArea.pageSize ?? 10, scrollX: !!cfg.tableArea.scrollX, scrollY: !!cfg.tableArea.scrollY, showCheckbox: !!cfg.tableArea.showCheckbox, stickyHeader: cfg.tableArea.stickyHeader !== false }
+    uiState.area.config = type === 'filter' ? { columns: cfg.filterArea.columns, gap: cfg.filterArea.gap, showActions: cfg.actionsArea?.show !== false } : type === 'card' ? { show: cfg.cardArea?.show ?? false, columns: cfg.cardArea?.columns ?? 4, gap: cfg.cardArea?.gap ?? '16px' } : { height: cfg.tableArea.height ?? '400px', pageSize: cfg.tableArea.pageSize ?? 10, scrollX: !!cfg.tableArea.scrollX, scrollY: !!cfg.tableArea.scrollY, showCheckbox: !!cfg.tableArea.showCheckbox, stickyHeader: cfg.tableArea.stickyHeader !== false, isEmptyData: !!cfg.tableArea.isEmptyData }
     uiState.area.visible = true
   },
   async saveAreaConfig() {
@@ -127,7 +131,7 @@ const actions = {
       const { type, config } = uiState.area
       if (type === 'filter') { item.filterArea.columns = config.columns; item.filterArea.gap = config.gap; if (!item.actionsArea) item.actionsArea = { buttons: [] }; item.actionsArea.show = config.showActions }
       else if (type === 'card') { if (!item.cardArea) item.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }; item.cardArea.show = config.show; item.cardArea.columns = config.columns; item.cardArea.gap = config.gap }
-      else { item.tableArea.height = config.height; item.tableArea.pageSize = config.pageSize; item.tableArea.scrollX = config.scrollX; item.tableArea.scrollY = config.scrollY; item.tableArea.showCheckbox = config.showCheckbox; item.tableArea.stickyHeader = config.stickyHeader }
+      else { item.tableArea.height = config.height; item.tableArea.pageSize = config.pageSize; item.tableArea.scrollX = config.scrollX; item.tableArea.scrollY = config.scrollY; item.tableArea.showCheckbox = config.showCheckbox; item.tableArea.stickyHeader = config.stickyHeader; item.tableArea.isEmptyData = config.isEmptyData }
     })
     uiState.area.visible = false
   },
@@ -344,6 +348,7 @@ const editor = {
             :scroll-y="false"
             :sticky-header="pageConfig.tableArea.stickyHeader !== false"
             :bordered="{ wrapper: true, cell: true }"
+            :is-empty-data="pageConfig.tableArea.isEmptyData"
             @action-click="actions.handleAction"
           >
             <template v-for="(col, colIndex) in visibleColumns" :key="col.key" #[`header-${col.key}`]>
@@ -449,6 +454,9 @@ const editor = {
         <div class="grid grid-cols-2 gap-4">
           <div class="flex items-center gap-2"><input type="checkbox" id="showCheckbox" v-model="uiState.area.config.showCheckbox" class="rounded" /><label for="showCheckbox" class="text-sm">显示复选框</label></div>
           <div class="flex items-center gap-2"><input type="checkbox" id="stickyHeader" v-model="uiState.area.config.stickyHeader" class="rounded" /><label for="stickyHeader" class="text-sm">吸顶表头</label></div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="flex items-center gap-2"><input type="checkbox" id="isEmptyData" v-model="uiState.area.config.isEmptyData" class="rounded" /><label for="isEmptyData" class="text-sm">是否空数据</label></div>
         </div>
       </div>
     </AModal>

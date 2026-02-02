@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Table as ATable, type TableColumnData } from '@arco-design/web-vue'
+import { Table as ATable, Empty as AEmpty, type TableColumnData } from '@arco-design/web-vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { TableColumn } from '@/types'
@@ -21,6 +21,7 @@ interface Props {
   stripe?: boolean
   hover?: boolean
   showHeader?: boolean
+  isEmptyData?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -35,7 +36,8 @@ const props = withDefaults(defineProps<Props>(), {
   bordered: true,
   stripe: false,
   hover: true,
-  showHeader: true
+  showHeader: true,
+  isEmptyData: false
 })
 
 // Emits
@@ -118,6 +120,7 @@ const rowSelection = computed(() => {
     type: 'checkbox' as const,
     showCheckedAll: props.showCheckedAll,
     selectedRowKeys: selectedKeys.value,
+    width: 30,
     onChange: (keys: (string | number)[]) => {
       selectedKeys.value = keys
       emit('selection-change', keys)
@@ -139,6 +142,13 @@ const handleActionClick = (action: string, record: any, e: Event) => {
   e.stopPropagation()
   emit('action-click', action, record)
 }
+
+const emptyBodyHeight = computed(() => {
+  if (props.isEmptyData && props.pageSize) {
+    return props.pageSize * 44
+  }
+  return undefined
+})
 </script>
 
 <template>
@@ -159,6 +169,16 @@ const handleActionClick = (action: string, record: any, e: Event) => {
       @page-change="handlePageChange"
       @row-click="handleRowClick"
     >
+      <!-- Empty Slot -->
+      <template #empty>
+        <div 
+          class="flex items-center justify-center w-full"
+          :style="{ height: emptyBodyHeight ? `${emptyBodyHeight}px` : undefined }"
+        >
+          <AEmpty />
+        </div>
+      </template>
+
       <!-- Forward Header Slots -->
       <template v-for="col in visibleColumns" :key="`header-${col.key}`" #[`title-${col.key}`]>
         <slot :name="`header-${col.key}`" :column="col">
@@ -287,4 +307,7 @@ const handleActionClick = (action: string, record: any, e: Event) => {
   align-items: center !important;
   justify-content: center !important;
 }
+
+
+
 </style>
