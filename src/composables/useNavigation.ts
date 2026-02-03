@@ -10,12 +10,49 @@ const currentSubNav = ref('')
 const _currentNavId = ref('')
 const detailTitle = ref<string | null>(null)
 const _navGroupsRef = ref<NavGroup[] | null>(null)
+const exceptionType = ref<'403' | '404' | '500' | null>(null)
 
 /**
  * 设置 navGroups 引用（由 configStore 调用）
  */
 export function setNavGroupsRef(navGroups: NavGroup[]) {
     _navGroupsRef.value = navGroups
+}
+
+/**
+ * 查找导航项上下文
+ */
+function findNavContext(navGroups: NavGroup[], navId: string) {
+    for (const group of navGroups) {
+        for (const mainItem of (group.items as any[])) {
+            // Check main item itself
+            if (mainItem.id === navId) {
+                return { mainNav: mainItem.title, subNav: '', navId: mainItem.id }
+            }
+            // Check sub items
+            const subItem = (mainItem.items as any[])?.find(item => item.id === navId)
+            if (subItem) {
+                return { mainNav: mainItem.title, subNav: subItem.name, navId: subItem.id }
+            }
+        }
+    }
+    return null
+}
+
+// 监听浏览器前进/后退
+if (typeof window !== 'undefined') {
+    window.addEventListener('popstate', () => {
+        const params = new URLSearchParams(window.location.search)
+        const navId = params.get('nav')
+        if (navId && _navGroupsRef.value) {
+            const ctx = findNavContext(_navGroupsRef.value, navId)
+            if (ctx) {
+                currentMainNav.value = ctx.mainNav
+                currentSubNav.value = ctx.subNav
+                _currentNavId.value = ctx.navId
+            }
+        }
+    })
 }
 
 
@@ -25,6 +62,30 @@ export function setNavGroupsRef(navGroups: NavGroup[]) {
  */
 export function initNavigation(navGroups: NavGroup[]) {
     if (!navGroups || navGroups.length === 0) return
+
+    // 1. 优先尝试从 URL 初始化
+    const params = new URLSearchParams(window.location.search)
+    const urlNavId = params.get('nav')
+
+    if (urlNavId) {
+        const ctx = findNavContext(navGroups, urlNavId)
+        if (ctx) {
+            currentMainNav.value = ctx.mainNav
+            currentSubNav.value = ctx.subNav
+            _currentNavId.value = ctx.navId
+            exceptionType.value = null
+            return
+        } else {
+            // URL ID not found -> 404
+            exceptionType.value = '404'
+            return
+        }
+    }
+
+    // 2. 只有在没有 URL 参数或参数无效时，才回退到默认第一个
+    if (_currentNavId.value && findNavContext(navGroups, _currentNavId.value)) {
+        return // 已经有有效状态，保持不变
+    }
 
     // 找到第一个可见的一级导航
     let firstMainNav: any = null
@@ -47,6 +108,12 @@ export function initNavigation(navGroups: NavGroup[]) {
             // 如果一级菜单没有子项，则使用一级菜单自己的 ID (V9 通常有子项)
             _currentNavId.value = firstMainNav.id
         }
+        exceptionType.value = null
+
+        // 初始化时也同步到 URL（可选，为了统一体验）
+        const url = new URL(window.location.href)
+        url.searchParams.set('nav', _currentNavId.value)
+        window.history.replaceState({}, '', url.toString())
     }
 }
 
@@ -57,18 +124,31 @@ export function useNavigation() {
     const setNavigation = (mainNav: string, subNav: string, navId?: string) => {
         currentMainNav.value = mainNav
         currentSubNav.value = subNav
-        if (navId) {
-            _currentNavId.value = navId
-        } else {
+
+        let targetId = navId
+        if (!targetId) {
             const navGroups = _navGroupsRef.value || []
+            // 简单的反向查找 ID
             for (const group of navGroups) {
                 for (const mainItem of (group.items as any[])) {
                     const subItem = (mainItem.items as any[])?.find(item => item.name === subNav)
                     if (subItem) {
-                        _currentNavId.value = subItem.id
-                        return
+                        targetId = subItem.id
+                        break
                     }
                 }
+                if (targetId) break
+            }
+        }
+
+        if (targetId) {
+            _currentNavId.value = targetId
+            exceptionType.value = null
+            // URL Sync
+            const url = new URL(window.location.href)
+            if (url.searchParams.get('nav') !== targetId) {
+                url.searchParams.set('nav', targetId)
+                window.history.pushState({}, '', url.toString())
             }
         }
     }
@@ -130,6 +210,7 @@ export function useNavigation() {
         breadcrumbs,
         currentPage,
         currentTemplate,
+        exceptionType, // Export exception state
         setNavigation,
         setDetailTitle,
     }

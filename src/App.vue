@@ -4,6 +4,7 @@ import Page1 from '@/views/Page1.vue'
 import AuthPage from '@/views/AuthPage.vue'
 import Profile from '@/views/Profile.vue'
 import SkeletonLoading from '@/views/SkeletonLoading.vue'
+import ExceptionPage from '@/views/ExceptionPage.vue'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { useOnboarding } from '@/composables/useOnboarding'
 import { useAuthStore } from '@/stores/authStore'
@@ -15,7 +16,7 @@ import ArcoLayout from '@/components/layout/ArcoLayout.vue'
 import ShadcnLayout from '@/components/layout/ShadcnLayout.vue'
 import { useNavigation, initNavigation } from '@/composables/useNavigation'
 
-const { currentPage, currentNavId } = useNavigation() 
+const { currentPage, currentNavId, exceptionType } = useNavigation() 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
 const teamStore = useConfigTeamStore()
@@ -99,6 +100,7 @@ onUnmounted(() => authStore.cleanup())
 <template>
   <SkeletonLoading v-if="authStore.isLoading || isConfigLoading" />
   <AuthPage v-else-if="!authStore.isAuthenticated" />
+  <ExceptionPage v-else-if="exceptionType" :type="exceptionType" />
   <component :is="LayoutComponent" v-else>
     <Transition name="fade-slide" mode="out-in" appear>
       <component :is="CurrentPageComponent" :key="currentPage" />
