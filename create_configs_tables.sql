@@ -625,3 +625,61 @@ before update on page_configs
 for each row
 execute procedure update_updated_at_column();
 
+-- 1. Create a table for Chat Sessions (conversations)
+create table public.ai_chat_sessions (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) not null,
+  title text default 'New Chat',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 2. Create a table for Messages
+create table public.ai_chat_messages (
+  id uuid default gen_random_uuid() primary key,
+  session_id uuid references public.ai_chat_sessions(id) on delete cascade not null,
+  role text not null, -- 'user' or 'assistant'
+  content text,
+  config_data jsonb, -- Store the generated config JSON here
+  status text default 'complete',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 3. Enable RLS (Security)
+alter table public.ai_chat_sessions enable row level security;
+alter table public.ai_chat_messages enable row level security;
+
+-- 4. Add Policies (Users can only valid their own data)
+-- Sessions
+create policy "Users can view their own sessions"
+  on public.ai_chat_sessions for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert their own sessions"
+  on public.ai_chat_sessions for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can delete their own sessions"
+  on public.ai_chat_sessions for delete
+  using (auth.uid() = user_id);
+
+-- Messages (Linked via session ownership)
+create policy "Users can view messages from their sessions"
+  on public.ai_chat_messages for select
+  using (
+    exists (
+      select 1 from public.ai_chat_sessions
+      where public.ai_chat_sessions.id = api_chat_messages.session_id
+      and public.ai_chat_sessions.user_id = auth.uid()
+    )
+  );
+
+create policy "Users can insert messages to their sessions"
+  on public.ai_chat_messages for insert
+  with check (
+    exists (
+      select 1 from public.ai_chat_sessions
+      where public.ai_chat_sessions.id = api_chat_messages.session_id
+      and public.ai_chat_sessions.user_id = auth.uid()
+    )
+  );
