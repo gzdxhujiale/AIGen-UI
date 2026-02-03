@@ -22,6 +22,7 @@ interface Props {
   hover?: boolean
   showHeader?: boolean
   isEmptyData?: boolean
+  columnResizable?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -37,7 +38,8 @@ const props = withDefaults(defineProps<Props>(), {
   stripe: false,
   hover: true,
   showHeader: true,
-  isEmptyData: false
+  isEmptyData: false,
+  columnResizable: false
 })
 
 // Emits
@@ -46,6 +48,7 @@ const emit = defineEmits<{
   (e: 'selection-change', selectedKeys: (string | number)[]): void
   (e: 'action-click', action: string, record: any): void
   (e: 'page-change', page: number): void
+  (e: 'column-resize', dataIndex: string, width: number): void
 }>()
 
 // Internal State
@@ -91,7 +94,15 @@ const arcoColumns = computed<TableColumnData[]>(() => {
       slotName: col.key, // Slot mapping for body
       titleSlotName: `title-${col.key}`, // Slot mapping for header
       cellStyle: Object.keys(cellStyle).length > 0 ? cellStyle : undefined,
-      headerCellStyle: Object.keys(cellStyle).length > 0 ? cellStyle : undefined
+      headerCellStyle: Object.keys(cellStyle).length > 0 ? cellStyle : undefined,
+      // Sorting
+      sortable: col.sortable ? { sortDirections: ['ascend', 'descend'] } : undefined,
+      // Filtering - Generate filters from data if filterable is true
+      filterable: col.filterable ? {
+        filters: Array.from(new Set(props.data.map(item => item[col.key]))).filter(Boolean).map(val => ({ text: String(val), value: String(val) })),
+        filter: (value: any, record: any) => String(record[col.key]).includes(String(value)),
+        multiple: true
+      } : undefined
     }
   })
 })
@@ -165,9 +176,11 @@ const emptyBodyHeight = computed(() => {
       :stripe="props.stripe"
       :hoverable="props.hover"
       :show-header="props.showHeader"
+      :column-resizable="props.columnResizable"
       size="medium"
       @page-change="handlePageChange"
       @row-click="handleRowClick"
+      @column-resize="(index: string, width: number) => emit('column-resize', index, width)"
     >
       <!-- Empty Slot -->
       <template #empty>
@@ -306,6 +319,11 @@ const emptyBodyHeight = computed(() => {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+}
+
+/* Remove background from sorted columns */
+.arco-table-wrapper :deep(.arco-table-td-sorted) {
+  background-color: transparent;
 }
 
 

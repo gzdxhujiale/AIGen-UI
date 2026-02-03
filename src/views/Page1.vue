@@ -2,7 +2,7 @@
 defineOptions({ name: 'Page1' })
 import { computed, reactive, watch } from 'vue'
 import { Button } from '@/components/ui/button'
-import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm, Drawer as ADrawer } from '@arco-design/web-vue'
+import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm, Drawer as ADrawer, Select as ASelect, Option as AOption } from '@arco-design/web-vue'
 import { Pencil, Plus, Trash2, File } from 'lucide-vue-next'
 import { safeJsonParseWithError } from '@/utils/error'
 import { generateMockValue, evaluateConditionalValue } from '@/utils/mock-data'
@@ -123,7 +123,19 @@ const actions = {
     uiState.area.type = type
     const cfg = pageConfig.value
     if (!cfg) return
-    uiState.area.config = type === 'filter' ? { columns: cfg.filterArea.columns, gap: cfg.filterArea.gap, showActions: cfg.actionsArea?.show !== false } : type === 'card' ? { show: cfg.cardArea?.show ?? false, columns: cfg.cardArea?.columns ?? 4, gap: cfg.cardArea?.gap ?? '16px' } : { height: cfg.tableArea.height ?? '400px', pageSize: cfg.tableArea.pageSize ?? 10, scrollX: !!cfg.tableArea.scrollX, scrollY: !!cfg.tableArea.scrollY, showCheckbox: !!cfg.tableArea.showCheckbox, stickyHeader: cfg.tableArea.stickyHeader !== false, isEmptyData: !!cfg.tableArea.isEmptyData }
+    uiState.area.config = type === 'filter' ? { columns: cfg.filterArea.columns, gap: cfg.filterArea.gap, showActions: cfg.actionsArea?.show !== false } 
+      : type === 'card' ? { show: cfg.cardArea?.show ?? false, columns: cfg.cardArea?.columns ?? 4, gap: cfg.cardArea?.gap ?? '16px' } 
+      : { 
+          height: cfg.tableArea.height ?? '400px', 
+          pageSize: cfg.tableArea.pageSize ?? 10, 
+          scrollX: !!cfg.tableArea.scrollX, 
+          scrollY: !!cfg.tableArea.scrollY, 
+          showCheckbox: !!cfg.tableArea.showCheckbox, 
+          stickyHeader: cfg.tableArea.stickyHeader !== false, 
+          isEmptyData: !!cfg.tableArea.isEmptyData,
+          sortableColumns: cfg.tableArea.sortableColumns || [],
+          filterableColumns: cfg.tableArea.filterableColumns || []
+        }
     uiState.area.visible = true
   },
   async saveAreaConfig() {
@@ -131,7 +143,17 @@ const actions = {
       const { type, config } = uiState.area
       if (type === 'filter') { item.filterArea.columns = config.columns; item.filterArea.gap = config.gap; if (!item.actionsArea) item.actionsArea = { buttons: [] }; item.actionsArea.show = config.showActions }
       else if (type === 'card') { if (!item.cardArea) item.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }; item.cardArea.show = config.show; item.cardArea.columns = config.columns; item.cardArea.gap = config.gap }
-      else { item.tableArea.height = config.height; item.tableArea.pageSize = config.pageSize; item.tableArea.scrollX = config.scrollX; item.tableArea.scrollY = config.scrollY; item.tableArea.showCheckbox = config.showCheckbox; item.tableArea.stickyHeader = config.stickyHeader; item.tableArea.isEmptyData = config.isEmptyData }
+      else { 
+        item.tableArea.height = config.height; 
+        item.tableArea.pageSize = config.pageSize; 
+        item.tableArea.scrollX = config.scrollX; 
+        item.tableArea.scrollY = config.scrollY; 
+        item.tableArea.showCheckbox = config.showCheckbox; 
+        item.tableArea.stickyHeader = config.stickyHeader; 
+        item.tableArea.isEmptyData = config.isEmptyData;
+        item.tableArea.sortableColumns = config.sortableColumns;
+        item.tableArea.filterableColumns = config.filterableColumns;
+      }
     })
     uiState.area.visible = false
   },
@@ -154,7 +176,16 @@ const actions = {
 // --- Computed & Watch ---
 const isSectionVisible = (s: string) => props.visibleSections?.includes(s as any) ?? true
 const visibleFilters = computed(() => pageConfig.value?.filterArea.filters.filter(f => f.visible !== false) || [])
-const visibleColumns = computed(() => pageConfig.value?.tableArea.columns.filter(c => c.visible !== false) || [])
+const visibleColumns = computed(() => {
+  if (!pageConfig.value) return []
+  return pageConfig.value.tableArea.columns
+    .filter(c => c.visible !== false)
+    .map(c => ({
+      ...c,
+      sortable: pageConfig.value?.tableArea.sortableColumns?.includes(c.key) || false,
+      filterable: pageConfig.value?.tableArea.filterableColumns?.includes(c.key) || false
+    }))
+})
 const visibleActions = computed(() => pageConfig.value?.actionsArea?.buttons?.filter((a: any) => a.visible !== false) || [])
 const actionButtonSpan = computed(() => {
   if (!pageConfig.value) return 1
@@ -192,6 +223,16 @@ const editor = {
     }
   },
   delete: (type: keyof typeof crudHandlers, i: number) => crudHandlers[type].handleDelete(i)
+}
+
+const handleColumnResize = (dataIndex: string, width: number) => {
+  if (!isEditMode.value) return
+  const navTitle = currentNavTitle.value
+  const subId = currentNavId.value
+  
+  if (navTitle) {
+      pageStore.updateTableColumn(navTitle, subId, dataIndex, { width: width + 'px' })
+  }
 }
 </script>
 
@@ -241,7 +282,7 @@ const editor = {
                   @dragend="actions.drag.end"
                 >
                   <FilterInput v-if="config.type === 'input'" :label="config.label" v-model="uiState.filters[config.key]" :placeholder="config.placeholder" />
-                  <FilterSelect v-else-if="config.type === 'select'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.options ?? []" />
+                  <FilterSelect v-else-if="config.type === 'select'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.options ?? []" :placeholder="config.placeholder" />
                   <FilterDateRange v-else-if="config.type === 'date-range'" :label="config.label" v-model="uiState.filters[config.key]" />
                   <FilterTreeSelect v-else-if="config.type === 'tree-select'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.treeOptions ?? []" :placeholder="config.placeholder" />
 
@@ -349,7 +390,9 @@ const editor = {
             :sticky-header="pageConfig.tableArea.stickyHeader !== false"
             :bordered="{ wrapper: true, cell: true }"
             :is-empty-data="pageConfig.tableArea.isEmptyData"
+            :column-resizable="isEditMode"
             @action-click="actions.handleAction"
+            @column-resize="handleColumnResize"
           >
             <template v-for="(col, colIndex) in visibleColumns" :key="col.key" #[`header-${col.key}`]>
               <div 
@@ -457,6 +500,20 @@ const editor = {
         </div>
         <div class="grid grid-cols-2 gap-4">
           <div class="flex items-center gap-2"><input type="checkbox" id="isEmptyData" v-model="uiState.area.config.isEmptyData" class="rounded" /><label for="isEmptyData" class="text-sm">是否空数据</label></div>
+        </div>
+        <div class="grid grid-cols-1 gap-4 pt-2 border-t">
+          <div>
+            <label class="text-sm font-medium mb-1.5 block">允许排序的列</label>
+            <ASelect v-model="uiState.area.config.sortableColumns" multiple allow-clear allow-search placeholder="选择列">
+               <AOption v-for="col in availableColumns" :key="col.key" :value="col.key">{{ col.label }}</AOption>
+            </ASelect>
+          </div>
+          <div>
+            <label class="text-sm font-medium mb-1.5 block">允许筛选的列</label>
+            <ASelect v-model="uiState.area.config.filterableColumns" multiple allow-clear allow-search placeholder="选择列">
+               <AOption v-for="col in availableColumns" :key="col.key" :value="col.key">{{ col.label }}</AOption>
+            </ASelect>
+          </div>
         </div>
       </div>
     </AModal>

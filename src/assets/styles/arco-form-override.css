@@ -17,7 +17,10 @@
 /* 基础状态 - 输入框、文本域、选择器 */
 .arco-input-wrapper,
 .arco-textarea-wrapper,
-.arco-select-view-single {
+.arco-select-view-single,
+.arco-select-view-multiple,
+.arco-input-tag,
+.arco-picker {
   background-color: var(--color-bg-2);
   border: 1px solid var(--color-neutral-3);
   border-radius: 4px;
@@ -26,7 +29,10 @@
 /* Hover 状态 */
 .arco-input-wrapper:hover,
 .arco-textarea-wrapper:hover,
-.arco-select-view-single:hover {
+.arco-select-view-single:hover,
+.arco-select-view-multiple:hover,
+.arco-input-tag:hover,
+.arco-picker:hover {
   background-color: var(--color-bg-2);
   border-color: rgb(var(--primary-6));
 }
@@ -34,7 +40,9 @@
 /* Focus 状态 */
 .arco-input-wrapper-focus,
 .arco-textarea-wrapper-focus,
-.arco-select-view-focus {
+.arco-select-view-focus,
+.arco-input-tag-focus,
+.arco-picker-focused {
   background-color: var(--color-bg-2);
   border-color: rgb(var(--primary-6));
 }

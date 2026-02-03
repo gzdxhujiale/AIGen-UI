@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Input } from '@/components/ui/input'
+import { Input as AInput } from '@arco-design/web-vue'
 
 defineProps<{
   label: string
@@ -15,30 +15,12 @@ defineEmits<{
 <template>
   <div class="flex items-center gap-2">
     <label class="text-xs font-medium text-muted-foreground whitespace-nowrap">{{ label }}</label>
-    <Input
+    <AInput
       :model-value="modelValue"
-      @update:model-value="$emit('update:modelValue', $event)"
       :placeholder="placeholder"
-      class="h-9 text-sm flex-1 filter-input-custom"
+      allow-clear
+      class="flex-1 w-[200px]"
+      @update:model-value="$emit('update:modelValue', $event)"
     />
   </div>
 </template>
-
-<style scoped>
-/* 移除焦点时的灰色边框，使用更清爽的样式 */
-:deep(.filter-input-custom) {
-  transition: border-color 0.2s ease;
-}
-
-:deep(.filter-input-custom:focus-visible) {
-  outline: none;
-  box-shadow: none;
-  border-color: hsl(var(--primary));
-}
-
-:deep(.filter-input-custom:focus) {
-  outline: none;
-  box-shadow: none;
-  border-color: hsl(var(--primary));
-}
-</style>

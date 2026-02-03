@@ -114,7 +114,10 @@ const addEffectItem = () => {
           </div>
           <div v-else>
             <label class="text-sm font-medium mb-1.5 block">{{ field.label }}</label>
-            <component :is="resolveComp(field.comp)" v-model="formState[field.key]" v-bind="field.props" class="w-full" />
+            <ASelect v-if="field.comp === 'select'" v-model="formState[field.key]" v-bind="field.props" class="w-full">
+               <AOption v-for="opt in field.props.options" :key="opt.value" :value="opt.value">{{ opt.label }}</AOption>
+            </ASelect>
+            <component v-else :is="resolveComp(field.comp)" v-model="formState[field.key]" v-bind="field.props" class="w-full" />
           </div>
         </div>
       </template>
