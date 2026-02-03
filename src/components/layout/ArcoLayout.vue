@@ -134,8 +134,6 @@ const iconOptions = Object.keys(ArcIcons)
   .map(key => ({ label: key.replace('Icon', ''), value: key }))
   .sort((a, b) => a.label.localeCompare(b.label))
 
-const layoutConfigVisible = ref(false)
-
 const navStyles = computed(() => {
     const cfg = configStore.layoutConfig
     return {
@@ -218,11 +216,6 @@ const navStyles = computed(() => {
           <a-button shape="circle" size="small" @click="collapsed = !collapsed"><ArcIcons.IconMenuUnfold v-if="collapsed" /><ArcIcons.IconMenuFold v-else /></a-button>
           <a-breadcrumb><a-breadcrumb-item>{{ breadcrumbs.main }}</a-breadcrumb-item><a-breadcrumb-item v-if="breadcrumbs.detail" class="cursor-pointer" @click="setDetailTitle(null)">{{ breadcrumbs.sub }}</a-breadcrumb-item><a-breadcrumb-item v-else>{{ breadcrumbs.sub }}</a-breadcrumb-item><a-breadcrumb-item v-if="breadcrumbs.detail">{{ breadcrumbs.detail }}</a-breadcrumb-item></a-breadcrumb>
           <div id="breadcrumb-actions" class="flex items-center gap-4 ml-4"></div>
-          <!-- 布局配置入口 -->
-          <a-button v-if="configStore.isEditMode" size="mini" type="outline" @click="layoutConfigVisible = true" class="ml-2">
-            <template #icon><IconSkin v-if="(ArcIcons as any).IconSkin" /><component v-else :is="resolveIcon('IconEdit')" /></template>
-            导航尺寸/位置
-          </a-button>
         </div>
         <div class="flex items-center gap-2">
             <template v-if="!configStore.isEditMode"><template v-for="(i, idx) in menuStore.menuConfig?.items" :key="idx"><a-button v-if="i.type==='text-button'" type="text" size="small">{{ i.label }}</a-button><div v-else class="flex items-center gap-2 text-xs"><span>{{ i.label }}</span><a-select size="small" style="width:100px" :default-value="i.options?.[0]"><a-option v-for="o in i.options" :key="o">{{ o }}</a-option></a-select></div></template></template>
@@ -256,22 +249,6 @@ const navStyles = computed(() => {
     <a-modal v-model:visible="editDialog.visible" :title="editDialog.title" @ok="handleEditSubmit"><a-form :model="editDialog.form" layout="vertical"><a-form-item label="标题" required><a-input v-model="editDialog.form.title" /></a-form-item><a-form-item v-if="editDialog.mode.includes('main')" label="图标"><a-select v-model="editDialog.form.icon" allow-search><a-option v-for="i in iconOptions" :key="i.value" :value="i.value"><template #icon><component :is="resolveIcon(i.value)" /></template>{{ i.label }}</a-option></a-select></a-form-item><a-form-item v-if="editDialog.mode.includes('main')" label="可见性"><a-checkbox v-model="editDialog.form.visible">侧边栏可见</a-checkbox></a-form-item></a-form></a-modal>
     <a-modal v-model:visible="hMenuDialog.visible" :title="hMenuDialog.isEdit ? '编辑菜单' : '新增菜单'" @ok="saveHMenu"><a-form :model="hMenuDialog.form" layout="vertical"><a-form-item label="类型"><a-radio-group v-model="hMenuDialog.form.type" type="button"><a-radio value="text-button">按钮</a-radio><a-radio value="dropdown">下拉</a-radio></a-radio-group></a-form-item><a-form-item label="标题" required><a-input v-model="hMenuDialog.form.label" /></a-form-item><a-form-item v-if="hMenuDialog.form.type === 'dropdown'" label="选项 (逗号分隔)" required><a-textarea v-model="hMenuDialog.form.options" /></a-form-item></a-form></a-modal>
 
-    <!-- 布局配置弹窗 -->
-    <a-modal v-model:visible="layoutConfigVisible" title="布局样式配置" :width="400" @ok="layoutConfigVisible = false" :footer="false">
-      <a-form :model="configStore.layoutConfig" layout="vertical" size="small">
-        <div class="grid grid-cols-2 gap-x-4">
-          <a-form-item label="一级图标大小 (px)"><a-input-number v-model="configStore.layoutConfig.mainNavIconSize" :min="10" :max="32" /></a-form-item>
-          <a-form-item label="一级图标 X轴偏移"><a-input-number v-model="configStore.layoutConfig.mainNavIconX" :min="-50" :max="50" /></a-form-item>
-          <a-form-item label="一级文字大小 (px)"><a-input-number v-model="configStore.layoutConfig.mainNavNameSize" :min="10" :max="24" /></a-form-item>
-          <a-form-item label="一级文字 X轴偏移"><a-input-number v-model="configStore.layoutConfig.mainNavNameX" :min="-50" :max="50" /></a-form-item>
-          <a-form-item label="二级文字大小 (px)"><a-input-number v-model="configStore.layoutConfig.subNavNameSize" :min="10" :max="24" /></a-form-item>
-          <a-form-item label="二级文字 X轴偏移"><a-input-number v-model="configStore.layoutConfig.subNavNameX" :min="-50" :max="50" /></a-form-item>
-        </div>
-        <div class="mt-4 pt-4 border-t text-right">
-          <a-button type="primary" @click="layoutConfigVisible = false">完成</a-button>
-        </div>
-      </a-form>
-    </a-modal>
   </a-layout>
 </template>
 
