@@ -4,6 +4,8 @@ import { streamChat, isCozeConfigured, type ChatMessage } from '@/api/coze'
 
 import { useConfigStore } from './configStore'
 import { useConfigPageStore } from './config_page_Store'
+import { useAuthStore } from './authStore'
+import { supabase } from '@/api/supabase'
 import { useNavigation } from '@/composables/useNavigation'
 import { toast } from 'vue-sonner'
 
@@ -13,6 +15,12 @@ export interface AIMessage extends ChatMessage {
     status?: 'sending' | 'streaming' | 'complete' | 'error'
     type?: 'text' | 'config_preview'
     configData?: any
+}
+
+export interface ChatSession {
+    id: string
+    title: string
+    updated_at: string
 }
 
 export type PreviewMode = 'initial' | 'append' | null
@@ -39,6 +47,11 @@ export const useAIStore = defineStore('ai', () => {
     const isMinimized = ref(false)
     const changeSummary = ref<ChangeSummary | null>(null)
     const buttonPosition = ref({ x: window.innerWidth - 88, y: window.innerHeight - 144 })
+
+    // --- Session State ---
+    const sessions = ref<ChatSession[]>([])
+    const currentSessionId = ref<string | null>(null)
+
 
     // 上下文模板: 用于控制发送给 AI 的额外上下文信息
     // 支持占位符 {{当前页面json配置}} 和 {{用户指令}}
@@ -142,6 +155,79 @@ export const useAIStore = defineStore('ai', () => {
     const setButtonPosition = (x: number, y: number) => { buttonPosition.value = { x, y } }
 
     // ============================================
+    // Session Management
+    // ============================================
+
+    async function loadSessions() {
+        const authStore = useAuthStore()
+        if (!authStore.user) return
+
+        const { data, error } = await supabase
+            .from('ai_chat_sessions')
+            .select('*')
+            .eq('user_id', authStore.user.id)
+            .order('updated_at', { ascending: false })
+
+        if (error) {
+            console.error('Failed to load sessions:', error)
+            return
+        }
+
+        sessions.value = data || []
+    }
+
+    async function loadSessionMessages(sessionId: string) {
+        isLoading.value = true
+        try {
+            const { data, error } = await supabase
+                .from('ai_chat_messages')
+                .select('*')
+                .eq('session_id', sessionId)
+                .order('created_at', { ascending: true })
+
+            if (error) throw error
+
+            messages.value = (data || []).map(m => ({
+                id: m.id,
+                role: m.role as 'user' | 'assistant',
+                content: m.content || '',
+                timestamp: new Date(m.created_at),
+                status: m.status as any,
+                configData: m.config_data
+            }))
+            currentSessionId.value = sessionId
+        } catch (e: any) {
+            console.error('Failed to load messages:', e)
+            toast.error('加载历史消息失败')
+        } finally {
+            isLoading.value = false
+        }
+    }
+
+    function createNewSession() {
+        currentSessionId.value = null
+        messages.value = []
+        clearPreview()
+    }
+
+    async function deleteSession(sessionId: string) {
+        const { error } = await supabase.from('ai_chat_sessions').delete().eq('id', sessionId)
+        if (error) {
+            toast.error('删除失败')
+            return
+        }
+        sessions.value = sessions.value.filter(s => s.id !== sessionId)
+        if (currentSessionId.value === sessionId) {
+            createNewSession()
+        }
+    }
+
+    async function switchSession(sessionId: string) {
+        if (currentSessionId.value === sessionId) return
+        await loadSessionMessages(sessionId)
+    }
+
+    // ============================================
     // 上下文注入助手
     // ============================================
 
@@ -192,6 +278,36 @@ export const useAIStore = defineStore('ai', () => {
         streamingContent.value = ''
 
         try {
+            // 1. Ensure Session Exists
+            let sessionId = currentSessionId.value
+            if (!sessionId) {
+                const authStore = useAuthStore()
+                if (authStore.user) {
+                    // Create new session in DB
+                    const title = content.slice(0, 30)
+                    const { data, error } = await supabase
+                        .from('ai_chat_sessions')
+                        .insert({ user_id: authStore.user.id, title })
+                        .select()
+                        .single()
+
+                    if (data && !error) {
+                        sessionId = data.id
+                        currentSessionId.value = sessionId
+                        sessions.value.unshift(data) // Add to local list
+                    }
+                }
+            }
+
+            // 2. Persist User Message
+            if (sessionId) {
+                await supabase.from('ai_chat_messages').insert({
+                    session_id: sessionId,
+                    role: 'user',
+                    content: content.trim()
+                })
+            }
+
             // 构建发送给 API 的消息
             const messagesToSend = messages.value
                 .filter(m => m.status === 'complete')
@@ -232,10 +348,21 @@ export const useAIStore = defineStore('ai', () => {
                     streamingContent.value += chunk
                     _updateLastMessage({ content: streamingContent.value })
                 },
-                (full, config) => {
+                async (full, config) => { // Make callback async
                     _updateLastMessage({ content: full, status: 'complete', type: config ? 'config_preview' : undefined, configData: config })
                     if (config) generatePreviewConfigs(config)
                     isLoading.value = false
+
+                    // 3. Persist AI Message
+                    if (sessionId) {
+                        await supabase.from('ai_chat_messages').insert({
+                            session_id: sessionId,
+                            role: 'assistant',
+                            content: full,
+                            config_data: config,
+                            status: 'complete'
+                        })
+                    }
                 },
                 (err) => {
                     _updateLastMessage({ content: `错误: ${err.message}`, status: 'error' })
@@ -331,10 +458,11 @@ export const useAIStore = defineStore('ai', () => {
 
     return {
         messages, isOpen, isLoading, pendingConfig, streamingContent, buttonPosition,
-        previewMode, isMinimized, changeSummary, contextTemplate,
+        previewMode, isMinimized, changeSummary, contextTemplate, sessions, currentSessionId,
         isConfigured, hasMessages, hasPendingConfig, hasPreviewConfig,
         toggleWindow, openWindow, closeWindow, sendMessage, clearMessages,
-        minimizeWindow, generatePreviewConfigs, confirmPreview, cancelPreview, clearPreview, setButtonPosition
+        minimizeWindow, generatePreviewConfigs, confirmPreview, cancelPreview, clearPreview, setButtonPosition,
+        loadSessions, loadSessionMessages, createNewSession, deleteSession, switchSession
     }
 })
 

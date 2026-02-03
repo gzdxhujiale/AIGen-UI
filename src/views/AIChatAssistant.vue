@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
-import { Send, Trash2, Sparkles, Loader2, Check, XIcon, Minus, AlertCircle } from 'lucide-vue-next'
+import { Send, Trash2, Sparkles, Loader2, Check, XIcon, Minus, AlertCircle, Clock, Plus, MessageSquare } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAIStore } from '@/stores/aiStore'
 import { useConfigStore } from '@/stores/configStore'
+import { useAuthStore } from '@/stores/authStore'
 import JsonViewer from 'vue-json-viewer'
 import 'vue-json-viewer/style.css'
 
 const aiStore = useAIStore()
 const configStore = useConfigStore()
+const authStore = useAuthStore()
 
 // --- State Proxies ---
 const isOpen = computed(() => aiStore.isOpen)
@@ -20,6 +22,10 @@ const messages = computed(() => aiStore.messages)
 const isConfigured = computed(() => aiStore.isConfigured)
 const previewMode = computed(() => aiStore.previewMode)
 const changeSummary = computed(() => aiStore.changeSummary)
+const sessions = computed(() => aiStore.sessions)
+const currentSessionId = computed(() => aiStore.currentSessionId)
+
+const isHistoryOpen = ref(false)
 
 // --- Constants & Configs (Data-Driven) ---
 
@@ -194,12 +200,62 @@ const handleSend = (content?: string) => {
     const text = content || inputValue.value.trim()
     if (!text || isLoading.value) return
     aiStore.sendMessage(text); if (!content) inputValue.value = ''
+    if (isHistoryOpen.value) isHistoryOpen.value = false
 }
 const handleRetry = () => aiStore.sendMessage(FIX_JSON_PROMPT)
 const handleClear = () => { aiStore.clearMessages(); configStore.clearPreviewConfig() }
 const handleConfirmPreview = () => aiStore.confirmPreview()
 const handleCancelPreview = () => aiStore.cancelPreview()
 const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+
+// --- History Logic ---
+const toggleHistory = () => {
+    if (!authStore.isAuthenticated) return
+    isHistoryOpen.value = !isHistoryOpen.value
+    if (isHistoryOpen.value) aiStore.loadSessions()
+}
+
+const handleNewChat = () => {
+    aiStore.createNewSession()
+    isHistoryOpen.value = false
+}
+
+const handleSwitchSession = async (id: string) => {
+    await aiStore.switchSession(id)
+    isHistoryOpen.value = false
+}
+
+const handleDeleteSession = async (e: Event, id: string) => {
+    e.stopPropagation()
+    await aiStore.deleteSession(id)
+}
+
+watch(isOpen, (v) => {
+    if (v && authStore.isAuthenticated) {
+        aiStore.loadSessions()
+        // If no current session but we have history, maybe load the first one?
+        // Or just let user start fresh or pick one.
+        // Let's load the latest session automatically if messages are empty and not just created
+        if (messages.value.length === 0 && !currentSessionId.value) {
+            // Check if we should auto-load? Maybe safest to just let user decide or start new.
+            // But user asked for persistence, usually implies auto-loading last state.
+             // Implemented in store logic or here?
+            if (aiStore.sessions.length > 0) {
+                 // aiStore.switchSession(aiStore.sessions[0].id)
+            }
+        }
+    }
+})
+
+// Auto-load sessions on mount if authenticated and window open
+onMounted(() => {
+    if (authStore.isAuthenticated) aiStore.loadSessions()
+})
+
+watch(() => authStore.isAuthenticated, (v) => { 
+    if(v) aiStore.loadSessions()
+    else aiStore.clearMessages()
+})
 </script>
 
 <template>
@@ -234,6 +290,8 @@ const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit',
                     <div class="header-info"><div class="header-title">AI 助手</div><div class="header-subtitle">INTELLIGENT ASSISTANT</div></div>
                 </div>
                 <div class="header-actions">
+                     <button v-if="authStore.isAuthenticated" class="header-action-btn" @click="handleNewChat" title="新对话"><Plus :size="18" /></button>
+                     <button v-if="authStore.isAuthenticated" class="header-action-btn" :class="{ 'text-violet-600 bg-violet-50': isHistoryOpen }" @click="toggleHistory" title="历史记录"><Clock :size="16" /></button>
                     <button class="header-action-btn" @click="handleClear" :disabled="messages.length === 0" title="清空消息"><Trash2 :size="15" /></button>
                     <button class="header-action-btn" @click="aiStore.minimizeWindow" title="最小化"><Minus :size="16" /></button>
                 </div>
@@ -326,6 +384,35 @@ const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit',
                     </div>
                 </div>
             </template>
+            
+            <!-- History Overlay -->
+            <div v-if="isHistoryOpen" class="history-overlay">
+                <div class="history-header">
+                    <span>历史记录</span>
+                    <button class="close-history-btn" @click="isHistoryOpen = false"><XIcon :size="16"/></button>
+                </div>
+                <div class="history-list">
+                    <div v-if="sessions.length === 0" class="history-empty">
+                        <MessageSquare :size="32" class="mb-2 opacity-50"/>
+                        <span>暂无历史记录</span>
+                    </div>
+                    <div 
+                        v-for="session in sessions" 
+                        :key="session.id" 
+                        class="history-item"
+                        :class="{ active: currentSessionId === session.id }"
+                        @click="handleSwitchSession(session.id)"
+                    >
+                        <div class="history-info">
+                            <span class="history-title truncate">{{ session.title || '未命名对话' }}</span>
+                            <span class="history-date">{{ new Date(session.updated_at).toLocaleDateString() }}</span>
+                        </div>
+                        <button class="history-delete-btn" @click="(e) => handleDeleteSession(e, session.id)">
+                            <Trash2 :size="14"/>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </Transition>
 </template>
@@ -796,6 +883,127 @@ const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit',
     margin-bottom: 16px;
 }
 .dark .preview-tabs { background: rgba(255, 255, 255, 0.1); }
+
+/* History Overlay */
+.history-overlay {
+    position: absolute;
+    top: 64px; /* header height */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    animation: fade-in-up 0.2s ease-out;
+}
+.dark .history-overlay { background: #1e293b; }
+
+.history-header {
+    padding: 16px 20px;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f1f5f9;
+}
+.dark .history-header { border-bottom-color: rgba(255,255,255,0.05); }
+
+.close-history-btn {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+}
+.close-history-btn:hover { background: #f1f5f9; }
+
+.history-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+.history-item:hover {
+    background: #f8fafc;
+}
+.dark .history-item:hover { background: rgba(255,255,255,0.05); }
+
+.history-item.active {
+    background: #f5f3ff;
+    border-color: rgba(139, 92, 246, 0.2);
+}
+.dark .history-item.active {
+    background: rgba(139, 92, 246, 0.1);
+    border-color: rgba(139, 92, 246, 0.2);
+}
+
+.history-info {
+    flex: 1;
+    min-width: 0;
+    margin-right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.history-title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #1e293b;
+}
+.dark .history-title { color: #f8fafc; }
+
+.history-date {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.history-delete-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    opacity: 0;
+    transition: all 0.2s;
+}
+.history-item:hover .history-delete-btn { opacity: 1; }
+.history-delete-btn:hover {
+    background: #fee2e2;
+    color: #ef4444;
+}
+
+.history-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #94a3b8;
+    font-size: 0.9rem;
+}
+
+@keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
 .preview-tab {
     flex: 1;
