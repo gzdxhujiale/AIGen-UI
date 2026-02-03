@@ -204,7 +204,20 @@ const actionButtonSpan = computed(() => {
 const availableColumns = computed(() => pageConfig.value?.tableArea.columns.map(c => ({ key: c.key, label: c.label || c.key })) || [])
 
 watch(currentNavId, () => mockHelper.load(), { immediate: true })
-watch(pageConfig, (c) => { if (c) { Object.keys(uiState.filters).forEach(k => delete uiState.filters[k]); c.filterArea.filters.forEach(f => uiState.filters[f.key] = f.defaultValue); mockHelper.load() } }, { immediate: true, deep: true })
+watch(pageConfig, (c) => {
+  if (c) {
+    Object.keys(uiState.filters).forEach(k => delete uiState.filters[k])
+    c.filterArea.filters.forEach(f => {
+      const dv = f.defaultValue
+      if (f.type === 'date-range' || f.type === 'select') {
+        uiState.filters[f.key] = Array.isArray(dv) ? dv : []
+      } else {
+        uiState.filters[f.key] = dv ?? ''
+      }
+    })
+    mockHelper.load()
+  }
+}, { immediate: true, deep: true })
 
 const currentCrud = computed(() => {
   const type = uiState.area.type
@@ -245,8 +258,8 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
         <!-- 功能区 - 筛选条件 + 操作按钮 -->
         <div 
           v-if="(isSectionVisible('filter') && pageConfig.filterArea?.show !== false) || (isSectionVisible('actions') && pageConfig.actionsArea?.show !== false)"
-          class="bg-background rounded-xl border shadow-sm relative"
-          :class="{ 'ring-2 ring-primary/50': isEditMode }"
+          class="relative transition-all duration-300"
+          :class="isEditMode ? 'bg-background rounded-xl border shadow-sm ring-2 ring-primary/50' : 'border-b border-border/60 pb-2'"
         >
           <div v-if="isEditMode" class="flex items-center justify-between px-5 py-2 border-b bg-muted/30">
             <div class="flex items-center gap-3">
@@ -266,7 +279,7 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
             </div>
           </div>
           
-          <div class="p-5">
+          <div :class="isEditMode ? 'p-5' : 'py-3 px-1'">
             <div 
               v-if="isSectionVisible('filter') && pageConfig.filterArea?.show !== false"
               class="grid"

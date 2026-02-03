@@ -17,8 +17,18 @@ export const useConfigStore = defineStore('config', () => {
     )
     const isEditMode = ref(false)
 
+    const layoutConfig = ref(JSON.parse(localStorage.getItem('arco_layout_config') || JSON.stringify({
+        mainNavIconSize: 16,
+        mainNavIconX: 0,
+        mainNavNameSize: 14,
+        mainNavNameX: -5,
+        subNavNameSize: 14,
+        subNavNameX: 0,
+    })))
+
     watch(navigationStyle, (val) => localStorage.setItem('shadcn_nav_style_pref', val))
     watch(filterActionFusion, (val) => localStorage.setItem('shadcn_filter_action_fusion', String(val)))
+    watch(layoutConfig, (val) => localStorage.setItem('arco_layout_config', JSON.stringify(val)), { deep: true })
 
     // --- 预览模式状态 ---
     const previewMode = ref<'append' | 'override' | null>(null)
@@ -108,7 +118,7 @@ export const useConfigStore = defineStore('config', () => {
     }
 
     return {
-        navigationStyle, filterActionFusion, isEditMode,
+        navigationStyle, filterActionFusion, isEditMode, layoutConfig,
         previewMode, previewConfig, previewNavGroups, isInPreviewMode,
         setEditMode, setNavigationStyle, setFilterActionFusion,
         setPreviewConfig, setPreviewNav, clearPreviewConfig,
