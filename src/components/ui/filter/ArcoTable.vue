@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Table as ATable, Empty as AEmpty, type TableColumnData } from '@arco-design/web-vue'
+import { Table as ATable, Empty as AEmpty, Skeleton as ASkeleton, SkeletonLine as ASkeletonLine, type TableColumnData } from '@arco-design/web-vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { TableColumn } from '@/types'
@@ -23,6 +23,9 @@ interface Props {
   showHeader?: boolean
   isEmptyData?: boolean
   columnResizable?: boolean
+  draggable?: boolean
+  tableLayoutFixed?: boolean
+  selectionWidth?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -39,7 +42,10 @@ const props = withDefaults(defineProps<Props>(), {
   hover: true,
   showHeader: true,
   isEmptyData: false,
-  columnResizable: false
+  columnResizable: false,
+  draggable: false,
+  tableLayoutFixed: true,
+  selectionWidth: 40
 })
 
 // Emits
@@ -49,11 +55,14 @@ const emit = defineEmits<{
   (e: 'action-click', action: string, record: any): void
   (e: 'page-change', page: number): void
   (e: 'column-resize', dataIndex: string, width: number): void
+  (e: 'column-reorder', fromIndex: number, toIndex: number): void
 }>()
 
 // Internal State
 const selectedKeys = ref<(string | number)[]>([])
 const currentPage = ref(1)
+const dragIndex = ref(-1)
+const dragOverIndex = ref(-1)
 
 // Helper: Status Styles
 const getStatusClass = (status: string) => {
@@ -75,13 +84,16 @@ const visibleColumns = computed(() => {
 
 // Map to Arco Columns
 const arcoColumns = computed<TableColumnData[]>(() => {
-  return visibleColumns.value.map(col => {
+  const cols = visibleColumns.value
+  return cols.map((col, index) => {
+    const isLastColumn = index === cols.length - 1
     const isPercentage = typeof col.width === 'string' && col.width.endsWith('%')
-    const width = (col.width && !isPercentage) ? parseInt(col.width) : undefined
-
+    // 最后一列不设置固定宽度，让它自适应，避免调整列宽时其他列被重新分配
+    const width = isLastColumn ? undefined : (col.width && !isPercentage) ? parseInt(col.width) : undefined
+    
     const cellStyle: any = {}
     if (col.minWidth) cellStyle.minWidth = col.minWidth
-    if (isPercentage) cellStyle.width = col.width
+    if (isPercentage && !isLastColumn) cellStyle.width = col.width
 
     return {
       title: col.label,
@@ -131,7 +143,7 @@ const rowSelection = computed(() => {
     type: 'checkbox' as const,
     showCheckedAll: props.showCheckedAll,
     selectedRowKeys: selectedKeys.value,
-    width: 30,
+    width: props.selectionWidth,
     onChange: (keys: (string | number)[]) => {
       selectedKeys.value = keys
       emit('selection-change', keys)
@@ -160,6 +172,37 @@ const emptyBodyHeight = computed(() => {
   }
   return undefined
 })
+
+// Drag and Drop Handlers
+const handleDragStart = (e: DragEvent, index: number) => {
+  if (!props.draggable) return
+  dragIndex.value = index
+  // Set drag image or ghost effect if needed
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+  }
+}
+
+const handleDragOver = (e: DragEvent, index: number) => {
+  if (!props.draggable) return
+  e.preventDefault()
+  dragOverIndex.value = index
+}
+
+const handleDrop = (toIndex: number) => {
+  if (!props.draggable || dragIndex.value === -1) return
+  const fromIndex = dragIndex.value
+  if (fromIndex !== toIndex) {
+    emit('column-reorder', fromIndex, toIndex)
+  }
+  dragIndex.value = -1
+  dragOverIndex.value = -1
+}
+
+const handleDragEnd = () => {
+  dragIndex.value = -1
+  dragOverIndex.value = -1
+}
 </script>
 
 <template>
@@ -177,6 +220,7 @@ const emptyBodyHeight = computed(() => {
       :hoverable="props.hover"
       :show-header="props.showHeader"
       :column-resizable="props.columnResizable"
+      :table-layout-fixed="props.tableLayoutFixed"
       size="medium"
       @page-change="handlePageChange"
       @row-click="handleRowClick"
@@ -193,10 +237,31 @@ const emptyBodyHeight = computed(() => {
       </template>
 
       <!-- Forward Header Slots -->
-      <template v-for="col in visibleColumns" :key="`header-${col.key}`" #[`title-${col.key}`]>
-        <slot :name="`header-${col.key}`" :column="col">
-          {{ col.label }}
-        </slot>
+      <template v-for="(col, idx) in visibleColumns" :key="`header-${col.key}`" #[`title-${col.key}`]>
+        <div 
+          class="custom-header-cell flex items-center relative w-full group/header-cell h-full"
+          :class="{ 
+            'cursor-move': props.draggable, 
+            'bg-primary/5': dragOverIndex === idx && dragIndex !== idx 
+          }"
+          :draggable="props.draggable"
+          @dragstart="handleDragStart($event, idx)"
+          @dragover="handleDragOver($event, idx)"
+          @drop="handleDrop(idx)"
+          @dragend="handleDragEnd"
+        >
+          <div class="flex-1 flex items-center min-w-0 pr-2">
+            <slot :name="`header-${col.key}`" :column="col">
+              <span class="truncate">{{ col.label }}</span>
+            </slot>
+          </div>
+
+          <!-- Vertical indicator for drop target -->
+          <div v-if="props.draggable && dragOverIndex === idx && dragIndex !== idx" 
+            class="absolute top-0 bottom-0 w-1 bg-primary z-20 pointer-events-none"
+            :class="dragIndex < idx ? 'right-0' : 'left-0'"
+          ></div>
+        </div>
       </template>
 
       <!-- Forward/Handle Body Slots -->
@@ -254,6 +319,15 @@ const emptyBodyHeight = computed(() => {
         </slot>
       </template>
     </ATable>
+
+    <!-- Loading Overlay with Arco Skeleton -->
+    <div v-if="props.loading" class="absolute inset-0 z-50 bg-background/80 backdrop-blur-[1px] flex flex-col p-4">
+      <div class="bg-card border rounded-lg p-6 shadow-sm w-full h-full">
+        <ASkeleton :animation="true">
+          <ASkeletonLine :rows="8" :widths="['40%', '100%', '100%', '80%', '100%', '100%', '60%', '100%']" />
+        </ASkeleton>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -271,6 +345,28 @@ const emptyBodyHeight = computed(() => {
   font-weight: 700;
   font-size: 0.875rem;
   color: hsl(var(--foreground));
+}
+
+.arco-table-wrapper :deep(.arco-table-th) {
+  position: relative;
+}
+
+.custom-header-cell {
+  box-sizing: border-box;
+}
+
+/* Header Action Buttons Hover Logic */
+.arco-table-wrapper :deep(.header-actions) {
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s ease-in-out;
+  transform: translateY(-50%) translateX(4px);
+}
+
+.arco-table-wrapper :deep(.arco-table-th:hover) .header-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
 }
 
 .arco-table-wrapper :deep(.arco-btn-link) {
@@ -293,18 +389,7 @@ const emptyBodyHeight = computed(() => {
 
 /* Ensure table expands to fill height */
 .arco-table-wrapper :deep(.arco-table-container) {
-  display: flex;
-  flex-direction: column;
-}
-
-.arco-table-wrapper :deep(.arco-table-header) {
-  flex-shrink: 0;
-}
-
-.arco-table-wrapper :deep(.arco-table-body) {
-  flex: 1;
-  position: relative;
-  min-height: 200px; /* Ensure minimum height for no-data state */
+  min-height: 200px;
 }
 
 /* Force centering for no-data */

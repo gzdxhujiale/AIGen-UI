@@ -3,6 +3,7 @@ defineOptions({ name: 'Page1' })
 import { computed, reactive, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm, Drawer as ADrawer, Select as ASelect, Option as AOption } from '@arco-design/web-vue'
+import { debounce } from 'lodash-es'
 import { Pencil, Plus, Trash2, File } from 'lucide-vue-next'
 import { safeJsonParseWithError } from '@/utils/error'
 import { generateMockValue, evaluateConditionalValue } from '@/utils/mock-data'
@@ -160,11 +161,12 @@ const actions = {
   drag: {
     start(i: number) { uiState.drag.index = i },
     over(e: DragEvent, i: number) { e.preventDefault(); uiState.drag.overIndex = i },
-    async drop(type: 'filter' | 'action' | 'column', target: number) {
-      if (uiState.drag.index === -1 || uiState.drag.index === target) return
+    async drop(type: 'filter' | 'action' | 'column', target: number, from?: number) {
+      const source = from !== undefined ? from : uiState.drag.index
+      if (source === -1 || source === target) return
       await _saveComponentAction(item => {
         const arr = type === 'filter' ? item.filterArea.filters : type === 'action' ? item.actionsArea.buttons : item.tableArea.columns
-        const [removed] = arr.splice(uiState.drag.index, 1)
+        const [removed] = arr.splice(source, 1)
         arr.splice(target, 0, removed)
       })
       this.end()
@@ -225,7 +227,7 @@ const editor = {
   delete: (type: keyof typeof crudHandlers, i: number) => crudHandlers[type].handleDelete(i)
 }
 
-const handleColumnResize = (dataIndex: string, width: number) => {
+const handleColumnResize = debounce((dataIndex: string, width: number) => {
   if (!isEditMode.value) return
   const navTitle = currentNavTitle.value
   const subId = currentNavId.value
@@ -233,7 +235,7 @@ const handleColumnResize = (dataIndex: string, width: number) => {
   if (navTitle) {
       pageStore.updateTableColumn(navTitle, subId, dataIndex, { width: width + 'px' })
   }
-}
+}, 300)
 </script>
 
 <template>
@@ -286,12 +288,15 @@ const handleColumnResize = (dataIndex: string, width: number) => {
                   <FilterDateRange v-else-if="config.type === 'date-range'" :label="config.label" v-model="uiState.filters[config.key]" />
                   <FilterTreeSelect v-else-if="config.type === 'tree-select'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.treeOptions ?? []" :placeholder="config.placeholder" />
 
-                  <div v-if="isEditMode" class="absolute inset-0 bg-primary/5 opacity-0 group-hover/filter:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-md pointer-events-none">
-                    <AButton size="mini" type="text" class="pointer-events-auto" @click.stop="editor.open('filter', 'edit', filterIndex)">
-                      <Pencil class="w-3 h-3" />
+                  <div v-if="isEditMode" class="absolute right-1 top-1 opacity-0 group-hover/filter:opacity-100 transition-opacity bg-background/95 backdrop-blur-sm border shadow-sm rounded-md flex items-center p-0.5 z-10 space-x-0.5 pointer-events-auto">
+                    <AButton size="mini" type="text" class="!px-1.5 !h-6 !text-muted-foreground hover:!text-primary transition-colors" @click.stop="editor.open('filter', 'edit', filterIndex)">
+                      <Pencil class="w-3.5 h-3.5" />
                     </AButton>
+                    <div class="w-px h-3 bg-border/60 mx-0.5"></div>
                     <APopconfirm content="确定要删除该筛选项吗?" @ok="editor.delete('filter', filterIndex)">
-                      <AButton size="mini" type="text" status="danger" class="pointer-events-auto" @click.stop><Trash2 class="w-3 h-3" /></AButton>
+                      <AButton size="mini" type="text" status="danger" class="!px-1.5 !h-6 !text-muted-foreground hover:!text-destructive transition-colors" @click.stop>
+                        <Trash2 class="w-3.5 h-3.5" />
+                      </AButton>
                     </APopconfirm>
                   </div>
                 </div>
@@ -302,10 +307,15 @@ const handleColumnResize = (dataIndex: string, width: number) => {
                   <div class="relative group/action">
                     <Button v-if="action.variant === 'shadcn-outline'" variant="outline" class="h-9 px-5" :class="action.className" @click="actions.handleAction(action.key)">{{ action.label }}</Button>
                     <AButton v-else :type="action.variant as any ?? 'outline'" class="h-9 px-5" :class="action.className" @click="actions.handleAction(action.key)">{{ action.label }}</AButton>
-                    <div v-if="isEditMode" class="absolute -top-1 -right-1 opacity-0 group-hover/action:opacity-100 transition-opacity flex gap-0.5">
-                      <AButton size="mini" type="primary" class="!p-1 !min-w-0" @click.stop="editor.open('action', 'edit', index)"><Pencil class="w-2.5 h-2.5" /></AButton>
+                    <div v-if="isEditMode" class="absolute -top-2 -right-2 opacity-0 group-hover/action:opacity-100 transition-opacity bg-background/95 backdrop-blur-sm border shadow-sm rounded-md flex items-center p-0.5 z-10 space-x-0.5">
+                      <AButton size="mini" type="text" class="!px-1.5 !h-6 !text-muted-foreground hover:!text-primary transition-colors" @click.stop="editor.open('action', 'edit', index)">
+                        <Pencil class="w-3.5 h-3.5" />
+                      </AButton>
+                      <div class="w-px h-3 bg-border/60 mx-0.5"></div>
                       <APopconfirm content="确定要删除该操作按钮吗?" @ok="editor.delete('action', index)">
-                        <AButton size="mini" status="danger" class="!p-1 !min-w-0" @click.stop><Trash2 class="w-2.5 h-2.5" /></AButton>
+                        <AButton size="mini" type="text" status="danger" class="!px-1.5 !h-6 !text-muted-foreground hover:!text-destructive transition-colors" @click.stop>
+                          <Trash2 class="w-3.5 h-3.5" />
+                        </AButton>
                       </APopconfirm>
                     </div>
                   </div>
@@ -319,10 +329,15 @@ const handleColumnResize = (dataIndex: string, width: number) => {
                   <div class="relative group/action">
                     <Button v-if="action.variant === 'shadcn-outline'" variant="outline" class="h-9 px-5" :class="action.className" @click="actions.handleAction(action.key)">{{ action.label }}</Button>
                     <AButton v-else :type="action.variant as any ?? 'outline'" class="h-9 px-5" :class="action.className" @click="actions.handleAction(action.key)">{{ action.label }}</AButton>
-                    <div v-if="isEditMode" class="absolute -top-1 -right-1 opacity-0 group-hover/action:opacity-100 transition-opacity flex gap-0.5">
-                      <AButton size="mini" type="primary" class="!p-1 !min-w-0" @click.stop="editor.open('action', 'edit', index)"><Pencil class="w-2.5 h-2.5" /></AButton>
+                    <div v-if="isEditMode" class="absolute -top-2 -right-2 opacity-0 group-hover/action:opacity-100 transition-opacity bg-background/95 backdrop-blur-sm border shadow-sm rounded-md flex items-center p-0.5 z-10 space-x-0.5">
+                      <AButton size="mini" type="text" class="!px-1.5 !h-6 !text-muted-foreground hover:!text-primary transition-colors" @click.stop="editor.open('action', 'edit', index)">
+                        <Pencil class="w-3.5 h-3.5" />
+                      </AButton>
+                      <div class="w-px h-3 bg-border/60 mx-0.5"></div>
                       <APopconfirm content="确定要删除该操作按钮吗?" @ok="editor.delete('action', index)">
-                        <AButton size="mini" status="danger" class="!p-1 !min-w-0" @click.stop><Trash2 class="w-2.5 h-2.5" /></AButton>
+                        <AButton size="mini" type="text" status="danger" class="!px-1.5 !h-6 !text-muted-foreground hover:!text-destructive transition-colors" @click.stop>
+                          <Trash2 class="w-3.5 h-3.5" />
+                        </AButton>
                       </APopconfirm>
                     </div>
                   </div>
@@ -349,10 +364,15 @@ const handleColumnResize = (dataIndex: string, width: number) => {
             <template v-for="(card, cardIndex) in pageConfig.cardArea.cards" :key="card.key">
               <div class="relative group/card">
                 <FilterCard :title="card.title" :data="card.data" :height="pageConfig.cardArea.cardHeight" :width="pageConfig.cardArea.cardWidth" />
-                <div v-if="isEditMode" class="absolute inset-0 bg-primary/5 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-md">
-                  <AButton size="mini" type="text" @click="editor.open('card', 'edit', cardIndex)"><Pencil class="w-3 h-3" /></AButton>
+                <div v-if="isEditMode" class="absolute right-2 top-2 opacity-0 group-hover/card:opacity-100 transition-opacity bg-background/95 backdrop-blur-sm border shadow-sm rounded-md flex items-center p-0.5 z-10 space-x-0.5">
+                  <AButton size="mini" type="text" class="!px-1.5 !h-6 !text-muted-foreground hover:!text-primary transition-colors" @click.stop="editor.open('card', 'edit', cardIndex)">
+                    <Pencil class="w-3.5 h-3.5" />
+                  </AButton>
+                  <div class="w-px h-3 bg-border/60 mx-0.5"></div>
                   <APopconfirm content="确定要删除该卡片吗?" @ok="editor.delete('card', cardIndex)">
-                    <AButton size="mini" type="text" status="danger" @click.stop><Trash2 class="w-3 h-3" /></AButton>
+                    <AButton size="mini" type="text" status="danger" class="!px-1.5 !h-6 !text-muted-foreground hover:!text-destructive transition-colors" @click.stop>
+                      <Trash2 class="w-3.5 h-3.5" />
+                    </AButton>
                   </APopconfirm>
                 </div>
               </div>
@@ -391,27 +411,24 @@ const handleColumnResize = (dataIndex: string, width: number) => {
             :bordered="{ wrapper: true, cell: true }"
             :is-empty-data="pageConfig.tableArea.isEmptyData"
             :column-resizable="isEditMode"
+            :draggable="isEditMode"
             @action-click="actions.handleAction"
             @column-resize="handleColumnResize"
+            @column-reorder="(from, to) => actions.drag.drop('column', to, from)"
           >
-            <template v-for="(col, colIndex) in visibleColumns" :key="col.key" #[`header-${col.key}`]>
-              <div 
-                class="flex items-center gap-2 relative group/column h-full w-full"
-                :class="{ 'cursor-move': isEditMode }"
-                :draggable="isEditMode"
-                @dragstart="actions.drag.start(colIndex)"
-                @dragover="(e) => actions.drag.over(e, colIndex)"
-                @drop="actions.drag.drop('column', colIndex)"
-                @dragend="actions.drag.end"
-              >
-                <span>{{ col.label }}</span>
-                <div v-if="isEditMode" class="absolute -right-2 top-1/2 -translate-y-1/2 bg-background border shadow-sm rounded flex items-center p-0.5 opacity-0 group-hover/column:opacity-100 transition-opacity z-10">
-                  <AButton size="mini" type="text" class="!px-1 !h-5" @click.stop="editor.open('column', 'edit', colIndex)"><Pencil class="w-2.5 h-2.5" /></AButton>
-                  <APopconfirm content="确定要删除该列吗?" @ok="editor.delete('column', colIndex)">
-                    <AButton size="mini" type="text" status="danger" class="!px-1 !h-5" @click.stop><Trash2 class="w-2.5 h-2.5" /></AButton>
-                  </APopconfirm>
-                </div>
-                <div v-if="isEditMode && uiState.drag.overIndex === colIndex" class="absolute left-0 top-0 bottom-0 w-0.5 bg-primary z-20"></div>
+            <template v-for="col in visibleColumns" :key="col.key" #[`header-${col.key}`]>
+              <span class="truncate line-clamp-1 pr-2">{{ col.label }}</span>
+              <!-- Header Actions: Hidden by default, shown on TH hover via CSS -->
+              <div v-if="isEditMode" class="header-actions absolute right-1 top-1/2 -translate-y-1/2 bg-background/95 backdrop-blur-sm border shadow-sm rounded-md flex items-center p-0.5 z-10 space-x-0.5">
+                <AButton size="mini" type="text" class="!px-1.5 !h-6 !text-muted-foreground hover:!text-primary transition-colors" @click.stop="editor.open('column', 'edit', visibleColumns.findIndex(c => c.key === col.key))">
+                  <Pencil class="w-3.5 h-3.5" />
+                </AButton>
+                <div class="w-px h-3 bg-border/60 mx-0.5"></div>
+                <APopconfirm content="确定要删除该列吗?" @ok="editor.delete('column', visibleColumns.findIndex(c => c.key === col.key))">
+                  <AButton size="mini" type="text" status="danger" class="!px-1.5 !h-6 !text-muted-foreground hover:!text-destructive transition-colors" @click.stop>
+                    <Trash2 class="w-3.5 h-3.5" />
+                  </AButton>
+                </APopconfirm>
               </div>
             </template>
           </ArcoTable>
