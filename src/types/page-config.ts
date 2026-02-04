@@ -83,6 +83,7 @@ export interface TableColumn {
     visible?: boolean
     mockFormat?: MockFormat           // 虚拟数据格式
     mockList?: string[] // 当格式为 'list' 或 'list-order' 时的候选数据
+    mockDigits?: number // 当格式为 'random-number' 时的位数（默认5）
     conditionRules?: Array<{ sourceColumn: string; operator: string; compareValue: string; displayValue: string; color?: string }> // 条件格式规则（基于其他列的值）
     buttons?: string[] // 文字按钮列表
     sortable?: boolean                // 是否开启排序
@@ -103,6 +104,7 @@ export interface TableAreaConfig {
     pageSize?: number       // 每页显示行数
     columns: TableColumn[]
     isEmptyData?: boolean   // 是否空数据
+    draggable?: boolean     // 是否启用拖拽排序
     sortableColumns?: string[] // 允许排序的列 Keys
     filterableColumns?: string[] // 允许筛选的列 Keys
 }

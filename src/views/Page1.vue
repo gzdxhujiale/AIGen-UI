@@ -76,14 +76,14 @@ const mockHelper = {
 // --- CRUD Config & Transformers ---
 const transformers: Record<string, (item: any) => any> = {
   filter: (item: any) => ({ ...item, placeholder: item.placeholder || '', options: item.options?.join(',') || '', treeOptions: item.treeOptions ? JSON.stringify(item.treeOptions) : '', visible: item.visible ?? true, multiple: item.multiple ?? false }),
-  column: (item: any) => ({ ...item, type: item.type || 'text', width: item.width || '120px', mockFormat: item.mockFormat || 'text', mockList: item.mockList?.join(',') || '', conditionRules: item.conditionRules ? JSON.stringify(item.conditionRules) : '', buttons: item.buttons?.join(',') || '', visible: item.visible ?? true, fixed: item.fixed || 'none', align: item.align || 'left' }),
+  column: (item: any) => ({ ...item, type: item.type || 'text', width: item.width || '120px', mockFormat: item.mockFormat || 'text', mockList: item.mockList?.join(',') || '', mockDigits: item.mockDigits || 5, conditionRules: item.conditionRules ? JSON.stringify(item.conditionRules) : '', buttons: item.buttons?.join(',') || '', visible: item.visible ?? true, fixed: item.fixed || 'none', align: item.align || 'left' }),
   action: (item: any) => ({ ...item, className: item.className || '', variant: item.variant || 'outline', effectType: item.effectType || 'none', effectTitle: item.effectConfig?.title || '', effectContent: item.effectConfig?.content || '', effectFormItems: (item.effectConfig?.formItems || []).map((fi: any) => ({ ...fi, multiple: fi.multiple ?? false })), effectTableColumns: (item.effectConfig?.tableArea?.columns || []).map((col: any) => ({ ...col, mockListStr: col.mockList?.join(',') || '', conditionRulesJson: col.conditionRules ? JSON.stringify(col.conditionRules) : '[]' })), visible: item.visible ?? true }),
   card: (item: any) => ({ ...item, data: String(item.data) })
 }
 
 const crudHandlers = {
   filter: useConfigCrud({ name: '筛选项', defaultForm: () => ({ key: '', type: 'input', label: '', placeholder: '', options: '', treeOptions: '', visible: true, multiple: false }), doSave: async (m, i, f) => _saveComponentAction(item => { const nf = { key: f.key || `f_${Date.now()}`, type: f.type, label: f.label, placeholder: f.placeholder || undefined, visible: f.visible, multiple: f.multiple, options: f.options ? f.options.split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : [], treeOptions: f.treeOptions ? safeJsonParseWithError(f.treeOptions, '树形') : undefined }; if (m && i !== null) item.filterArea.filters[i] = nf; else item.filterArea.filters.push(nf) }), doDelete: (i) => _saveComponentAction(item => item.filterArea.filters.splice(i, 1)) }),
-  column: useConfigCrud({ name: '列', defaultForm: () => ({ key: '', label: '', width: '120px', type: 'text', mockFormat: 'none', mockList: '', conditionRules: '', buttons: '', fixed: 'none', align: 'left', visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { const nc = { key: f.key || `c_${Date.now()}`, label: f.label, width: f.width, type: f.type === 'text' ? undefined : f.type, visible: f.visible, mockFormat: f.mockFormat === 'none' ? undefined : f.mockFormat, mockList: ['list', 'list-order'].includes(f.mockFormat) ? f.mockList.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined, conditionRules: f.mockFormat === 'conditional' && f.conditionRules ? safeJsonParseWithError(f.conditionRules, '条件') : undefined, buttons: f.type === 'text-button' && f.buttons ? f.buttons.split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : undefined, fixed: f.fixed === 'none' ? undefined : f.fixed, align: f.align === 'left' ? undefined : f.align }; if (m && i !== null) item.tableArea.columns[i] = nc; else item.tableArea.columns.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.tableArea.columns.splice(i, 1)) }),
+  column: useConfigCrud({ name: '列', defaultForm: () => ({ key: '', label: '', width: '120px', type: 'text', mockFormat: 'none', mockList: '', mockDigits: 5, conditionRules: '', buttons: '', fixed: 'none', align: 'left', visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { const nc = { key: f.key || `c_${Date.now()}`, label: f.label, width: f.width, type: f.type === 'text' ? undefined : f.type, visible: f.visible, mockFormat: f.mockFormat === 'none' ? undefined : f.mockFormat, mockList: ['list', 'list-order'].includes(f.mockFormat) ? f.mockList.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined, mockDigits: f.mockFormat === 'random-number' ? f.mockDigits : undefined, conditionRules: f.mockFormat === 'conditional' && f.conditionRules ? safeJsonParseWithError(f.conditionRules, '条件') : undefined, buttons: f.type === 'text-button' && f.buttons ? f.buttons.split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : undefined, fixed: f.fixed === 'none' ? undefined : f.fixed, align: f.align === 'left' ? undefined : f.align }; if (m && i !== null) item.tableArea.columns[i] = nc; else item.tableArea.columns.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.tableArea.columns.splice(i, 1)) }),
   action: useConfigCrud({ name: '按钮', defaultForm: () => ({ key: '', label: '', variant: 'outline', className: '', effectType: 'none', effectTitle: '', effectContent: '', effectFormItems: [], effectTableColumns: [], visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.actionsArea) item.actionsArea = { buttons: [], show: true }; const na = { key: f.key || `a_${Date.now()}`, label: f.label, variant: f.variant, className: f.className || undefined, visible: f.visible, effectType: f.effectType === 'none' ? undefined : f.effectType, effectConfig: ['modal', 'page-form'].includes(f.effectType) ? { title: f.effectTitle, content: f.effectContent, formItems: f.effectFormItems } : ['table', 'drawer'].includes(f.effectType) ? { title: f.effectTitle, targetNavId: (f as any).targetNavId || (f as any).effectConfig?.targetNavId } : undefined }; if (m && i !== null) item.actionsArea.buttons[i] = na; else item.actionsArea.buttons.push(na) }), doDelete: (i) => _saveComponentAction(item => item.actionsArea.buttons.splice(i, 1)) }),
   card: useConfigCrud({ name: '卡片', defaultForm: () => ({ key: '', title: '', data: '' }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.cardArea) item.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }; const nc = { key: f.key || `cd_${Date.now()}`, title: f.title, data: f.data }; if (m && i !== null) item.cardArea.cards[i] = nc; else item.cardArea.cards.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.cardArea.cards.splice(i, 1)) })
 }
@@ -141,6 +141,7 @@ const actions = {
           showCheckbox: !!cfg.tableArea.showCheckbox, 
           stickyHeader: cfg.tableArea.stickyHeader !== false, 
           isEmptyData: !!cfg.tableArea.isEmptyData,
+          draggable: !!cfg.tableArea.draggable,
           sortableColumns: cfg.tableArea.sortableColumns || [],
           filterableColumns: cfg.tableArea.filterableColumns || []
         }
@@ -159,6 +160,7 @@ const actions = {
         item.tableArea.showCheckbox = config.showCheckbox; 
         item.tableArea.stickyHeader = config.stickyHeader; 
         item.tableArea.isEmptyData = config.isEmptyData;
+        item.tableArea.draggable = config.draggable;
         item.tableArea.sortableColumns = config.sortableColumns;
         item.tableArea.filterableColumns = config.filterableColumns;
       }
@@ -429,15 +431,31 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
           <ArcoTable
             :columns="visibleColumns"
             :data="uiState.tableData"
-            :show-checkbox="pageConfig.tableArea.showCheckbox"
-            :page-size="pageConfig.tableArea.pageSize"
-            :scroll-x="pageConfig.tableArea.scrollX"
-            :scroll-y="false"
-            :sticky-header="pageConfig.tableArea.stickyHeader !== false"
-            :bordered="{ wrapper: true, cell: true }"
-            :is-empty-data="pageConfig.tableArea.isEmptyData"
-            :column-resizable="isEditMode"
-            :draggable="isEditMode"
+            :config="{
+              scroll: { 
+                x: pageConfig.tableArea.scrollX, 
+                y: pageConfig.tableArea.scrollY,
+                stickyHeader: pageConfig.tableArea.stickyHeader !== false
+              },
+              selection: { 
+                enabled: pageConfig.tableArea.showCheckbox 
+              },
+              drag: { 
+                column: isEditMode, 
+                row: pageConfig.tableArea.draggable 
+              },
+              pagination: { 
+                pageSize: pageConfig.tableArea.pageSize 
+              },
+              layout: { 
+                bordered: { wrapper: true, cell: true },
+                height: pageConfig.tableArea.height
+              },
+              column: { 
+                resizable: isEditMode 
+              },
+              emptyData: pageConfig.tableArea.isEmptyData
+            }"
             @action-click="actions.handleAction"
             @column-resize="handleColumnResize"
             @column-reorder="(from, to) => actions.drag.drop('column', to, from)"
@@ -543,6 +561,7 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
         </div>
         <div class="grid grid-cols-2 gap-4">
           <div class="flex items-center gap-2"><input type="checkbox" id="isEmptyData" v-model="uiState.area.config.isEmptyData" class="rounded" /><label for="isEmptyData" class="text-sm">是否空数据</label></div>
+          <div class="flex items-center gap-2"><input type="checkbox" id="draggable" v-model="uiState.area.config.draggable" class="rounded" /><label for="draggable" class="text-sm">拖拽锚点</label></div>
         </div>
         <div class="grid grid-cols-1 gap-4 pt-2 border-t">
           <div>

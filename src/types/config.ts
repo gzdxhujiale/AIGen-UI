@@ -117,8 +117,10 @@ export const MOCK_FORMATS = {
     TEXT: 'text',
     /** 随机日期时间 */
     DATETIME: 'datetime',
-    /** 随机数字 */
+    /** 序号（从1开始递增） */
     NUMBER: 'number',
+    /** 随机数字 */
+    RANDOM_NUMBER: 'random-number',
     /** 从列表中随机选取 */
     LIST: 'list',
 } as const
@@ -133,7 +135,8 @@ export const MOCK_FORMAT_LABELS: Record<MockFormat, string> = {
     [MOCK_FORMATS.NONE]: '无',
     [MOCK_FORMATS.TEXT]: '随机文本',
     [MOCK_FORMATS.DATETIME]: '随机时间',
-    [MOCK_FORMATS.NUMBER]: '随机数字',
+    [MOCK_FORMATS.NUMBER]: '序号',
+    [MOCK_FORMATS.RANDOM_NUMBER]: '随机数字',
     [MOCK_FORMATS.LIST]: '从列表随机',
 }
 

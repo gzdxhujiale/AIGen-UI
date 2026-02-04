@@ -7,6 +7,7 @@ export function generateMockValue(col: any, index: number): string | number {
     const format = col.mockFormat
     const label = col.label
     const mockList = col.mockList
+    const mockDigits = col.mockDigits || 5 // 默认5位数
 
     // 如果 mockFormat 未定义或为 'none'，返回空字符串
     if (!format || format === 'none') {
@@ -46,7 +47,13 @@ export function generateMockValue(col: any, index: number): string | number {
             const s = String(randomSeconds).padStart(2, '0')
             return `${year}-${month}-${day} ${h}:${m}:${s}`
         case 'number':
-            return Math.floor(10000 + Math.random() * 90000)
+            // 序号：从1开始递增
+            return index + 1
+        case 'random-number':
+            // 随机数字：根据位数生成
+            const min = Math.pow(10, mockDigits - 1)
+            const max = Math.pow(10, mockDigits) - 1
+            return Math.floor(min + Math.random() * (max - min + 1))
         case 'conditional':
             // 条件格式：根据其他列的值来决定显示什么
             // 需要在调用方处理（因为依赖其他列的值）

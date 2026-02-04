@@ -4,48 +4,18 @@ import { Table as ATable, Empty as AEmpty, Skeleton as ASkeleton, SkeletonLine a
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { TableColumn } from '@/types'
+import { type TableConfig, mergeTableConfig } from './table-config'
 
-// Props
+// Props - 使用配置对象模式
 interface Props {
   columns: TableColumn[]
   data: any[]
-  showCheckbox?: boolean
-  showCheckedAll?: boolean
-  pageSize?: number
-  height?: string
-  scrollX?: boolean | string | number
-  scrollY?: boolean | string | number
-  stickyHeader?: boolean
+  config?: TableConfig
   loading?: boolean
-  bordered?: boolean | { wrapper?: boolean, cell?: boolean, headerCell?: boolean, bodyCell?: boolean }
-  stripe?: boolean
-  hover?: boolean
-  showHeader?: boolean
-  isEmptyData?: boolean
-  columnResizable?: boolean
-  draggable?: boolean
-  tableLayoutFixed?: boolean
-  selectionWidth?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  showCheckbox: true,
-  showCheckedAll: true,
-  pageSize: 10,
-  height: '500px',
-  scrollX: true,
-  scrollY: true,
-  stickyHeader: true,
-  loading: false,
-  bordered: true,
-  stripe: false,
-  hover: true,
-  showHeader: true,
-  isEmptyData: false,
-  columnResizable: false,
-  draggable: false,
-  tableLayoutFixed: true,
-  selectionWidth: 40
+  loading: false
 })
 
 // Emits
@@ -56,7 +26,11 @@ const emit = defineEmits<{
   (e: 'page-change', page: number): void
   (e: 'column-resize', dataIndex: string, width: number): void
   (e: 'column-reorder', fromIndex: number, toIndex: number): void
+  (e: 'row-reorder', data: any[]): void
 }>()
+
+// 合并用户配置与默认配置
+const cfg = computed(() => mergeTableConfig(props.config))
 
 // Internal State
 const selectedKeys = ref<(string | number)[]>([])
@@ -85,15 +59,26 @@ const visibleColumns = computed(() => {
 // Map to Arco Columns
 const arcoColumns = computed<TableColumnData[]>(() => {
   const cols = visibleColumns.value
+  
+  // 找出最后一个非固定列的索引
+  let lastNonFixedIndex = -1
+  for (let i = cols.length - 1; i >= 0; i--) {
+    if (!cols[i].fixed) {
+      lastNonFixedIndex = i
+      break
+    }
+  }
+  
   return cols.map((col, index) => {
-    const isLastColumn = index === cols.length - 1
-    const isPercentage = typeof col.width === 'string' && col.width.endsWith('%')
-    // 最后一列不设置固定宽度，让它自适应，避免调整列宽时其他列被重新分配
-    const width = isLastColumn ? undefined : (col.width && !isPercentage) ? parseInt(col.width) : undefined
+    let width: number | undefined = undefined
     
-    const cellStyle: any = {}
-    if (col.minWidth) cellStyle.minWidth = col.minWidth
-    if (isPercentage && !isLastColumn) cellStyle.width = col.width
+    if (col.width) {
+      width = typeof col.width === 'string' ? parseInt(col.width) || 120 : col.width
+    } else if (col.fixed) {
+      width = 120
+    } else if (index !== lastNonFixedIndex) {
+      width = 120
+    }
 
     return {
       title: col.label,
@@ -103,13 +88,9 @@ const arcoColumns = computed<TableColumnData[]>(() => {
       align: col.align,
       ellipsis: col.ellipsis,
       tooltip: col.tooltip,
-      slotName: col.key, // Slot mapping for body
-      titleSlotName: `title-${col.key}`, // Slot mapping for header
-      cellStyle: Object.keys(cellStyle).length > 0 ? cellStyle : undefined,
-      headerCellStyle: Object.keys(cellStyle).length > 0 ? cellStyle : undefined,
-      // Sorting
+      slotName: col.key,
+      titleSlotName: `title-${col.key}`,
       sortable: col.sortable ? { sortDirections: ['ascend', 'descend'] } : undefined,
-      // Filtering - Generate filters from data if filterable is true
       filterable: col.filterable ? {
         filters: Array.from(new Set(props.data.map(item => item[col.key]))).filter(Boolean).map(val => ({ text: String(val), value: String(val) })),
         filter: (value: any, record: any) => String(record[col.key]).includes(String(value)),
@@ -123,31 +104,42 @@ const arcoColumns = computed<TableColumnData[]>(() => {
 const paginationProps = computed(() => ({
   total: props.data.length,
   current: currentPage.value,
-  pageSize: props.pageSize,
-  showTotal: true,
-  showJumper: true,
+  pageSize: cfg.value.pagination.pageSize,
+  showTotal: cfg.value.pagination.showTotal,
+  showJumper: cfg.value.pagination.showJumper,
   size: 'small',
   showPageSize: false,
 }))
 
 // Scroll Configuration
-const scroll = computed(() => ({
-  x: props.scrollX === true ? '100%' : props.scrollX,
-  y: props.scrollY === true ? props.height : props.scrollY
-}))
+const scroll = computed(() => {
+  const x = cfg.value.scroll.x ? '100%' : undefined
+  const y = cfg.value.scroll.y === true ? cfg.value.layout.height : (cfg.value.scroll.y || undefined)
+  return { x, y }
+})
 
 // Selection Configuration
 const rowSelection = computed(() => {
-  if (!props.showCheckbox) return undefined
+  if (!cfg.value.selection.enabled) return undefined
   return {
     type: 'checkbox' as const,
-    showCheckedAll: props.showCheckedAll,
+    showCheckedAll: cfg.value.selection.showCheckedAll,
     selectedRowKeys: selectedKeys.value,
-    width: props.selectionWidth,
+    width: cfg.value.selection.width,
     onChange: (keys: (string | number)[]) => {
       selectedKeys.value = keys
       emit('selection-change', keys)
     }
+  }
+})
+
+// Row Draggable Configuration
+const rowDraggableConfig = computed(() => {
+  if (!cfg.value.drag.row) return undefined
+  return {
+    type: 'handle' as const,
+    width: 40,
+    title: ' '
   }
 })
 
@@ -166,31 +158,34 @@ const handleActionClick = (action: string, record: any, e: Event) => {
   emit('action-click', action, record)
 }
 
+const handleRowChange = (data: any[]) => {
+  emit('row-reorder', data)
+}
+
 const emptyBodyHeight = computed(() => {
-  if (props.isEmptyData && props.pageSize) {
-    return props.pageSize * 44
+  if (cfg.value.emptyData && cfg.value.pagination.pageSize) {
+    return cfg.value.pagination.pageSize * 44
   }
   return undefined
 })
 
-// Drag and Drop Handlers
+// Column Drag Handlers
 const handleDragStart = (e: DragEvent, index: number) => {
-  if (!props.draggable) return
+  if (!cfg.value.drag.column) return
   dragIndex.value = index
-  // Set drag image or ghost effect if needed
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move'
   }
 }
 
 const handleDragOver = (e: DragEvent, index: number) => {
-  if (!props.draggable) return
+  if (!cfg.value.drag.column) return
   e.preventDefault()
   dragOverIndex.value = index
 }
 
 const handleDrop = (toIndex: number) => {
-  if (!props.draggable || dragIndex.value === -1) return
+  if (!cfg.value.drag.column || dragIndex.value === -1) return
   const fromIndex = dragIndex.value
   if (fromIndex !== toIndex) {
     emit('column-reorder', fromIndex, toIndex)
@@ -215,16 +210,19 @@ const handleDragEnd = () => {
       :loading="props.loading"
       :row-selection="rowSelection"
       row-key="id"
-      :bordered="props.bordered"
-      :stripe="props.stripe"
-      :hoverable="props.hover"
-      :show-header="props.showHeader"
-      :column-resizable="props.columnResizable"
-      :table-layout-fixed="props.tableLayoutFixed"
+      :bordered="cfg.layout.bordered"
+      :stripe="cfg.layout.stripe"
+      :hoverable="cfg.layout.hover"
+      :show-header="cfg.showHeader"
+      :column-resizable="cfg.column.resizable"
+      :sticky-header="cfg.scroll.stickyHeader"
+      :table-layout-fixed="cfg.layout.fixed"
+      :draggable="rowDraggableConfig"
       size="medium"
       @page-change="handlePageChange"
       @row-click="handleRowClick"
       @column-resize="(index: string, width: number) => emit('column-resize', index, width)"
+      @change="handleRowChange"
     >
       <!-- Empty Slot -->
       <template #empty>
@@ -241,10 +239,10 @@ const handleDragEnd = () => {
         <div 
           class="custom-header-cell flex items-center relative w-full group/header-cell h-full"
           :class="{ 
-            'cursor-move': props.draggable, 
+            'cursor-move': cfg.drag.column, 
             'bg-primary/5': dragOverIndex === idx && dragIndex !== idx 
           }"
-          :draggable="props.draggable"
+          :draggable="cfg.drag.column"
           @dragstart="handleDragStart($event, idx)"
           @dragover="handleDragOver($event, idx)"
           @drop="handleDrop(idx)"
@@ -257,7 +255,7 @@ const handleDragEnd = () => {
           </div>
 
           <!-- Vertical indicator for drop target -->
-          <div v-if="props.draggable && dragOverIndex === idx && dragIndex !== idx" 
+          <div v-if="cfg.drag.column && dragOverIndex === idx && dragIndex !== idx" 
             class="absolute top-0 bottom-0 w-1 bg-primary z-20 pointer-events-none"
             :class="dragIndex < idx ? 'right-0' : 'left-0'"
           ></div>
@@ -267,8 +265,6 @@ const handleDragEnd = () => {
       <!-- Forward/Handle Body Slots -->
       <template v-for="col in visibleColumns" :key="col.key" #[col.key]="{ record, rowIndex }">
         <slot :name="col.key" :record="record" :rowIndex="rowIndex" :column="col">
-          <!-- Default Render Logic based on 'type' -->
-          
           <!-- Badge -->
           <Badge 
             v-if="col.type === 'badge'" 
@@ -315,7 +311,7 @@ const handleDragEnd = () => {
           </div>
           
           <!-- Default Text -->
-          <span v-else class="text-sm text-foreground/80 inline-block min-h-[22px]">{{ record[col.key] || '' }}</span>
+          <span v-else class="text-sm text-foreground/80">{{ record[col.key] || '' }}</span>
         </slot>
       </template>
     </ATable>
@@ -345,10 +341,6 @@ const handleDragEnd = () => {
   font-weight: 700;
   font-size: 0.875rem;
   color: hsl(var(--foreground));
-}
-
-.arco-table-wrapper :deep(.arco-table-th) {
-  position: relative;
 }
 
 .custom-header-cell {
@@ -400,7 +392,7 @@ const handleDragEnd = () => {
   transform: translate(-50%, -50%) !important;
   width: 100%;
   height: 100%;
-  inset: auto !important; /* Reset inset */
+  inset: auto !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -410,7 +402,4 @@ const handleDragEnd = () => {
 .arco-table-wrapper :deep(.arco-table-td-sorted) {
   background-color: transparent;
 }
-
-
-
 </style>

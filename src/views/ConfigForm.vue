@@ -2,7 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import {
   Input as AInput, Select as ASelect, Option as AOption,
-  Textarea as ATextarea, Button as AButton
+  Textarea as ATextarea, Button as AButton, InputNumber as AInputNumber
 } from '@arco-design/web-vue'
 import { Button as ShadcnButton } from '@/components/ui/button'
 import { FormInput, Plus, Trash2 } from 'lucide-vue-next'
@@ -128,8 +128,12 @@ const addEffectItem = () => {
           <div>
             <label class="text-sm font-medium mb-1.5 block">Mock 格式</label>
             <ASelect v-model="formState.mockFormat" class="w-full" placeholder="选择规则">
-               <AOption v-for="o in ['none', 'text', 'datetime', 'number', 'list', 'list-order', 'conditional']" :key="o" :value="o">{{ o }}</AOption>
+               <AOption v-for="o in ['none', 'text', 'datetime', 'number', 'random-number', 'list', 'list-order', 'conditional']" :key="o" :value="o">{{ o === 'number' ? '序号' : o === 'random-number' ? '随机数字' : o }}</AOption>
             </ASelect>
+          </div>
+          <div v-if="formState.mockFormat === 'random-number'">
+             <label class="text-sm font-medium mb-1.5 block">位数</label>
+             <AInputNumber v-model="formState.mockDigits" :min="1" :max="10" :default-value="5" class="w-full" />
           </div>
           <div v-if="['list','list-order'].includes(formState.mockFormat)">
              <label class="text-sm font-medium mb-1.5 block">列表值 (逗号隔开)</label>
