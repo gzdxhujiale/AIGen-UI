@@ -75,9 +75,8 @@ const handleSelectAll = (checked: boolean | (string | number | boolean)[]) => {
       allow-search
       :max-tag-count="maxTagCount"
       :trigger-props="{ autoFitPopupMinWidth: true }"
-      class="text-render-select"
-      :style="{ width: width || '200px' }"
-      :class="{ 'is-all-selected': isAllSelected }"
+      :class="['text-render-select', { 'is-all-selected': isAllSelected, 'flex-1': !width }]"
+      :style="width ? { width } : undefined"
     >
       <template #header v-if="multiple">
         <div class="px-3 py-2 border-b border-gray-100 dark:border-gray-800">

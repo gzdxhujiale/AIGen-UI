@@ -20,7 +20,8 @@ defineEmits<{
       :model-value="modelValue"
       :placeholder="placeholder"
       allow-clear
-      :style="{ width: width || '200px' }"
+      :class="!width && 'flex-1'"
+      :style="width ? { width } : undefined"
       @update:model-value="$emit('update:modelValue', $event)"
     />
   </div>

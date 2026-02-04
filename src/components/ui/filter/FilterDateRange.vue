@@ -18,8 +18,8 @@ defineEmits<{
     <ARangePicker
       :model-value="Array.isArray(modelValue) ? modelValue : []"
       allow-clear
-      class="flex-1"
-      :style="{ width: width || '200px' }"
+      :class="!width && 'flex-1'"
+      :style="width ? { width } : undefined"
       @update:model-value="(val: any) => $emit('update:modelValue', val)"
     />
   </div>

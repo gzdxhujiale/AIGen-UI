@@ -31,8 +31,8 @@ defineEmits<{
       allow-search
       allow-clear
       :field-names="{ key: 'value', title: 'label', children: 'children' }"
-      class="flex-1"
-      :style="{ width: width || '200px' }"
+      :class="!width && 'flex-1'"
+      :style="width ? { width } : undefined"
       @update:model-value="(val: any) => $emit('update:modelValue', val)"
     />
   </div>

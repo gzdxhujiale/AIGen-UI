@@ -84,10 +84,10 @@ const handleSubmit = async () => {
              <div class="space-y-6">
                 <template v-for="item in formItems" :key="item.key">
                    <div>
-                      <FilterInput v-if="item.type === 'input'" :label="item.label" v-model="formData[item.key]" :placeholder="item.placeholder"  />
-                      <FilterSelect v-else-if="item.type === 'select'" :label="item.label" v-model="formData[item.key]" :options="item.options || []" :placeholder="item.placeholder" :multiple="item.multiple !== false" />
-                      <FilterDateRange v-else-if="item.type === 'date-range'" :label="item.label" v-model="formData[item.key]"  />
-                      <FilterTreeSelect v-else-if="item.type === 'tree-select'" :label="item.label" v-model="formData[item.key]" :options="item.treeOptions || []" :placeholder="item.placeholder"  />
+                      <FilterInput v-if="item.type === 'input'" :label="item.label" v-model="formData[item.key]" :placeholder="item.placeholder" width="320px" />
+                      <FilterSelect v-else-if="item.type === 'select'" :label="item.label" v-model="formData[item.key]" :options="item.options || []" :placeholder="item.placeholder" :multiple="item.multiple !== false" width="320px" />
+                      <FilterDateRange v-else-if="item.type === 'date-range'" :label="item.label" v-model="formData[item.key]" width="320px" />
+                      <FilterTreeSelect v-else-if="item.type === 'tree-select'" :label="item.label" v-model="formData[item.key]" :options="item.treeOptions || []" :placeholder="item.placeholder" width="320px" />
                       <div v-else class="space-y-1.5">
                          <label class="text-xs font-medium text-muted-foreground">{{ item.label }}</label>
                          <ATextarea v-if="item.type === 'textarea'" v-model="formData[item.key]" :placeholder="item.placeholder" :auto-size="{minRows:3}" />
