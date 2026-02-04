@@ -27,6 +27,7 @@ const formSchemas = computed(() => ({
     { key: 'label', label: '显示标签 (Label)', comp: 'input', props: { placeholder: '如: 关键词' } },
     { key: 'type', label: '类型 (Type)', comp: 'select', props: { options: [{value:'input',label:'输入框'},{value:'select',label:'下拉框'},{value:'date-range',label:'日期范围'},{value:'tree-select',label:'树形选择'}] } },
     { key: 'placeholder', label: '占位文字', comp: 'input', props: { placeholder: '请输入...' } },
+    { key: 'multiple', label: '启用多选', comp: 'checkbox', showIf: (s:any) => s.type === 'select' },
     { key: 'options', label: '选项列表 (逗号分隔)', comp: 'textarea', showIf: (s:any) => s.type === 'select', props: { placeholder: 'A,B,C', autoSize: {minRows:2} } },
     { key: 'treeOptions', label: '树形数据 JSON', comp: 'textarea', showIf: (s:any) => s.type === 'tree-select', props: { placeholder: '[{"key":"1",...}]', class: 'font-mono text-xs' } }
   ],
@@ -164,7 +165,11 @@ const addEffectItem = () => {
                  <AInput v-model="item.label" size="mini" placeholder="标签" />
                  <AInput v-model="item.key" size="mini" placeholder="Key" />
                  <ASelect v-model="item.type" size="mini"><AOption value="input">Input</AOption><AOption value="textarea">Textarea</AOption><AOption value="select">Select</AOption><AOption value="tree-select">Tree</AOption><AOption value="date-range">Date</AOption></ASelect>
-                 <ATextarea v-if="item.type==='select'" :model-value="item.options?.join(',')" @update:model-value="(v)=>item.options=String(v).split(/[，,]/).map(s=>s.trim()).filter(Boolean)" placeholder="选项A,选项B" class="col-span-3 text-[10px]" :auto-size="{minRows:1,maxRows:2}"/>
+                 <div v-if="item.type === 'select'" class="col-span-3 flex items-center gap-1.5 px-0.5">
+                    <input type="checkbox" v-model="item.multiple" class="w-3 h-3 rounded" :id="'mult-' + item.key"/>
+                    <label :for="'mult-' + item.key" class="text-[10px] text-muted-foreground whitespace-nowrap cursor-pointer">启用多选</label>
+                 </div>
+                 <ATextarea v-if="item.type==='select'" :model-value="item.options?.join(',')" @update:model-value="(v)=>item.options=String(v).split(/[，,]/).map(s=>s.trim())" placeholder="选项A,选项B" class="col-span-3 text-[10px]" :auto-size="{minRows:1,maxRows:2}"/>
                  <ATextarea v-if="item.type==='tree-select'" v-model="item.treeOptions" placeholder='[{"value":"1","label":"A"}]' class="col-span-3 text-[10px] font-mono" :auto-size="{minRows:1,maxRows:3}"/>
                  <Trash2 class="absolute top-1 right-1 w-3 h-3 text-red-400 cursor-pointer opacity-0 group-hover:opacity-100" @click="formState.effectFormItems.splice(idx,1)" />
               </div>

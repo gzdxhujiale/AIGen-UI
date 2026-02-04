@@ -28,6 +28,7 @@ export interface FilterConfig {
     type: FilterType
     label: string
     placeholder?: string
+    multiple?: boolean
     options?: string[]
     treeOptions?: TreeNode[]
     defaultValue?: string | any | undefined

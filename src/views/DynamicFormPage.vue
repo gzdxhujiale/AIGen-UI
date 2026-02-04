@@ -45,7 +45,13 @@ watch(context, (ctx) => {
   if (ctx && ctx.effectConfig?.formItems) {
     const data: Record<string, any> = {}
     ctx.effectConfig.formItems.forEach((item: any) => {
-      data[item.key] = item.defaultValue || ''
+      if (item.type === 'select' && item.multiple !== false) {
+        data[item.key] = item.defaultValue || []
+      } else if (item.type === 'date-range') {
+        data[item.key] = item.defaultValue || []
+      } else {
+        data[item.key] = item.defaultValue || ''
+      }
     })
     formData.value = data
   }
@@ -79,7 +85,7 @@ const handleSubmit = async () => {
                 <template v-for="item in formItems" :key="item.key">
                    <div>
                       <FilterInput v-if="item.type === 'input'" :label="item.label" v-model="formData[item.key]" :placeholder="item.placeholder"  />
-                      <FilterSelect v-else-if="item.type === 'select'" :label="item.label" v-model="formData[item.key]" :options="item.options || []" :placeholder="item.placeholder"  />
+                      <FilterSelect v-else-if="item.type === 'select'" :label="item.label" v-model="formData[item.key]" :options="item.options || []" :placeholder="item.placeholder" :multiple="item.multiple !== false" />
                       <FilterDateRange v-else-if="item.type === 'date-range'" :label="item.label" v-model="formData[item.key]"  />
                       <FilterTreeSelect v-else-if="item.type === 'tree-select'" :label="item.label" v-model="formData[item.key]" :options="item.treeOptions || []" :placeholder="item.placeholder"  />
                       <div v-else class="space-y-1.5">

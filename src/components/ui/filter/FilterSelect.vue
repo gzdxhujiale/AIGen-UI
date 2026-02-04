@@ -4,19 +4,20 @@ import { Select as ASelect, Option as AOption, Checkbox as ACheckbox } from '@ar
 
 const props = withDefaults(defineProps<{
   label: string
-  modelValue: string[] | undefined
+  modelValue: string | string[] | undefined
   options: string[]
+  multiple?: boolean
   maxTagCount?: number
   placeholder?: string
   width?: string
 }>(), {
-  modelValue: () => [],
+  multiple: false,
   maxTagCount: 1,
   placeholder: '请选择'
 })
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: string[]): void
+  (e: 'update:modelValue', value: string | string[]): void
 }>()
 
 const filteredOptions = computed(() => {
@@ -25,23 +26,32 @@ const filteredOptions = computed(() => {
 
 const internalValue = computed({
   get: () => {
-    // 如果值为 "全部" 或 "All"，则视为选择了所有 filteredOptions
+    // 如果是单选模式
+    if (!props.multiple) {
+      return props.modelValue as string || ''
+    }
+    
+    // 如果是多选模式，且值为 "全部" 或 "All"，则视为选择了所有 filteredOptions
     if (props.modelValue === '全部' as any || props.modelValue === 'All' as any) {
       return [...filteredOptions.value]
     }
-    return props.modelValue || []
+    return (props.modelValue as string[]) || []
   },
-  set: (val: string[]) => {
+  set: (val: string | string[]) => {
     emit('update:modelValue', val)
   }
 })
 
 const isAllSelected = computed(() => {
-  return internalValue.value && filteredOptions.value.length > 0 && internalValue.value.length === filteredOptions.value.length
+  if (!props.multiple) return false
+  const val = internalValue.value as string[]
+  return val && filteredOptions.value.length > 0 && val.length === filteredOptions.value.length
 })
 
 const isIndeterminate = computed(() => {
-  const len = internalValue.value?.length || 0
+  if (!props.multiple) return false
+  const val = internalValue.value as string[]
+  const len = val?.length || 0
   return len > 0 && len < filteredOptions.value.length
 })
 
@@ -60,7 +70,7 @@ const handleSelectAll = (checked: boolean | (string | number | boolean)[]) => {
     <ASelect
       v-model="internalValue"
       :placeholder="placeholder"
-      multiple
+      :multiple="multiple"
       allow-clear
       allow-search
       :max-tag-count="maxTagCount"
@@ -69,7 +79,7 @@ const handleSelectAll = (checked: boolean | (string | number | boolean)[]) => {
       :style="{ width: width || '200px' }"
       :class="{ 'is-all-selected': isAllSelected }"
     >
-      <template #header>
+      <template #header v-if="multiple">
         <div class="px-3 py-2 border-b border-gray-100 dark:border-gray-800">
           <ACheckbox
             :model-value="isAllSelected"
@@ -81,7 +91,7 @@ const handleSelectAll = (checked: boolean | (string | number | boolean)[]) => {
         </div>
       </template>
       
-      <template #prefix v-if="isAllSelected">
+      <template #prefix v-if="multiple && isAllSelected">
         <span class="text-[var(--color-text-1)] whitespace-nowrap pl-1">全选</span>
       </template>
 
@@ -129,3 +139,4 @@ const handleSelectAll = (checked: boolean | (string | number | boolean)[]) => {
   text-overflow: ellipsis;
 }
 </style>
+
