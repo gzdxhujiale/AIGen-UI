@@ -5,6 +5,7 @@ defineProps<{
   label: string
   modelValue: string | number | undefined
   placeholder?: string
+  width?: string
 }>()
 
 defineEmits<{
@@ -19,7 +20,7 @@ defineEmits<{
       :model-value="modelValue"
       :placeholder="placeholder"
       allow-clear
-      class="flex-1 w-[200px]"
+      :style="{ width: width || '200px' }"
       @update:model-value="$emit('update:modelValue', $event)"
     />
   </div>

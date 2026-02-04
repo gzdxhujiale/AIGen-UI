@@ -4,6 +4,7 @@ import { RangePicker as ARangePicker } from '@arco-design/web-vue'
 defineProps<{
   label: string
   modelValue: (string | number | Date)[] | undefined
+  width?: string
 }>()
 
 defineEmits<{
@@ -17,7 +18,8 @@ defineEmits<{
     <ARangePicker
       :model-value="Array.isArray(modelValue) ? modelValue : []"
       allow-clear
-      class="flex-1 w-[200px]"
+      class="flex-1"
+      :style="{ width: width || '200px' }"
       @update:model-value="(val: any) => $emit('update:modelValue', val)"
     />
   </div>

@@ -8,6 +8,7 @@ const props = withDefaults(defineProps<{
   options: string[]
   maxTagCount?: number
   placeholder?: string
+  width?: string
 }>(), {
   modelValue: () => [],
   maxTagCount: 1,
@@ -64,7 +65,8 @@ const handleSelectAll = (checked: boolean | (string | number | boolean)[]) => {
       allow-search
       :max-tag-count="maxTagCount"
       :trigger-props="{ autoFitPopupMinWidth: true }"
-      class="w-[200px] text-render-select"
+      class="text-render-select"
+      :style="{ width: width || '200px' }"
       :class="{ 'is-all-selected': isAllSelected }"
     >
       <template #header>

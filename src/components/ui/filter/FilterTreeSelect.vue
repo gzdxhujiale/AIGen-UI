@@ -13,6 +13,7 @@ defineProps<{
   modelValue: string | undefined
   options: TreeNode[]
   placeholder?: string
+  width?: string
 }>()
 
 defineEmits<{
@@ -30,7 +31,8 @@ defineEmits<{
       allow-search
       allow-clear
       :field-names="{ key: 'value', title: 'label', children: 'children' }"
-      class="flex-1 w-[200px]"
+      class="flex-1"
+      :style="{ width: width || '200px' }"
       @update:model-value="(val: any) => $emit('update:modelValue', val)"
     />
   </div>

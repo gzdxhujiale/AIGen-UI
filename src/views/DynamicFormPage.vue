@@ -69,7 +69,7 @@ const handleSubmit = async () => {
   <div class="dynamic-form-page h-full flex flex-col">
     <!-- Content -->
     <div class="flex-1 overflow-y-auto p-6">
-      <div class="max-w-3xl mx-auto">
+      <div class="max-w-3xl mx-auto relative -left-[40px]">
         <ACard :bordered="false" class="bg-transparent" :header-style="{ border: 'none' }">
           <div v-if="!context" class="py-10 text-center text-muted-foreground">
              配置不存在或已失效
@@ -78,10 +78,10 @@ const handleSubmit = async () => {
              <div class="space-y-6">
                 <template v-for="item in formItems" :key="item.key">
                    <div>
-                      <FilterInput v-if="item.type === 'input'" :label="item.label" v-model="formData[item.key]" :placeholder="item.placeholder" />
-                      <FilterSelect v-else-if="item.type === 'select'" :label="item.label" v-model="formData[item.key]" :options="item.options || []" :placeholder="item.placeholder" />
-                      <FilterDateRange v-else-if="item.type === 'date-range'" :label="item.label" v-model="formData[item.key]" />
-                      <FilterTreeSelect v-else-if="item.type === 'tree-select'" :label="item.label" v-model="formData[item.key]" :options="item.treeOptions || []" :placeholder="item.placeholder" />
+                      <FilterInput v-if="item.type === 'input'" :label="item.label" v-model="formData[item.key]" :placeholder="item.placeholder"  />
+                      <FilterSelect v-else-if="item.type === 'select'" :label="item.label" v-model="formData[item.key]" :options="item.options || []" :placeholder="item.placeholder"  />
+                      <FilterDateRange v-else-if="item.type === 'date-range'" :label="item.label" v-model="formData[item.key]"  />
+                      <FilterTreeSelect v-else-if="item.type === 'tree-select'" :label="item.label" v-model="formData[item.key]" :options="item.treeOptions || []" :placeholder="item.placeholder"  />
                       <div v-else class="space-y-1.5">
                          <label class="text-xs font-medium text-muted-foreground">{{ item.label }}</label>
                          <ATextarea v-if="item.type === 'textarea'" v-model="formData[item.key]" :placeholder="item.placeholder" :auto-size="{minRows:3}" />
