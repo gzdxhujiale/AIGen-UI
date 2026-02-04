@@ -32,6 +32,7 @@ export interface FilterConfig {
     treeOptions?: TreeNode[]
     defaultValue?: string | any | undefined
     visible?: boolean
+    fullWidth?: boolean
 }
 
 /**

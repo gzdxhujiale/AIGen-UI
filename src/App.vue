@@ -5,7 +5,9 @@ import AuthPage from '@/views/AuthPage.vue'
 import Profile from '@/views/Profile.vue'
 import SkeletonLoading from '@/views/SkeletonLoading.vue'
 import ExceptionPage from '@/views/ExceptionPage.vue'
+import DynamicFormPage from '@/views/DynamicFormPage.vue'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
+
 import { useOnboarding } from '@/composables/useOnboarding'
 import { useAuthStore } from '@/stores/authStore'
 import { useConfigStore } from '@/stores/configStore'
@@ -27,7 +29,7 @@ const { startOnboarding } = useOnboarding()
 const isConfigLoading = ref(true)
 
 // Page Mapping
-const pageComponents: Record<string, any> = { Page1, profile: Profile }
+const pageComponents: Record<string, any> = { Page1, profile: Profile, DynamicFormPage }
 const CurrentPageComponent = computed(() => pageComponents[currentPage.value] || Page1)
 
 // Dynamic Layout

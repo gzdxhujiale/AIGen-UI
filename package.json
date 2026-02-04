@@ -10,7 +10,7 @@
     "deploy": "npm run build && echo 'aigenui.hujiale.works' > dist/CNAME && npx -y gh-pages -d dist"
   },
   "dependencies": {
-    "@ai-sdk/ui-utils": "^1.2.11",
+    "@ai-sdk/ui-utils": " ^1.2.11",
     "@arco-design/web-vue": "^2.57.0",
     "@internationalized/date": "^3.10.1",
     "@supabase/supabase-js": "^2.90.1",

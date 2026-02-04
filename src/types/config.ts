@@ -23,6 +23,8 @@ export const FILTER_TYPES = {
     DATE_RANGE: 'date-range',
     /** 树形选择器 */
     TREE_SELECT: 'tree-select',
+    /** 文本域 */
+    TEXTAREA: 'textarea',
 } as const
 
 /** 筛选器类型的联合类型 */
@@ -36,6 +38,7 @@ export const FILTER_TYPE_LABELS: Record<FilterType, string> = {
     [FILTER_TYPES.SELECT]: '下拉框',
     [FILTER_TYPES.DATE_RANGE]: '日期范围',
     [FILTER_TYPES.TREE_SELECT]: '树形选择',
+    [FILTER_TYPES.TEXTAREA]: '文本域',
 }
 
 // ============================================
@@ -188,6 +191,8 @@ export const EFFECT_TYPES = {
     TABLE: 'table',
     /** 打开抽屉表格 */
     DRAWER: 'drawer',
+    /** 新页面表单 */
+    PAGE_FORM: 'page-form',
 } as const
 
 /** 交互效果类型的联合类型 */

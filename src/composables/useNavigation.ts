@@ -11,6 +11,8 @@ const _currentNavId = ref('')
 const detailTitle = ref<string | null>(null)
 const _navGroupsRef = ref<NavGroup[] | null>(null)
 const exceptionType = ref<'403' | '404' | '500' | null>(null)
+const detailKey = ref<string | null>(null)
+const detailType = ref<string | null>(null)
 
 /**
  * 设置 navGroups 引用（由 configStore 调用）
@@ -153,8 +155,10 @@ export function useNavigation() {
         }
     }
 
-    const setDetailTitle = (title: string | null) => {
+    const setDetailTitle = (title: string | null, key: string | null = null, type: string | null = null) => {
         detailTitle.value = title
+        detailKey.value = title ? key : null
+        detailType.value = title ? type : null
     }
 
     const breadcrumbs = computed(() => ({
@@ -191,6 +195,8 @@ export function useNavigation() {
     })
 
     const currentPage = computed(() => {
+        if (detailType.value === 'page-form') return 'DynamicFormPage'
+
         const navId = _currentNavId.value
         if (navId === 'settings') return 'Settings'
         if (navId === 'billing') return 'Billing'
@@ -207,6 +213,8 @@ export function useNavigation() {
         currentSubNav,
         currentNavId,
         detailTitle,
+        detailKey,
+        detailType,
         breadcrumbs,
         currentPage,
         currentTemplate,
