@@ -31,6 +31,8 @@ export interface FilterConfig {
     multiple?: boolean
     options?: string[]
     treeOptions?: TreeNode[]
+    precision?: 'year' | 'month' | 'date' | 'hour' | 'minute' | 'second'
+    disabled?: boolean
     defaultValue?: string | any | undefined
     visible?: boolean
     fullWidth?: boolean

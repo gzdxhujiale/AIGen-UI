@@ -14,6 +14,7 @@ defineProps<{
   options: TreeNode[]
   placeholder?: string
   width?: string
+  disabled?: boolean
 }>()
 
 defineEmits<{
@@ -28,6 +29,7 @@ defineEmits<{
       :model-value="modelValue"
       :data="options"
       :placeholder="placeholder"
+      :disabled="disabled"
       allow-search
       allow-clear
       :field-names="{ key: 'value', title: 'label', children: 'children' }"

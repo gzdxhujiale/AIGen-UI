@@ -6,6 +6,7 @@ defineProps<{
   modelValue: string | number | undefined
   placeholder?: string
   width?: string
+  disabled?: boolean
 }>()
 
 defineEmits<{
@@ -19,6 +20,7 @@ defineEmits<{
     <AInput
       :model-value="modelValue"
       :placeholder="placeholder"
+      :disabled="disabled"
       allow-clear
       :class="!width && 'flex-1'"
       :style="width ? { width } : undefined"

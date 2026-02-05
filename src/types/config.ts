@@ -21,10 +21,16 @@ export const FILTER_TYPES = {
     SELECT: 'select',
     /** 日期范围选择器 */
     DATE_RANGE: 'date-range',
+    /** 单点日期选择器 */
+    DATE: 'date',
     /** 树形选择器 */
     TREE_SELECT: 'tree-select',
     /** 文本域 */
     TEXTAREA: 'textarea',
+    /** 单选框 */
+    RADIO: 'radio',
+    /** 复选框 */
+    CHECKBOX: 'checkbox',
 } as const
 
 /** 筛选器类型的联合类型 */
@@ -37,8 +43,11 @@ export const FILTER_TYPE_LABELS: Record<FilterType, string> = {
     [FILTER_TYPES.INPUT]: '输入框',
     [FILTER_TYPES.SELECT]: '下拉框',
     [FILTER_TYPES.DATE_RANGE]: '日期范围',
+    [FILTER_TYPES.DATE]: '单点日期',
     [FILTER_TYPES.TREE_SELECT]: '树形选择',
     [FILTER_TYPES.TEXTAREA]: '文本域',
+    [FILTER_TYPES.RADIO]: '单选框',
+    [FILTER_TYPES.CHECKBOX]: '复选框',
 }
 
 // ============================================

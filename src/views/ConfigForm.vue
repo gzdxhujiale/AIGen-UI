@@ -2,7 +2,8 @@
 import { ref, watch, computed } from 'vue'
 import {
   Input as AInput, Select as ASelect, Option as AOption,
-  Textarea as ATextarea, Button as AButton, InputNumber as AInputNumber
+  Textarea as ATextarea, Button as AButton, InputNumber as AInputNumber,
+  InputTag as AInputTag
 } from '@arco-design/web-vue'
 import { Button as ShadcnButton } from '@/components/ui/button'
 import { FormInput, Plus, Trash2 } from 'lucide-vue-next'
@@ -25,10 +26,12 @@ const formSchemas = computed(() => ({
   filter: [
     { key: 'key', label: '字段名 (Key)', comp: 'input', props: { placeholder: '如: keyword' } },
     { key: 'label', label: '显示标签 (Label)', comp: 'input', props: { placeholder: '如: 关键词' } },
-    { key: 'type', label: '类型 (Type)', comp: 'select', props: { options: [{value:'input',label:'输入框'},{value:'select',label:'下拉框'},{value:'date-range',label:'日期范围'},{value:'tree-select',label:'树形选择'}] } },
+    { key: 'type', label: '类型 (Type)', comp: 'select', props: { options: [{value:'input',label:'输入框'},{value:'select',label:'下拉框'},{value:'date-range',label:'日期范围'},{value:'date',label:'单点日期'},{value:'tree-select',label:'树形选择'},{value:'radio',label:'单选框'},{value:'checkbox',label:'复选框'}] } },
+    { key: 'precision', label: '时间精度', comp: 'select', showIf: (s:any) => ['date', 'date-range'].includes(s.type), props: { options: [{value:'year',label:'年'},{value:'month',label:'月'},{value:'date',label:'日'},{value:'hour',label:'时'},{value:'minute',label:'分'},{value:'second',label:'秒'}], placeholder: '默认:日' } },
     { key: 'placeholder', label: '占位文字', comp: 'input', props: { placeholder: '请输入...' } },
     { key: 'multiple', label: '启用多选', comp: 'checkbox', showIf: (s:any) => s.type === 'select' },
-    { key: 'options', label: '选项列表 (逗号分隔)', comp: 'textarea', showIf: (s:any) => s.type === 'select', props: { placeholder: 'A,B,C', autoSize: {minRows:2} } },
+    { key: 'disabled', label: '禁用', comp: 'checkbox' },
+    { key: 'options', label: '选项列表', comp: 'input-tag', showIf: (s:any) => ['select', 'radio', 'checkbox'].includes(s.type), props: { readonly: false, placeholder: '输入后回车添加' } },
     { key: 'treeOptions', label: '树形数据 JSON', comp: 'textarea', showIf: (s:any) => s.type === 'tree-select', props: { placeholder: '[{"key":"1",...}]', class: 'font-mono text-xs' } }
   ],
   column: [
@@ -36,7 +39,7 @@ const formSchemas = computed(() => ({
     { key: 'label', label: '显示标签', comp: 'input', props: { placeholder: '如: 用户名' } },
     { key: 'width', label: '宽度', comp: 'input', props: { placeholder: '如: 120px' } },
     { key: 'type', label: '类型', comp: 'select', props: { options: [{value:'text',label:'普通文本'},{value:'badge',label:'徽标'},{value:'status-badge',label:'状态点'},{value:'text-button',label:'文字按钮组'}] } },
-    { key: 'buttons', label: '按钮Action Key (逗号分隔)', comp: 'input', showIf: (s:any) => s.type === 'text-button', props: { placeholder: 'edit, delete' } },
+    { key: 'buttons', label: '按钮Action Key', comp: 'input-tag', showIf: (s:any) => s.type === 'text-button' },
     { key: 'fixed', label: '固定方式', comp: 'select', props: { options: [{value:'none',label:'不固定'},{value:'left',label:'左侧固定'},{value:'right',label:'右侧固定'}] } },
     { key: 'align', label: '对齐方式', comp: 'select', props: { options: [{value:'left',label:'左对齐'},{value:'center',label:'居中'},{value:'right',label:'右对齐'}] } },
     { key: 'ellipsis', label: '内容过长省略', comp: 'checkbox' },
@@ -58,7 +61,7 @@ const formSchemas = computed(() => ({
 }))
 
 const resolveComp = (type: string) => {
-  const map: any = { input: AInput, select: ASelect, textarea: ATextarea, checkbox: 'input' } // checkbox special handled
+  const map: any = { input: AInput, select: ASelect, textarea: ATextarea, checkbox: 'input', 'input-tag': AInputTag }
   return map[type] || AInput
 }
 
@@ -136,9 +139,9 @@ const addEffectItem = () => {
              <AInputNumber v-model="formState.mockDigits" :min="1" :max="10" :default-value="5" class="w-full" />
           </div>
           <div v-if="['list','list-order'].includes(formState.mockFormat)">
-             <label class="text-sm font-medium mb-1.5 block">列表值 (逗号隔开)</label>
-             <AInput :model-value="Array.isArray(formState.mockList)?formState.mockList.join(','):formState.mockList" @update:model-value="(v:string)=>formState.mockList=v.split(',').map(s=>s.trim()).filter(Boolean)" />
-          </div>
+              <label class="text-sm font-medium mb-1.5 block">列表值</label>
+              <AInputTag v-model="formState.mockList" placeholder="输入后回车添加" />
+           </div>
           <!-- 条件格式 (Condition Rules) -->
           <div v-if="formState.mockFormat === 'conditional'" class="col-span-2">
              <div class="flex justify-between items-center mb-2"><label class="text-sm font-medium">条件规则</label><AButton size="mini" type="outline" @click="addCondition"><Plus class="w-3 h-3"/> 添加</AButton></div>
@@ -168,12 +171,16 @@ const addEffectItem = () => {
               <div v-for="(item, idx) in formState.effectFormItems" :key="item.key" class="p-2 border rounded bg-muted/30 relative group grid grid-cols-3 gap-2">
                  <AInput v-model="item.label" size="mini" placeholder="标签" />
                  <AInput v-model="item.key" size="mini" placeholder="Key" />
-                 <ASelect v-model="item.type" size="mini"><AOption value="input">Input</AOption><AOption value="textarea">Textarea</AOption><AOption value="select">Select</AOption><AOption value="tree-select">Tree</AOption><AOption value="date-range">Date</AOption></ASelect>
+                 <ASelect v-model="item.type" size="mini"><AOption value="input">Input</AOption><AOption value="textarea">Textarea</AOption><AOption value="select">Select</AOption><AOption value="tree-select">Tree</AOption><AOption value="date-range">Date Range</AOption><AOption value="date">Date</AOption><AOption value="radio">Radio</AOption><AOption value="checkbox">Checkbox</AOption></ASelect>
                  <div v-if="item.type === 'select'" class="col-span-3 flex items-center gap-1.5 px-0.5">
                     <input type="checkbox" v-model="item.multiple" class="w-3 h-3 rounded" :id="'mult-' + item.key"/>
                     <label :for="'mult-' + item.key" class="text-[10px] text-muted-foreground whitespace-nowrap cursor-pointer">启用多选</label>
                  </div>
-                 <ATextarea v-if="item.type==='select'" :model-value="item.options?.join(',')" @update:model-value="(v)=>item.options=String(v).split(/[，,]/).map(s=>s.trim())" placeholder="选项A,选项B" class="col-span-3 text-[10px]" :auto-size="{minRows:1,maxRows:2}"/>
+                 <AInputTag v-if="['select', 'radio', 'checkbox'].includes(item.type)" v-model="item.options" placeholder="输入后回车" class="col-span-3" />
+                 <ASelect v-if="['date', 'date-range'].includes(item.type)" v-model="item.precision" size="mini" placeholder="时间精度" class="col-span-3">
+                    <AOption value="year">年</AOption><AOption value="month">月</AOption><AOption value="date">日</AOption>
+                    <AOption value="hour">时</AOption><AOption value="minute">分</AOption><AOption value="second">秒</AOption>
+                 </ASelect>
                  <ATextarea v-if="item.type==='tree-select'" v-model="item.treeOptions" placeholder='[{"value":"1","label":"A"}]' class="col-span-3 text-[10px] font-mono" :auto-size="{minRows:1,maxRows:3}"/>
                  <Trash2 class="absolute top-1 right-1 w-3 h-3 text-red-400 cursor-pointer opacity-0 group-hover:opacity-100" @click="formState.effectFormItems.splice(idx,1)" />
               </div>

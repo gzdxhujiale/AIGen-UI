@@ -10,6 +10,7 @@ const props = withDefaults(defineProps<{
   maxTagCount?: number
   placeholder?: string
   width?: string
+  disabled?: boolean
 }>(), {
   multiple: false,
   maxTagCount: 1,
@@ -71,6 +72,7 @@ const handleSelectAll = (checked: boolean | (string | number | boolean)[]) => {
       v-model="internalValue"
       :placeholder="placeholder"
       :multiple="multiple"
+      :disabled="disabled"
       allow-clear
       allow-search
       :max-tag-count="maxTagCount"
