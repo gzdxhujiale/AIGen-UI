@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineOptions({ name: 'Page1' })
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm, Drawer as ADrawer, Select as ASelect, Option as AOption } from '@arco-design/web-vue'
 import { debounce } from 'lodash-es'
@@ -11,7 +11,7 @@ import { FilterInput, FilterSelect, FilterDateRange, FilterTreeSelect, FilterRad
 import ConfigForm from '@/views/ConfigForm.vue'
 import { useNavigation } from '@/composables/useNavigation'
 import { useConfigStore } from '@/stores/configStore'
-import type { Page1Config } from '@/types'
+import type { Page1Config, TableColumn, Page1ConfigData, ActionButtonConfig } from '@/types'
 import { useConfigPageStore } from '@/stores/config_page_Store'
 import { useConfigCrud } from '@/composables/useConfigCrud'
 
@@ -39,6 +39,7 @@ const uiState = reactive({
   // Drag & Drop
   drag: { index: -1, overIndex: -1 }
 })
+const configFormRef = ref<InstanceType<typeof ConfigForm> | null>(null)
 
 const pageConfig = computed<Page1Config | undefined>(() => {
   const navTitle = currentNavTitle.value
@@ -54,20 +55,21 @@ const mockHelper = {
   generate(config: Page1Config | any[], rowCount = 20) {
     const cols = Array.isArray(config) ? config : (config as Page1Config).tableArea.columns
     if (!cols?.length) return []
-    const normal = cols.filter((c: any) => (c.mockFormat || 'none') !== 'conditional')
-    const conditional = cols.filter((c: any) => c.mockFormat === 'conditional')
+    const normal = cols.filter(c => (c.mockFormat as string || 'none') !== 'conditional')
+    const conditional = cols.filter(c => (c.mockFormat as string) === 'conditional')
     return Array.from({ length: rowCount }, (_, i) => {
-      const row: any = { id: i + 1 }
-      normal.forEach((c: any) => row[c.key] = generateMockValue(c, i))
-      conditional.forEach((c: any) => row[c.key] = c.conditionRules ? evaluateConditionalValue(row, c.conditionRules) : '')
+      const row: Record<string, unknown> = { id: i + 1 }
+      normal.forEach((c: TableColumn) => row[c.key] = generateMockValue(c, i))
+      conditional.forEach((c: TableColumn) => row[c.key] = c.conditionRules ? evaluateConditionalValue(row, c.conditionRules) : '')
       return row
     })
   },
   load() {
-    if (pageConfig.value?.tableArea?.isEmptyData) {
+    if (!pageConfig.value) { uiState.tableData = []; uiState.currentPage = 1; return }
+    if (pageConfig.value.tableArea?.isEmptyData) {
       uiState.tableData = []
     } else {
-      uiState.tableData = pageConfig.value?.mockData?.().length ? pageConfig.value.mockData() : this.generate(pageConfig.value!)
+      uiState.tableData = pageConfig.value.mockData?.().length ? pageConfig.value.mockData() : this.generate(pageConfig.value)
     }
     uiState.currentPage = 1
   }
@@ -82,20 +84,21 @@ const transformers: Record<string, (item: any) => any> = {
 }
 
 const crudHandlers = {
-  filter: useConfigCrud({ name: '筛选项', defaultForm: () => ({ key: '', type: 'input', label: '', placeholder: '', options: [] as string[], treeOptions: '', visible: true, multiple: false, precision: '', disabled: false }), doSave: async (m, i, f) => _saveComponentAction(item => { const opts = f.options as any; const nf = { key: f.key || `f_${Date.now()}`, type: f.type, label: f.label, placeholder: f.placeholder || undefined, visible: f.visible, multiple: f.multiple, precision: ['date', 'date-range'].includes(f.type) && f.precision ? f.precision : undefined, disabled: f.disabled || undefined, options: Array.isArray(opts) ? opts : (opts ? String(opts).split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : []), treeOptions: f.treeOptions ? safeJsonParseWithError(f.treeOptions, '树形') : undefined }; if (m && i !== null) item.filterArea.filters[i] = nf; else item.filterArea.filters.push(nf) }), doDelete: (i) => _saveComponentAction(item => item.filterArea.filters.splice(i, 1)) }),
-  column: useConfigCrud({ name: '列', defaultForm: () => ({ key: '', label: '', width: '120px', type: 'text', mockFormat: 'none', mockList: [] as string[], mockDigits: 5, conditionRules: '', buttons: [] as string[], fixed: 'none', align: 'left', visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { const ml = f.mockList as any; const btns = f.buttons as any; const nc = { key: f.key || `c_${Date.now()}`, label: f.label, width: f.width, type: f.type === 'text' ? undefined : f.type, visible: f.visible, mockFormat: f.mockFormat === 'none' ? undefined : f.mockFormat, mockList: ['list', 'list-order'].includes(f.mockFormat) ? (Array.isArray(ml) ? ml : (ml ? String(ml).split(',').map((s: string) => s.trim()).filter(Boolean) : [])) : undefined, mockDigits: f.mockFormat === 'random-number' ? f.mockDigits : undefined, conditionRules: f.mockFormat === 'conditional' && f.conditionRules ? safeJsonParseWithError(f.conditionRules, '条件') : undefined, buttons: f.type === 'text-button' ? (Array.isArray(btns) ? btns : (btns ? String(btns).split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : [])) : undefined, fixed: f.fixed === 'none' ? undefined : f.fixed, align: f.align === 'left' ? undefined : f.align }; if (m && i !== null) item.tableArea.columns[i] = nc; else item.tableArea.columns.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.tableArea.columns.splice(i, 1)) }),
-  action: useConfigCrud({ name: '按钮', defaultForm: () => ({ key: '', label: '', variant: 'outline', className: '', effectType: 'none', effectTitle: '', effectContent: '', effectFormItems: [], effectTableColumns: [], visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.actionsArea) item.actionsArea = { buttons: [], show: true }; const na = { key: f.key || `a_${Date.now()}`, label: f.label, variant: f.variant, className: f.className || undefined, visible: f.visible, effectType: f.effectType === 'none' ? undefined : f.effectType, effectConfig: ['modal', 'page-form'].includes(f.effectType) ? { title: f.effectTitle, content: f.effectContent, formItems: f.effectFormItems } : ['table', 'drawer'].includes(f.effectType) ? { title: f.effectTitle, targetNavId: (f as any).targetNavId || (f as any).effectConfig?.targetNavId } : undefined }; if (m && i !== null) item.actionsArea.buttons[i] = na; else item.actionsArea.buttons.push(na) }), doDelete: (i) => _saveComponentAction(item => item.actionsArea.buttons.splice(i, 1)) }),
-  card: useConfigCrud({ name: '卡片', defaultForm: () => ({ key: '', title: '', data: '' }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.cardArea) item.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }; const nc = { key: f.key || `cd_${Date.now()}`, title: f.title, data: f.data }; if (m && i !== null) item.cardArea.cards[i] = nc; else item.cardArea.cards.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.cardArea.cards.splice(i, 1)) })
+  filter: useConfigCrud({ name: '筛选项', defaultForm: () => ({ key: '', type: 'input', label: '', placeholder: '', options: [] as string[], treeOptions: '', visible: true, multiple: false, precision: '', disabled: false }), doSave: async (m, i, f) => _saveComponentAction(item => { const opts = f.options as any; const nf: any = { key: f.key || `f_${Date.now()}`, type: f.type, label: f.label, placeholder: f.placeholder || undefined, visible: f.visible, multiple: f.multiple, precision: ['date', 'date-range'].includes(f.type) && f.precision ? f.precision : undefined, disabled: f.disabled || undefined, options: Array.isArray(opts) ? opts : (opts ? String(opts).split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : []), treeOptions: f.treeOptions ? safeJsonParseWithError(f.treeOptions, '树形') : undefined }; if (m && i !== null) item.filterArea.filters[i] = nf; else item.filterArea.filters.push(nf) }), doDelete: (i) => _saveComponentAction(item => item.filterArea.filters.splice(i, 1)) }),
+  column: useConfigCrud({ name: '列', defaultForm: () => ({ key: '', label: '', width: '120px', type: 'text', mockFormat: 'none', mockList: [] as string[], mockDigits: 5, conditionRules: '', buttons: [] as string[], fixed: 'none', align: 'left', visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { const ml = f.mockList as any; const btns = f.buttons as any; const nc: any = { key: f.key || `c_${Date.now()}`, label: f.label, width: f.width, type: f.type === 'text' ? undefined : f.type, visible: f.visible, mockFormat: f.mockFormat === 'none' ? undefined : f.mockFormat, mockList: ['list', 'list-order'].includes(f.mockFormat) ? (Array.isArray(ml) ? ml : (ml ? String(ml).split(',').map((s: string) => s.trim()).filter(Boolean) : [])) : undefined, mockDigits: f.mockFormat === 'random-number' ? f.mockDigits : undefined, conditionRules: f.mockFormat === 'conditional' && f.conditionRules ? safeJsonParseWithError(f.conditionRules, '条件') : undefined, buttons: f.type === 'text-button' ? (Array.isArray(btns) ? btns : (btns ? String(btns).split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : [])) : undefined, fixed: f.fixed === 'none' ? undefined : f.fixed, align: f.align === 'left' ? undefined : f.align }; if (m && i !== null) item.tableArea.columns[i] = nc; else item.tableArea.columns.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.tableArea.columns.splice(i, 1)) }),
+  action: useConfigCrud({ name: '按钮', defaultForm: () => ({ key: '', label: '', variant: 'outline', className: '', effectType: 'none', effectTitle: '', effectContent: '', effectFormItems: [], effectTableColumns: [], visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.actionsArea) item.actionsArea = { buttons: [], show: true }; const na: any = { key: f.key || `a_${Date.now()}`, label: f.label, variant: f.variant, className: f.className || undefined, visible: f.visible, effectType: f.effectType === 'none' ? undefined : f.effectType, effectConfig: ['modal', 'page-form'].includes(f.effectType) ? { title: f.effectTitle, content: f.effectContent, formItems: f.effectFormItems } : ['table', 'drawer'].includes(f.effectType) ? { title: f.effectTitle, targetNavId: (f as any).targetNavId || (f as any).effectConfig?.targetNavId } : undefined }; if (m && i !== null) item.actionsArea!.buttons[i] = na; else item.actionsArea!.buttons.push(na) }), doDelete: (i) => _saveComponentAction(item => item.actionsArea!.buttons.splice(i, 1)) }),
+  card: useConfigCrud({ name: '卡片', defaultForm: () => ({ key: '', title: '', data: '' }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.cardArea) item.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }; const nc = { key: f.key || `cd_${Date.now()}`, title: f.title, data: f.data }; if (m && i !== null) item.cardArea!.cards[i] = nc; else item.cardArea!.cards.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.cardArea!.cards.splice(i, 1)) })
 }
 
-const _saveComponentAction = async (updateFn: (item: any) => void) => {
+const _saveComponentAction = async (updateFn: (item: Page1ConfigData) => void) => {
   const navTitle = currentNavTitle.value, subId = currentNavId.value
   if (!navTitle) return Message.error('未找到导航')
   const item = pageStore.getSubPageConfig(navTitle, subId)
   if (!item?.component) return Message.error('配置不存在')
   updateFn(item.component)
   const res = await pageStore.updateSubPageComponent(navTitle, subId, item.component)
-  if (!res.success) Message.error('保存失败: ' + res.message)
+  if (res.success) { Message.success({ content: '已保存', duration: 1500 }); mockHelper.load() }
+  else Message.error('保存失败: ' + res.message)
 }
 
 // --- Action & UI Logic ---
@@ -174,7 +177,7 @@ const actions = {
       const source = from !== undefined ? from : uiState.drag.index
       if (source === -1 || source === target) return
       await _saveComponentAction(item => {
-        const arr = type === 'filter' ? item.filterArea.filters : type === 'action' ? item.actionsArea.buttons : item.tableArea.columns
+        const arr = type === 'filter' ? item.filterArea.filters : type === 'action' ? item.actionsArea!.buttons : item.tableArea.columns
         const [removed] = arr.splice(source, 1)
         arr.splice(target, 0, removed)
       })
@@ -197,7 +200,7 @@ const visibleColumns = computed(() => {
       filterable: pageConfig.value?.tableArea.filterableColumns?.includes(c.key) || false
     }))
 })
-const visibleActions = computed(() => pageConfig.value?.actionsArea?.buttons?.filter((a: any) => a.visible !== false) || [])
+const visibleActions = computed(() => pageConfig.value?.actionsArea?.buttons?.filter((a: ActionButtonConfig) => a.visible !== false) || [])
 const actionButtonSpan = computed(() => {
   if (!pageConfig.value) return 1
   const cols = pageConfig.value.filterArea.columns
@@ -220,7 +223,7 @@ watch(pageConfig, (c) => {
       const dv = f.defaultValue
       if (f.type === 'date-range' || f.type === 'checkbox') {
         uiState.filters[f.key] = Array.isArray(dv) ? dv : []
-      } else if (f.type === 'select') {
+      } else if (f.type === 'select' || f.type === 'tree-select') {
         if (f.multiple !== false) {
           uiState.filters[f.key] = Array.isArray(dv) ? dv : []
         } else {
@@ -232,7 +235,7 @@ watch(pageConfig, (c) => {
     })
     mockHelper.load()
   }
-}, { immediate: true, deep: true })
+}, { immediate: true })
 
 const currentCrud = computed(() => {
   const type = uiState.area.type
@@ -303,8 +306,12 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
             >
               <template v-for="(config, filterIndex) in visibleFilters" :key="config.key">
                 <div 
-                  class="relative group/filter"
-                  :class="[{ 'cursor-move': isEditMode }, { 'ring-2 ring-primary/30 ring-offset-1': isEditMode && uiState.drag.overIndex === filterIndex }]"
+                  class="relative group/filter transition-opacity"
+                  :class="[
+                    { 'cursor-move': isEditMode },
+                    { 'ring-2 ring-primary/30 ring-offset-1': isEditMode && uiState.drag.overIndex === filterIndex },
+                    { 'opacity-40': isEditMode && uiState.drag.index === filterIndex }
+                  ]"
                   :draggable="isEditMode"
                   @dragstart="actions.drag.start(filterIndex)"
                   @dragover="(e) => actions.drag.over(e, filterIndex)"
@@ -315,7 +322,7 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
                   <FilterSelect v-else-if="config.type === 'select'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.options ?? []" :placeholder="config.placeholder" :multiple="config.multiple !== false" :disabled="config.disabled" />
                   <FilterDateRange v-else-if="config.type === 'date-range'" :label="config.label" v-model="uiState.filters[config.key]" :precision="config.precision" :disabled="config.disabled" />
                   <FilterDateRange v-else-if="config.type === 'date'" :label="config.label" v-model="uiState.filters[config.key]" mode="single" :precision="config.precision" :disabled="config.disabled" />
-                  <FilterTreeSelect v-else-if="config.type === 'tree-select'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.treeOptions ?? []" :placeholder="config.placeholder" :disabled="config.disabled" />
+                  <FilterTreeSelect v-else-if="config.type === 'tree-select'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.treeOptions ?? []" :placeholder="config.placeholder" :multiple="config.multiple" :disabled="config.disabled" />
                   <FilterRadio v-else-if="config.type === 'radio'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.options ?? []" />
                   <FilterCheckbox v-else-if="config.type === 'checkbox'" :label="config.label" v-model="uiState.filters[config.key]" :options="config.options ?? []" />
 
@@ -483,9 +490,14 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
       </div>
     </div>
 
-    <div v-else class="flex flex-col items-center justify-center h-full text-muted-foreground space-y-2">
-      <File class="w-12 h-12 opacity-20" />
-      <span class="text-xs">暂无页面配置</span>
+    <div v-else class="flex flex-col items-center justify-center h-full text-muted-foreground space-y-4 py-20">
+      <div class="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center">
+        <File class="w-8 h-8 opacity-30" />
+      </div>
+      <div class="text-center space-y-1">
+        <p class="text-sm font-medium">暂无页面配置</p>
+        <p class="text-xs text-muted-foreground/60">可通过 AI 助手快速生成，或进入编辑模式手动创建</p>
+      </div>
     </div>
 
     <!-- 效果弹窗 (Modal) -->
@@ -498,7 +510,7 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
             <FilterSelect v-else-if="config.type === 'select'" :label="config.label" v-model="uiState.effect.data[config.key]" :options="config.options ?? []" :multiple="config.multiple !== false" :disabled="config.disabled" />
             <FilterDateRange v-else-if="config.type === 'date-range'" :label="config.label" v-model="uiState.effect.data[config.key]" :precision="config.precision" :disabled="config.disabled" />
             <FilterDateRange v-else-if="config.type === 'date'" :label="config.label" v-model="uiState.effect.data[config.key]" mode="single" :precision="config.precision" :disabled="config.disabled" />
-            <FilterTreeSelect v-else-if="config.type === 'tree-select'" :label="config.label" v-model="uiState.effect.data[config.key]" :options="config.treeOptions ?? []" :placeholder="config.placeholder" :disabled="config.disabled" />
+            <FilterTreeSelect v-else-if="config.type === 'tree-select'" :label="config.label" v-model="uiState.effect.data[config.key]" :options="config.treeOptions ?? []" :placeholder="config.placeholder" :multiple="config.multiple" :disabled="config.disabled" />
             <FilterRadio v-else-if="config.type === 'radio'" :label="config.label" v-model="uiState.effect.data[config.key]" :options="config.options ?? []" />
             <FilterCheckbox v-else-if="config.type === 'checkbox'" :label="config.label" v-model="uiState.effect.data[config.key]" :options="config.options ?? []" />
           </template>
@@ -525,14 +537,14 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
       v-if="currentCrud"
       v-model:visible="currentCrud.dialogVisible.value" 
       :title="(currentCrud.mode.value === 'add' ? '添加' : '编辑') + currentCrud.name" 
-      @ok="currentCrud.handleSave()" 
+      @before-ok="(done: (closed: boolean) => void) => { if (configFormRef?.validate()) { currentCrud!.handleSave(); done(true) } else { done(false) } }"
       :width="480"
     >
-      <ConfigForm :type="uiState.area.type as any" v-model="currentCrud.formData.value" :available-columns="availableColumns" />
+      <ConfigForm ref="configFormRef" :type="uiState.area.type as any" v-model="currentCrud.formData.value" :available-columns="availableColumns" />
     </AModal>
 
     <!-- 区域配置弹窗 -->
-    <AModal v-model:visible="uiState.area.visible" :title="uiState.area.type === 'filter' ? '筛选区配置' : uiState.area.type === 'card' ? '卡片区配置' : '表格区配置'" @ok="actions.saveAreaConfig" :width="480">
+    <AModal v-model:visible="uiState.area.visible" :title="uiState.area.type === 'filter' ? '筛选区配置' : uiState.area.type === 'card' ? '卡片区配置' : '表格区配置'" @ok="actions.saveAreaConfig" :width="uiState.area.type === 'table' ? 600 : 480">
       <div v-if="uiState.area.type === 'filter'" class="space-y-4 text-left">
         <div class="grid grid-cols-2 gap-4">
           <div><label class="text-sm font-medium mb-1.5 block">每行列数</label><AInputNumber v-model="uiState.area.config.columns" :min="1" :max="6" /></div>

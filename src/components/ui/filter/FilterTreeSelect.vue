@@ -15,10 +15,11 @@ defineProps<{
   placeholder?: string
   width?: string
   disabled?: boolean
+  multiple?: boolean
 }>()
 
 defineEmits<{
-  'update:modelValue': [value: string]
+  'update:modelValue': [value: string | string[]]
 }>()
 </script>
 
@@ -30,6 +31,7 @@ defineEmits<{
       :data="options"
       :placeholder="placeholder"
       :disabled="disabled"
+      :multiple="multiple"
       allow-search
       allow-clear
       :field-names="{ key: 'value', title: 'label', children: 'children' }"

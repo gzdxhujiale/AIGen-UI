@@ -7,7 +7,7 @@ import * as Icons from 'lucide-vue-next'
 
 const DEFAULT_TEAM_CONFIG: TeamItem[] = [{
     name: 'AIGen-UI',
-    logo: Icons.GalleryVerticalEnd as any,
+    logo: Icons.GalleryVerticalEnd,
     plan: 'online',
     permissions: { navMain: 'all' }
 }]
@@ -25,9 +25,10 @@ export const useConfigTeamStore = defineStore('config-team', () => {
             const res = await fn(user.id)
             localStorage.setItem(CACHE_KEY, JSON.stringify(teams.value))
             return { success: true, data: res }
-        } catch (e: any) {
-            if (!silent) toast.error(e.message)
-            return { success: false, message: e.message }
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            if (!silent) toast.error(msg)
+            return { success: false, message: msg }
         } finally { isLoading.value = false }
     }
 

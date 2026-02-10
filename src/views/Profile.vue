@@ -26,13 +26,13 @@ import { useConfigTeamStore } from '@/stores/config_team_Store'
 const { Row: ARow, Col: ACol } = AGrid
 const authStore = useAuthStore()
 const teamStore = useConfigTeamStore()
-import type { UserTeam } from '@/types/user'
+import type { TeamItem } from '@/types/navigation'
 
 // 2. 表单状态
 const form = reactive({
   userName: '',
   avatarUrl: '',
-  teams: [] as UserTeam[]
+  teams: [] as TeamItem[]
 })
 
 // 3. 响应式自动保存逻辑
@@ -89,7 +89,7 @@ const addTeam = async () => {
 }
 
 const removeTeam = async (name: string) => {
-  const index = form.teams.findIndex(t => t.name === name)
+  const index = form.teams.findIndex((t: TeamItem) => t.name === name)
   if (index !== -1) {
     form.teams.splice(index, 1)
     await performSave()
@@ -239,7 +239,7 @@ const handleAvatarUpload = async (fileList: any[]) => {
             </ASelect>
           </template>
           <template #permissions>
-             <div class="text-xs text-secondary-foreground/60">权限细粒度编辑器 (Beta)</div>
+             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">即将推出</span>
           </template>
           <template #actions="{ record }">
             <ATooltip content="删除团队">
@@ -249,13 +249,23 @@ const handleAvatarUpload = async (fileList: any[]) => {
               </AButton>
             </ATooltip>
           </template>
+          <template #empty>
+            <div class="flex flex-col items-center py-8 text-gray-400">
+              <IconSafe class="text-3xl mb-3 opacity-30" />
+              <p class="text-sm mb-3">还没有团队</p>
+              <AButton type="outline" size="small" @click="addTeam">
+                <template #icon><IconPlus /></template>
+                添加您的第一个团队
+              </AButton>
+            </div>
+          </template>
         </ATable>
       </ACard>
 
       <!-- 底部保存状态提示 -->
       <div v-if="isSaving || isSaveSuccess" 
-           class="fixed bottom-4 right-4 bg-white/80 backdrop-blur shadow-lg border rounded-full px-4 py-2 flex items-center gap-2 transition-all duration-300 z-50"
-           :class="isSaveSuccess ? 'text-green-600 border-green-200' : 'text-primary border-primary/20'">
+           class="fixed bottom-4 right-4 backdrop-blur shadow-lg border rounded-full px-4 py-2 flex items-center gap-2 transition-all duration-300 z-50"
+           :class="isSaveSuccess ? 'bg-white/80 dark:bg-slate-800/80 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' : 'bg-white/80 dark:bg-slate-800/80 text-primary border-primary/20'">
         <IconRefresh v-if="isSaving" class="animate-spin" />
         <IconCheck v-else />
         <span class="text-xs font-medium">{{ isSaveSuccess ? '已自动保存' : '自动保存中...' }}</span>

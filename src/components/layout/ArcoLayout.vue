@@ -163,7 +163,7 @@ const navStyles = computed(() => {
           <div v-else class="w-full flex justify-center"><img :src="teamLogoUrl" class="size-8 rounded-lg" /></div>
         </div>
 
-        <a-scrollbar class="flex-1 py-4 px-2 overflow-hidden">
+        <a-scrollbar class="flex-1 py-4 px-2" :outer-style="{overflow: 'auto', flex: '1', minHeight: '0'}">
           <div v-for="(g, idx) in (configStore.isEditMode ? pageStore.navGroups : filteredNavGroups)" :key="idx" class="mb-6">
             <div v-if="!collapsed && (g.showLabel !== false)" class="px-4 mb-2 text-xs font-bold text-gray-400 uppercase tracking-widest">{{ g.label }}</div>
             <a-menu v-if="!configStore.isEditMode" mode="vertical" :collapsed="collapsed" :selected-keys="selectedKeys" v-model:open-keys="openKeys" class="!bg-transparent !border-none">
@@ -188,21 +188,43 @@ const navStyles = computed(() => {
                 </a-menu-item>
               </template>
             </a-menu>
-            <div v-else class="space-y-2 px-2">
-                <div class="flex items-center justify-between text-xs font-bold text-gray-400 mb-1"><span>{{ g.label }}</span><a-button size="mini" type="text" @click="_openNavDialog('add-main', {idx})"><Plus class="size-3" /></a-button></div>
-                <div v-for="i in g.items" :key="i.id" class="border border-dashed border-gray-300 rounded-md p-2 bg-gray-50/50">
-                    <div class="flex items-center justify-between group">
-                        <div class="flex items-center gap-2"><component :is="resolveIcon(i.icon)" class="size-4" /><span class="text-sm">{{ i.title }}</span></div>
-                        <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><a-button size="mini" type="text" @click="_openNavDialog('edit-main', {idx, mId: i.id, item: i})"><Pencil class="size-3" /></a-button><a-button size="mini" type="text" @click="_openNavDialog('add-sub', {idx, mId: i.id})"><Plus class="size-3" /></a-button><a-popconfirm content="确定删除?" @ok="pageStore.deleteNavMainItem(i.id)"><a-button size="mini" type="text" status="danger"><Trash2 class="size-3" /></a-button></a-popconfirm></div>
+            <!-- 编辑模式导航 -->
+            <div v-else class="edit-nav-container space-y-2.5 px-1">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{{ g.label }}</span>
+                  <a-button size="mini" type="outline" class="!rounded-md !text-xs !px-1.5 !h-5" @click="_openNavDialog('add-main', {idx})"><Plus class="size-3 mr-0.5" /><span class="text-[11px]">添加</span></a-button>
+                </div>
+                <div v-for="i in g.items" :key="i.id" class="edit-nav-card rounded-lg border border-gray-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] hover:border-gray-300">
+                    <div class="flex items-center justify-between px-3 py-2">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <div class="flex items-center justify-center size-7 rounded-md bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600">
+                            <component :is="resolveIcon(i.icon)" class="size-4" />
+                          </div>
+                          <span class="text-sm font-medium text-gray-800 truncate">{{ i.title }}</span>
+                        </div>
+                        <div class="flex items-center gap-0.5 shrink-0">
+                          <a-button size="mini" type="text" class="!p-1 !rounded-md hover:!bg-blue-50" @click="_openNavDialog('edit-main', {idx, mId: i.id, item: i})"><Pencil class="size-3 text-gray-400 hover:text-blue-500" /></a-button>
+                          <a-button size="mini" type="text" class="!p-1 !rounded-md hover:!bg-green-50" @click="_openNavDialog('add-sub', {idx, mId: i.id})"><Plus class="size-3 text-gray-400 hover:text-green-500" /></a-button>
+                          <a-popconfirm content="确定删除?" @ok="pageStore.deleteNavMainItem(i.id)"><a-button size="mini" type="text" class="!p-1 !rounded-md hover:!bg-red-50"><Trash2 class="size-3 text-gray-400 hover:text-red-500" /></a-button></a-popconfirm>
+                        </div>
                     </div>
-                    <draggable v-model="i.items" item-key="id" group="subs" handle=".drag-handle" class="mt-2 space-y-1 pl-4" @change="pageStore.savePageConfig(i.title, i as any)">
+                    <draggable v-if="i.items?.length" v-model="i.items" item-key="id" group="subs" handle=".drag-handle" class="px-2 pb-2 space-y-1" @change="pageStore.savePageConfig(i.title, i as any)">
                         <template #item="{ element: s }">
-                            <div class="flex items-center justify-between p-1.5 bg-white border border-gray-200 rounded text-xs group/sub cursor-pointer hover:bg-gray-50" @click="handleNavClick(i.title, s.name, s.id)">
-                                <div class="flex items-center gap-2 min-w-0"><GripVertical class="size-3 text-gray-400 drag-handle cursor-move" /><span class="truncate">{{ s.name }}</span></div>
-                                <div class="flex gap-0.5 opacity-0 group-hover/sub:opacity-100"><a-button size="mini" type="text" class="!px-1" @click.stop="_openNavDialog('edit-sub', {idx, mId: i.id, sId: s.id, item: s})"><Pencil class="size-3" /></a-button><a-popconfirm content="确定删除?" @ok="pageStore.deleteSubPage(i.id, s.id)"><a-button size="mini" type="text" status="danger" class="!px-1"><Trash2 class="size-3" /></a-button></a-popconfirm></div>
+                            <div class="edit-nav-sub flex items-center justify-between py-1.5 px-2 bg-gray-50/80 border border-gray-100 rounded-md text-xs group/sub cursor-pointer transition-all duration-150 hover:bg-blue-50/50 hover:border-blue-200" @click="handleNavClick(i.title, s.name, s.id)">
+                                <div class="flex items-center gap-2 min-w-0">
+                                  <GripVertical class="size-3 text-gray-300 drag-handle cursor-move shrink-0 hover:text-gray-500" />
+                                  <span class="truncate text-gray-600">{{ s.name }}</span>
+                                </div>
+                                <div class="flex gap-0.5 opacity-0 group-hover/sub:opacity-100 transition-opacity shrink-0">
+                                  <a-button size="mini" type="text" class="!px-1 !py-0.5 !rounded" @click.stop="_openNavDialog('edit-sub', {idx, mId: i.id, sId: s.id, item: s})"><Pencil class="size-3 text-gray-400" /></a-button>
+                                  <a-popconfirm content="确定删除?" @ok="pageStore.deleteSubPage(i.id, s.id)"><a-button size="mini" type="text" status="danger" class="!px-1 !py-0.5 !rounded"><Trash2 class="size-3" /></a-button></a-popconfirm>
+                                </div>
                             </div>
                         </template>
                     </draggable>
+                    <div v-else class="px-3 pb-2">
+                      <div class="text-[11px] text-gray-300 italic py-1">暂无子页面</div>
+                    </div>
                 </div>
             </div>
           </div>

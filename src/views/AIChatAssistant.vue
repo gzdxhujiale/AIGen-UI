@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
-import { Send, Trash2, Sparkles, Loader2, Check, XIcon, Minus, AlertCircle, Clock, Plus, MessageSquare } from 'lucide-vue-next'
+import { Send, Trash2, Sparkles, Loader2, Check, XIcon, Minus, AlertCircle, Clock, Plus, MessageSquare, Copy } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Popconfirm as APopconfirm } from '@arco-design/web-vue'
 import { useAIStore } from '@/stores/aiStore'
 import { useConfigStore } from '@/stores/configStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -183,7 +183,8 @@ function setupAutoRecovery() {
                 const isFail = lastMsg.status === 'error' || (!lastMsg.configData && (lastMsg.content.includes('Sorry') || lastMsg.content.includes('抱歉')))
                 const lastUser = msgs[msgs.length - 2]
                 if (isFail && !lastUser?.content.includes('previous response was not valid JSON')) {
-                    setTimeout(() => handleRetry(), 500)
+                    autoRetryNotice.value = '检测到错误，正在自动修复…'
+                    setTimeout(() => { handleRetry(); autoRetryNotice.value = '' }, 500)
                 }
             }
         }
@@ -193,6 +194,7 @@ setupAutoRecovery()
 
 // --- UI Logic ---
 const inputValue = ref('')
+const autoRetryNotice = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 watch(messages, async () => { await nextTick(); if(messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight }, { deep: true })
 
@@ -207,6 +209,29 @@ const handleClear = () => { aiStore.clearMessages(); configStore.clearPreviewCon
 const handleConfirmPreview = () => aiStore.confirmPreview()
 const handleCancelPreview = () => aiStore.cancelPreview()
 const formatTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+const formatRelativeDate = (dateStr: string) => {
+    const d = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffDays = Math.floor(diffMs / 86400000)
+    if (diffDays === 0) return '今天'
+    if (diffDays === 1) return '昨天'
+    if (diffDays < 7) return `${diffDays}天前`
+    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+}
+
+const copyMessageText = (text: string) => {
+    navigator.clipboard.writeText(text)
+        .then(() => { /* silent success */ })
+        .catch(() => { /* fallback - do nothing */ })
+}
+
+const handleInputKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        handleSend()
+    }
+}
 
 // --- History Logic ---
 const toggleHistory = () => {
@@ -277,6 +302,10 @@ watch(() => authStore.isAuthenticated, (v) => {
                 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                 <span class="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white"></span>
             </span>
+            <!-- Docked edge hint -->
+            <span v-if="isDocked && !isOpen && !isDragging" class="docked-hint" :class="position.x < 50 ? 'docked-hint-right' : 'docked-hint-left'">
+                <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><path d="M0 0l8 6-8 6z"/></svg>
+            </span>
         </button>
     </div>
 
@@ -344,6 +373,10 @@ watch(() => authStore.isAuthenticated, (v) => {
                                     <div class="viewer-header"><span class="text-xs font-medium text-muted-foreground">配置详情</span></div>
                                     <JsonViewer :value="message.configData" :expand-depth="0" boxed copyable sort theme="jv-light" class="custom-json-viewer"/>
                                 </div>
+                                <!-- Message hover actions -->
+                                <div v-if="message.status !== 'streaming'" class="message-hover-actions">
+                                    <button class="msg-action-btn" @click="copyMessageText(message.content)" title="复制"><Copy :size="13" /></button>
+                                </div>
                             </div>
                             <div class="message-meta"><span class="message-time">{{ formatTime(message.timestamp) }}</span></div>
                         </div>
@@ -375,12 +408,19 @@ watch(() => authStore.isAuthenticated, (v) => {
                 </div>
 
                 <div class="chat-input">
+                    <div v-if="autoRetryNotice" class="auto-retry-notice">
+                        <Loader2 :size="14" class="animate-spin" />
+                        <span>{{ autoRetryNotice }}</span>
+                    </div>
                     <div class="input-wrapper">
-                        <Input v-model="inputValue" type="text" placeholder="描述您想要的配置修改..." class="input-field" @keydown.enter.prevent="handleSend()"/>
+                        <textarea v-model="inputValue" rows="1" placeholder="描述您想要的配置修改..." class="input-field" @keydown="handleInputKeydown" />
                         <Button class="send-btn" size="icon" :disabled="!inputValue.trim() || isLoading" @click="() => handleSend()">
                             <Loader2 v-if="isLoading" :size="18" class="loading-icon" />
                             <Send v-else :size="18" />
                         </Button>
+                    </div>
+                    <div class="input-hint">
+                        <kbd>Enter</kbd> 发送 · <kbd>Shift+Enter</kbd> 换行
                     </div>
                 </div>
             </template>
@@ -405,11 +445,13 @@ watch(() => authStore.isAuthenticated, (v) => {
                     >
                         <div class="history-info">
                             <span class="history-title truncate">{{ session.title || '未命名对话' }}</span>
-                            <span class="history-date">{{ new Date(session.updated_at).toLocaleDateString() }}</span>
+                            <span class="history-date">{{ formatRelativeDate(session.updated_at) }}</span>
                         </div>
-                        <button class="history-delete-btn" @click="(e) => handleDeleteSession(e, session.id)">
-                            <Trash2 :size="14"/>
-                        </button>
+                        <APopconfirm content="确定删除该会话吗？" @ok="handleDeleteSession($event, session.id)">
+                            <button class="history-delete-btn" @click.stop>
+                                <Trash2 :size="14"/>
+                            </button>
+                        </APopconfirm>
                     </div>
                 </div>
             </div>
@@ -1114,9 +1156,88 @@ watch(() => authStore.isAuthenticated, (v) => {
     border: none !important;
     background: transparent !important;
     box-shadow: none !important;
-    padding-left: 16px;
-    height: 48px;
+    outline: none !important;
+    padding: 12px 16px;
+    min-height: 44px;
+    max-height: 120px;
     font-size: 0.95rem;
+    flex: 1;
+    resize: none;
+    line-height: 1.4;
+    font-family: inherit;
+    color: inherit;
+}
+
+.message-hover-actions {
+    display: none;
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    gap: 2px;
+}
+.message-content:hover .message-hover-actions {
+    display: flex;
+}
+.msg-action-btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: 1px solid rgba(0,0,0,0.08);
+    background: rgba(255,255,255,0.9);
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.msg-action-btn:hover {
+    background: #f1f5f9;
+    color: #334155;
+}
+.dark .msg-action-btn {
+    background: rgba(30, 41, 59, 0.9);
+    border-color: rgba(255,255,255,0.1);
+    color: #94a3b8;
+}
+.dark .msg-action-btn:hover {
+    background: rgba(51, 65, 85, 1);
+    color: #e2e8f0;
+}
+
+.message-content {
+    position: relative;
+}
+
+.auto-retry-notice {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    margin-bottom: 8px;
+    font-size: 0.75rem;
+    color: #8B5CF6;
+    background: rgba(139, 92, 246, 0.08);
+    border-radius: 20px;
+}
+
+.input-hint {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding-top: 6px;
+    font-size: 0.65rem;
+    color: #94a3b8;
+}
+.input-hint kbd {
+    padding: 1px 4px;
+    background: rgba(0,0,0,0.06);
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.65rem;
+}
+.dark .input-hint kbd {
+    background: rgba(255,255,255,0.1);
 }
 
 .send-btn {
@@ -1162,5 +1283,19 @@ watch(() => authStore.isAuthenticated, (v) => {
 @keyframes pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.6; transform: scale(1.2); }
+}
+
+.docked-hint {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255,255,255,0.7);
+    animation: docked-breathe 2s ease-in-out infinite;
+}
+.docked-hint-right { right: 6px; }
+.docked-hint-left { left: 6px; transform: translateY(-50%) rotate(180deg); }
+@keyframes docked-breathe {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
 }
 </style>

@@ -27,8 +27,9 @@ export const useAuthStore = defineStore('auth', () => {
         isLoading.value = true; error.value = null
         try {
             const data = await fn(); return { success: true, data }
-        } catch (e: any) {
-            error.value = e.message; return { success: false, error: e.message }
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            error.value = msg; return { success: false, error: msg }
         } finally { isLoading.value = false }
     }
 
@@ -52,7 +53,7 @@ export const useAuthStore = defineStore('auth', () => {
             if (err) throw err; return data
         })
 
-    const signUp = (email: string, pass: string, meta?: any) =>
+    const signUp = (email: string, pass: string, meta?: Record<string, string>) =>
         _runAction(async () => {
             const { data, error: err } = await supabase.auth.signUp({ email, password: pass, options: { data: meta } })
             if (err) throw err; return data
@@ -71,7 +72,7 @@ export const useAuthStore = defineStore('auth', () => {
         return '重置邮件已发送'
     })
 
-    const updateUserMetadata = (metadata: any) => _runAction(async () => {
+    const updateUserMetadata = (metadata: Record<string, string>) => _runAction(async () => {
         const { data, error: err } = await supabase.auth.updateUser({ data: metadata })
         if (err) throw err; user.value = data.user; return data
     })

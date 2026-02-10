@@ -26,13 +26,13 @@ export function setNavGroupsRef(navGroups: NavGroup[]) {
  */
 function findNavContext(navGroups: NavGroup[], navId: string) {
     for (const group of navGroups) {
-        for (const mainItem of (group.items as any[])) {
+        for (const mainItem of group.items) {
             // Check main item itself
             if (mainItem.id === navId) {
                 return { mainNav: mainItem.title, subNav: '', navId: mainItem.id }
             }
             // Check sub items
-            const subItem = (mainItem.items as any[])?.find(item => item.id === navId)
+            const subItem = mainItem.items?.find(item => item.id === navId)
             if (subItem) {
                 return { mainNav: mainItem.title, subNav: subItem.name, navId: subItem.id }
             }
@@ -132,8 +132,8 @@ export function useNavigation() {
             const navGroups = _navGroupsRef.value || []
             // 简单的反向查找 ID
             for (const group of navGroups) {
-                for (const mainItem of (group.items as any[])) {
-                    const subItem = (mainItem.items as any[])?.find(item => item.name === subNav)
+                for (const mainItem of group.items) {
+                    const subItem = mainItem.items?.find(item => item.name === subNav)
                     if (subItem) {
                         targetId = subItem.id
                         break
@@ -194,13 +194,17 @@ export function useNavigation() {
         return undefined
     })
 
+    const SPECIAL_PAGES: Record<string, string> = {
+        settings: 'Settings',
+        billing: 'Billing',
+        profile: 'profile',
+    }
+
     const currentPage = computed(() => {
         if (detailType.value === 'page-form') return 'DynamicFormPage'
 
         const navId = _currentNavId.value
-        if (navId === 'settings') return 'Settings'
-        if (navId === 'billing') return 'Billing'
-        if (navId === 'profile') return 'profile'
+        if (navId in SPECIAL_PAGES) return SPECIAL_PAGES[navId]
 
         if (currentTemplate.value) {
             return currentTemplate.value

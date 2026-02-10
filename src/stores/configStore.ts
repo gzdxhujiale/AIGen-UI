@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import type { Page1Config } from '@/types'
+import type { Page1Config, NavGroup } from '@/types'
 import { useConfigPageStore } from './config_page_Store'
 import { useConfigTeamStore } from './config_team_Store'
 
@@ -33,7 +33,7 @@ export const useConfigStore = defineStore('config', () => {
     // --- 预览模式状态 ---
     const previewMode = ref<'append' | 'override' | null>(null)
     const previewConfig = ref<Page1Config | null>(null)
-    const previewNavGroups = ref<any[] | null>(null)
+    const previewNavGroups = ref<NavGroup[] | null>(null)
     const isInPreviewMode = computed(() => previewMode.value !== null)
 
     // --- 临时/项目状态 ---
@@ -51,7 +51,7 @@ export const useConfigStore = defineStore('config', () => {
         previewConfig.value = config
         previewMode.value = mode
     }
-    const setPreviewNav = (groups: any[]) => { previewNavGroups.value = groups }
+    const setPreviewNav = (groups: NavGroup[]) => { previewNavGroups.value = groups }
     const clearPreviewConfig = () => {
         previewMode.value = null
         previewConfig.value = null
@@ -80,7 +80,8 @@ export const useConfigStore = defineStore('config', () => {
         }
     }
 
-    function importFullConfig(config: any) {
+    function importFullConfig(data: unknown) {
+        const config = data as { navGroups?: any[]; pageConfigs?: Record<string, any> }
         if (!config?.navGroups) return { success: false, message: '无效配置' }
         try {
             config.navGroups.flatMap((g: any) => g.items || []).forEach((main: any) => {
@@ -99,8 +100,9 @@ export const useConfigStore = defineStore('config', () => {
                 })
             })
             return { success: true }
-        } catch (e: any) {
-            return { success: false, message: e.message }
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            return { success: false, message: msg }
         }
     }
 
@@ -112,8 +114,9 @@ export const useConfigStore = defineStore('config', () => {
             ])
             if (!r1.success || !r2.success) throw new Error(r1.message || r2.message)
             return { success: true }
-        } catch (e: any) {
-            return { success: false, message: e.message }
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            return { success: false, message: msg }
         }
     }
 

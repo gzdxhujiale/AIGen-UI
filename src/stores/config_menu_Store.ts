@@ -21,9 +21,10 @@ export const useConfigMenuStore = defineStore('config-menu', () => {
             const res = await fn(user.id)
             localStorage.setItem(CACHE_KEY, JSON.stringify(menuConfig.value))
             return { success: true, data: res }
-        } catch (e: any) {
-            if (!silent) toast.error(e.message)
-            return { success: false, message: e.message }
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            if (!silent) toast.error(msg)
+            return { success: false, message: msg }
         } finally { isLoading.value = false }
     }
 

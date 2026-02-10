@@ -2,6 +2,17 @@
 // 统一导出所有类型定义
 // ============================================
 
+// 配置常量与类型
+export {
+    FILTER_TYPES, COLUMN_TYPES, BUTTON_VARIANTS,
+    MOCK_FORMATS, FIXED_POSITIONS, ALIGN_OPTIONS, EFFECT_TYPES,
+} from './config'
+
+export type {
+    FilterType, ColumnType, ButtonVariant,
+    MockFormat, FixedPosition, AlignOption, EffectType,
+} from './config'
+
 // 页面配置类型
 export type {
     TreeNode,

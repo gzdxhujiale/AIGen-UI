@@ -3,11 +3,12 @@ import { ref, watch, computed } from 'vue'
 import {
   Input as AInput, Select as ASelect, Option as AOption,
   Textarea as ATextarea, Button as AButton, InputNumber as AInputNumber,
-  InputTag as AInputTag
+  InputTag as AInputTag, Message
 } from '@arco-design/web-vue'
 import { Button as ShadcnButton } from '@/components/ui/button'
 import { FormInput, Plus, Trash2 } from 'lucide-vue-next'
 import { useConfigPageStore } from '@/stores/config_page_Store'
+import TreeConfigModal from '@/components/ui/filter/TreeConfigModal.vue'
 
 const props = defineProps<{
   type: 'filter' | 'column' | 'action' | 'card'
@@ -18,6 +19,8 @@ const props = defineProps<{
 const emit = defineEmits(['update:modelValue'])
 const configPageStore = useConfigPageStore()
 const formState = ref<any>({ ...props.modelValue })
+const treeConfigVisible = ref(false)
+const currentTreeField = ref('') // to track which field is being edited (filter or action item)
 
 // ----------------------------------------------------------------------
 // 1. Data-Driven Schemas (配置化表单定义)
@@ -29,10 +32,10 @@ const formSchemas = computed(() => ({
     { key: 'type', label: '类型 (Type)', comp: 'select', props: { options: [{value:'input',label:'输入框'},{value:'select',label:'下拉框'},{value:'date-range',label:'日期范围'},{value:'date',label:'单点日期'},{value:'tree-select',label:'树形选择'},{value:'radio',label:'单选框'},{value:'checkbox',label:'复选框'}] } },
     { key: 'precision', label: '时间精度', comp: 'select', showIf: (s:any) => ['date', 'date-range'].includes(s.type), props: { options: [{value:'year',label:'年'},{value:'month',label:'月'},{value:'date',label:'日'},{value:'hour',label:'时'},{value:'minute',label:'分'},{value:'second',label:'秒'}], placeholder: '默认:日' } },
     { key: 'placeholder', label: '占位文字', comp: 'input', props: { placeholder: '请输入...' } },
-    { key: 'multiple', label: '启用多选', comp: 'checkbox', showIf: (s:any) => s.type === 'select' },
+    { key: 'multiple', label: '启用多选', comp: 'checkbox', showIf: (s:any) => ['select', 'tree-select'].includes(s.type) },
     { key: 'disabled', label: '禁用', comp: 'checkbox' },
     { key: 'options', label: '选项列表', comp: 'input-tag', showIf: (s:any) => ['select', 'radio', 'checkbox'].includes(s.type), props: { readonly: false, placeholder: '输入后回车添加' } },
-    { key: 'treeOptions', label: '树形数据 JSON', comp: 'textarea', showIf: (s:any) => s.type === 'tree-select', props: { placeholder: '[{"key":"1",...}]', class: 'font-mono text-xs' } }
+    { key: 'treeOptions', label: '树形数据配置', comp: 'tree-config-trigger', showIf: (s:any) => s.type === 'tree-select' }
   ],
   column: [
     { key: 'key', label: '字段名 (Key)', comp: 'input', props: { placeholder: '如: user_name' } },
@@ -78,7 +81,24 @@ const conditionRulesProxy = computed({
 
 // 监听状态同步
 watch(() => props.modelValue, (v) => { if(JSON.stringify(v)!==JSON.stringify(formState.value)) formState.value = JSON.parse(JSON.stringify(v)) }, { deep: true })
-watch(formState, (v) => emit('update:modelValue', v), { deep: true })
+watch(formState, (v) => { emit('update:modelValue', v); clearErrors() }, { deep: true })
+
+// Validation
+const validationErrors = ref<Record<string, string>>({})
+const clearErrors = () => { validationErrors.value = {} }
+const validate = (): boolean => {
+  const errors: Record<string, string> = {}
+  const f = formState.value
+  const labelField = props.type === 'card' ? 'title' : 'label'
+  if (!f[labelField]?.trim()) errors[labelField] = '标签不能为空'
+  validationErrors.value = errors
+  if (Object.keys(errors).length > 0) {
+    Message.warning('请填写必填项')
+    return false
+  }
+  return true
+}
+defineExpose({ validate })
 
 // 辅助数据
 const availablePages = computed(() => {
@@ -117,9 +137,17 @@ const addEffectItem = () => {
              <label :for="field.key" class="text-sm cursor-pointer">{{ field.label }}</label>
           </div>
           <div v-else>
-            <label class="text-sm font-medium mb-1.5 block">{{ field.label }}</label>
-            <ASelect v-if="field.comp === 'select'" v-model="formState[field.key]" v-bind="field.props" class="w-full" />
-            <component v-else :is="resolveComp(field.comp)" v-model="formState[field.key]" v-bind="field.props" class="w-full" />
+            <label class="text-sm font-medium mb-1.5 block">
+              {{ field.label }}
+              <span v-if="['label','title'].includes(field.key)" class="text-red-500 ml-0.5">*</span>
+            </label>
+            <ASelect v-if="field.comp === 'select'" v-model="formState[field.key]" v-bind="field.props" class="w-full" :class="{ 'validation-error': validationErrors[field.key] }" />
+            <div v-else-if="field.comp === 'tree-config-trigger'" class="flex gap-2">
+               <AInput :model-value="formState[field.key] ? '已配置 ' + (JSON.parse(formState[field.key]).length || 0) + ' 个根节点' : '未配置'" readonly class="flex-1 text-xs" />
+               <AButton @click="() => { currentTreeField = 'filter'; treeConfigVisible = true }">配置数据</AButton>
+            </div>
+            <component v-else :is="resolveComp(field.comp)" v-model="formState[field.key]" v-bind="field.props" class="w-full" :class="{ 'validation-error': validationErrors[field.key] }" />
+            <span v-if="validationErrors[field.key]" class="text-[11px] text-red-500 mt-0.5 block">{{ validationErrors[field.key] }}</span>
           </div>
         </div>
       </template>
@@ -146,13 +174,16 @@ const addEffectItem = () => {
           <div v-if="formState.mockFormat === 'conditional'" class="col-span-2">
              <div class="flex justify-between items-center mb-2"><label class="text-sm font-medium">条件规则</label><AButton size="mini" type="outline" @click="addCondition"><Plus class="w-3 h-3"/> 添加</AButton></div>
              <div class="space-y-2">
-               <div v-for="(rule, idx) in conditionRulesProxy" :key="idx" class="p-2 border rounded bg-background/50 relative group grid grid-cols-4 gap-2">
-                  <ASelect v-model="rule.sourceColumn" size="small" placeholder="列" allow-search><AOption v-for="c in availableColumns" :key="c.key" :value="c.key">{{c.label}}</AOption></ASelect>
-                  <ASelect v-model="rule.operator" size="small"><AOption v-for="o in operatorOptions" :key="o.value" :value="o.value">{{o.label}}</AOption></ASelect>
-                  <AInput v-model="rule.compareValue" size="small" placeholder="比较值" />
-                  <AInput v-model="rule.displayValue" size="small" placeholder="显示值" />
-                  <Trash2 class="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-100 text-red-500 rounded-full p-0.5 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity" @click="removeCondition(idx)" />
-               </div>
+                <div class="grid grid-cols-4 gap-2 px-2 text-[10px] text-muted-foreground font-medium">
+                  <span>源列</span><span>运算符</span><span>比较值</span><span>显示值</span>
+                </div>
+                <div v-for="(rule, idx) in conditionRulesProxy" :key="idx" class="p-2 border rounded bg-background/50 relative group grid grid-cols-4 gap-2">
+                   <ASelect v-model="rule.sourceColumn" size="small" placeholder="列" allow-search><AOption v-for="c in availableColumns" :key="c.key" :value="c.key">{{c.label}}</AOption></ASelect>
+                   <ASelect v-model="rule.operator" size="small"><AOption v-for="o in operatorOptions" :key="o.value" :value="o.value">{{o.label}}</AOption></ASelect>
+                   <AInput v-model="rule.compareValue" size="small" placeholder="比较值" />
+                   <AInput v-model="rule.displayValue" size="small" placeholder="显示值" />
+                   <Trash2 class="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-100 text-red-500 rounded-full p-0.5 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity" @click="removeCondition(idx)" />
+                </div>
              </div>
           </div>
        </div>
@@ -172,7 +203,7 @@ const addEffectItem = () => {
                  <AInput v-model="item.label" size="mini" placeholder="标签" />
                  <AInput v-model="item.key" size="mini" placeholder="Key" />
                  <ASelect v-model="item.type" size="mini"><AOption value="input">Input</AOption><AOption value="textarea">Textarea</AOption><AOption value="select">Select</AOption><AOption value="tree-select">Tree</AOption><AOption value="date-range">Date Range</AOption><AOption value="date">Date</AOption><AOption value="radio">Radio</AOption><AOption value="checkbox">Checkbox</AOption></ASelect>
-                 <div v-if="item.type === 'select'" class="col-span-3 flex items-center gap-1.5 px-0.5">
+                 <div v-if="['select', 'tree-select'].includes(item.type)" class="col-span-3 flex items-center gap-1.5 px-0.5">
                     <input type="checkbox" v-model="item.multiple" class="w-3 h-3 rounded" :id="'mult-' + item.key"/>
                     <label :for="'mult-' + item.key" class="text-[10px] text-muted-foreground whitespace-nowrap cursor-pointer">启用多选</label>
                  </div>
@@ -181,7 +212,10 @@ const addEffectItem = () => {
                     <AOption value="year">年</AOption><AOption value="month">月</AOption><AOption value="date">日</AOption>
                     <AOption value="hour">时</AOption><AOption value="minute">分</AOption><AOption value="second">秒</AOption>
                  </ASelect>
-                 <ATextarea v-if="item.type==='tree-select'" v-model="item.treeOptions" placeholder='[{"value":"1","label":"A"}]' class="col-span-3 text-[10px] font-mono" :auto-size="{minRows:1,maxRows:3}"/>
+                 <div v-if="item.type==='tree-select'" class="col-span-3 flex gap-2">
+                    <AInput :model-value="item.treeOptions ? '已配置 ' + (JSON.parse(item.treeOptions).length || 0) + ' 个根节点' : '未配置'" readonly class="flex-1 text-xs" />
+                    <AButton size="small" @click="() => { currentTreeField = 'action-' + idx; treeConfigVisible = true }">配置数据</AButton>
+                 </div>
                  <Trash2 class="absolute top-1 right-1 w-3 h-3 text-red-400 cursor-pointer opacity-0 group-hover:opacity-100" @click="formState.effectFormItems.splice(idx,1)" />
               </div>
             </div>
@@ -202,10 +236,23 @@ const addEffectItem = () => {
        <AButton v-else :type="formState.variant" size="small" :class="formState.className">{{ formState.label||'按钮' }}</AButton>
     </div>
   </div>
+  
+  <TreeConfigModal 
+    v-if="treeConfigVisible"
+    :visible="treeConfigVisible" 
+    :model-value="currentTreeField === 'filter' ? formState.treeOptions : formState.effectFormItems[parseInt(currentTreeField.split('-')[1])].treeOptions"
+    @update:visible="treeConfigVisible = $event"
+    @ok="(val) => { 
+      if(currentTreeField === 'filter') formState.treeOptions = val
+      else formState.effectFormItems[parseInt(currentTreeField.split('-')[1])].treeOptions = val
+    }"
+  />
 </template>
 
 <style scoped>
 .config-form-container { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
 .config-form-container::-webkit-scrollbar { width: 4px; }
 .config-form-container::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 4px; }
+.validation-error { border-color: #ef4444 !important; }
+.validation-error:focus { box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important; }
 </style>

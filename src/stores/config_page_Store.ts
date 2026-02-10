@@ -158,8 +158,9 @@ export const useConfigPageStore = defineStore('config-page', () => {
             const { record, component } = _getCompContext(navTitle, subId)
             if (mutationFn(component) === false) return { success: false, message: '操作目标不存在' }
             return await savePageConfig(navTitle, record.page_config)
-        } catch (e: any) {
-            return { success: false, message: e.message }
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            return { success: false, message: msg }
         }
     }
 
@@ -277,10 +278,11 @@ export const useConfigPageStore = defineStore('config-page', () => {
             }
             isLoaded.value = true
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error)
             console.error('加载页面配置失败:', error)
-            toast.error('加载页面配置失败: ' + error.message)
-            return { success: false, message: error.message }
+            toast.error('加载页面配置失败: ' + msg)
+            return { success: false, message: msg }
         } finally {
             isLoading.value = false
         }
@@ -366,10 +368,11 @@ export const useConfigPageStore = defineStore('config-page', () => {
             }
             lastSyncTime.value = new Date()
             return { success: true, data }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error)
             console.error('保存页面配置失败:', error)
-            syncError.value = error.message
-            return { success: false, message: error.message }
+            syncError.value = msg
+            return { success: false, message: msg }
         }
     }
 
@@ -405,10 +408,11 @@ export const useConfigPageStore = defineStore('config-page', () => {
             pageConfigs.value.delete(title)
             updateCache() // 更新缓存
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error)
             console.error('删除页面配置失败:', error)
-            toast.error('删除页面配置失败: ' + error.message)
-            return { success: false, message: error.message }
+            toast.error('删除页面配置失败: ' + msg)
+            return { success: false, message: msg }
         }
     }
 
@@ -460,10 +464,11 @@ export const useConfigPageStore = defineStore('config-page', () => {
             updateCache() // 更新缓存
 
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error)
             console.error('重命名一级导航失败:', error)
-            toast.error('重命名一级导航失败: ' + error.message)
-            return { success: false, message: error.message }
+            toast.error('重命名一级导航失败: ' + msg)
+            return { success: false, message: msg }
         }
     }
 
@@ -728,9 +733,10 @@ export const useConfigPageStore = defineStore('config-page', () => {
             lastSyncTime.value = new Date()
 
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error)
             console.error('应用预览配置失败:', error)
-            return { success: false, message: error.message }
+            return { success: false, message: msg }
         }
     }
 
@@ -765,10 +771,11 @@ export const useConfigPageStore = defineStore('config-page', () => {
 
             await loadPageConfigs()
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error)
             console.error('批量保存页面配置失败:', error)
-            toast.error('批量保存页面配置失败: ' + error.message)
-            return { success: false, message: error.message }
+            toast.error('批量保存页面配置失败: ' + msg)
+            return { success: false, message: msg }
         }
     }
 
@@ -794,7 +801,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
         if (!isLoaded.value && navGroups.value.length > 0) {
             initNavigation(navGroups.value)
         }
-    }, { deep: true, immediate: true })
+    }, { immediate: true })
 
     /**
      * 确保所有待处理的同步完成

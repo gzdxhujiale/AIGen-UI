@@ -5,6 +5,7 @@ import { streamChat, isCozeConfigured, type ChatMessage } from '@/api/coze'
 import { useConfigStore } from './configStore'
 import { useConfigPageStore } from './config_page_Store'
 import { useAuthStore } from './authStore'
+import type { PageConfigRecord, PageSubItem } from './config_page_Store'
 import { supabase } from '@/api/supabase'
 import { useNavigation } from '@/composables/useNavigation'
 import { toast } from 'vue-sonner'
@@ -14,7 +15,7 @@ export interface AIMessage extends ChatMessage {
     timestamp: Date
     status?: 'sending' | 'streaming' | 'complete' | 'error'
     type?: 'text' | 'config_preview'
-    configData?: any
+    configData?: PageConfigRecord[]
 }
 
 export interface ChatSession {
@@ -41,7 +42,7 @@ export const useAIStore = defineStore('ai', () => {
     const messages = ref<AIMessage[]>([])
     const isOpen = ref(false)
     const isLoading = ref(false)
-    const pendingConfig = ref<any>(null)
+    const pendingConfig = ref<unknown>(null)
     const streamingContent = ref('')
     const previewMode = ref<PreviewMode>(null)
     const isMinimized = ref(false)
@@ -77,8 +78,9 @@ export const useAIStore = defineStore('ai', () => {
     /**
      * 标准化 AI 返回的异构配置数据
      */
-    function _normalizeAIConfig(config: any): any[] {
-        const wrap = (item: any) => {
+    function _normalizeAIConfig(config: unknown): PageConfigRecord[] {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI 返回的数据结构不可预测
+        const wrap = (item: any): PageConfigRecord | null => {
             if (!item) return null
 
             // 清理 page_config 的助手函数
@@ -135,13 +137,13 @@ export const useAIStore = defineStore('ai', () => {
         let rawList: any[]
         if (Array.isArray(config)) {
             rawList = config
-        } else if (config.items && Array.isArray(config.items) && !config.title && !config.page_config) {
+        } else if (typeof config === 'object' && config !== null && 'items' in config && Array.isArray((config as any).items) && !('title' in config) && !('page_config' in config)) {
             // Treat as wrapper only if it doesn't look like a single record (no title/page_config)
-            rawList = config.items
+            rawList = (config as any).items
         } else {
             rawList = [config]
         }
-        return rawList.map(wrap).filter(Boolean)
+        return rawList.map(wrap).filter((r): r is PageConfigRecord => r !== null)
     }
 
     // ============================================
@@ -192,11 +194,11 @@ export const useAIStore = defineStore('ai', () => {
                 role: m.role as 'user' | 'assistant',
                 content: m.content || '',
                 timestamp: new Date(m.created_at),
-                status: m.status as any,
+                status: m.status as AIMessage['status'],
                 configData: m.config_data
             }))
             currentSessionId.value = sessionId
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('Failed to load messages:', e)
             toast.error('加载历史消息失败')
         } finally {
@@ -370,8 +372,9 @@ export const useAIStore = defineStore('ai', () => {
                     toast.error('AI 请求失败', { description: err.message })
                 }
             )
-        } catch (e: any) {
-            _updateLastMessage({ content: `未预期错误: ${e.message}`, status: 'error' })
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            _updateLastMessage({ content: `未预期错误: ${msg}`, status: 'error' })
             isLoading.value = false
         }
     }
@@ -380,7 +383,7 @@ export const useAIStore = defineStore('ai', () => {
     // 预览与应用
     // ============================================
 
-    function generatePreviewConfigs(config: any) {
+    function generatePreviewConfigs(config: unknown) {
         const records = _normalizeAIConfig(config)
         if (!records.length) return
 
@@ -389,8 +392,8 @@ export const useAIStore = defineStore('ai', () => {
             const existing = configPageStore.getPageConfigByTitle(newRec.title)
             if (existing) {
                 const merged = JSON.parse(JSON.stringify(existing))
-                newRec.page_config.items?.forEach((ni: any) => {
-                    const idx = merged.page_config.items.findIndex((i: any) => i.name === ni.name || i.id === ni.id)
+                newRec.page_config.items?.forEach((ni: PageSubItem) => {
+                    const idx = merged.page_config.items.findIndex((i: PageSubItem) => i.name === ni.name || i.id === ni.id)
                     idx > -1 ? (merged.page_config.items[idx] = { ...merged.page_config.items[idx], ...ni }) : merged.page_config.items.push(ni)
                 })
                 configPageStore.setPreviewPageConfig(newRec.title, merged)
@@ -428,9 +431,10 @@ export const useAIStore = defineStore('ai', () => {
             } else {
                 throw new Error(result.message || 'Unknown error during save')
             }
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
             console.error('应用预览失败:', e)
-            toast.error('同步失败', { description: e.message })
+            toast.error('同步失败', { description: msg })
         } finally {
             isLoading.value = false
         }
