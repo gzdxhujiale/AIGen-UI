@@ -66,7 +66,7 @@ export function useOnboarding() {
                 },
                 steps: [
                     {
-                        element: '.ai-chat-button',
+                        element: '.ai-trigger-btn',
                         popover: {
                             title: '🤖 AI 配置助手',
                             description: '点击这个按钮可以调用 AI 助手来帮助您生成和修改页面配置。只需描述您想要的效果，AI 会自动生成配置方案供您预览和确认。',
@@ -77,10 +77,10 @@ export function useOnboarding() {
                                 const trigger = document.querySelector('#user-avatar-trigger') as HTMLElement
                                 if (trigger) {
                                     trigger.click()
-                                    // 等待下拉菜单渲染后再进入下一步
+                                    // 给一点时间让下拉菜单渲染出来
                                     setTimeout(() => {
                                         driverObj.moveNext()
-                                    }, 300)
+                                    }, 400)
                                 } else {
                                     driverObj.moveNext()
                                 }
@@ -91,7 +91,7 @@ export function useOnboarding() {
                         element: '#nav-profile',
                         popover: {
                             title: '👤 用户中心',
-                            description: '用户中心包含三个核心功能：\n\n• 基本信息配置\n• 界面布局配置 - 选择导航风格\n• 团队管理配置 - 管理您的团队信息和权限',
+                            description: '用户中心包含三个核心功能：\n\n• 个人资料：配置您的职位、部门、所在地、个性化标签等信息。\n• 团队管理：管理您的团队信息和成员权限。',
                             side: 'left',
                             align: 'start'
                         }
@@ -99,13 +99,12 @@ export function useOnboarding() {
                     {
                         element: '#nav-edit-mode',
                         popover: {
-                            title: '✏️ 布局编辑',
-                            description: '您可以在用户头像菜单中找到此选项。\n\n开启编辑模式后，您可以：\n• 添加/修改/删除导航项\n• 添加/修改/删除页面布局配置\n• 实时预览配置效果',
-                            side: 'bottom',
-                            align: 'end'
+                            title: '✏️ 预览/编辑模式',
+                            description: '核心切换开关。\n\n• **编辑模式**：可以实时修改导航、添加组件、调整布局。\n• **预览模式**：查看最终生效的用户界面效果。',
+                            side: 'left',
+                            align: 'start'
                         }
                     }
-
                 ]
             })
 

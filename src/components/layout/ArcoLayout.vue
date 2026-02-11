@@ -251,8 +251,25 @@ const navStyles = computed(() => {
             </div>
             <a-divider direction="vertical" class="mx-1 opacity-50" />
             <a-dropdown @select="handleUserAction" trigger="click" position="br">
-                <div class="p-0.5 rounded-full hover:bg-gray-100 cursor-pointer border border-gray-200"><a-avatar :size="32" :image-url="authStore.userAvatar" class="shadow-sm" /></div>
-                <template #content><div class="py-1 min-w-[150px]"><a-doption value="profile" class="py-2.5"><template #icon><ArcIcons.IconUser class="size-4 opacity-70"/></template>用户中心</a-doption><a-doption value="toggle-edit" class="py-2.5"><template #icon><component :is="configStore.isEditMode ? Eye : Pencil" class="size-4 opacity-70"/></template>{{ configStore.isEditMode ? '预览模式' : '编辑模式' }}</a-doption><a-doption value="logout" class="text-red-500 py-2.5 font-medium"><template #icon><LogOut class="size-4"/></template>退出登录</a-doption></div></template>
+                <div id="user-avatar-trigger" class="p-0.5 rounded-full hover:bg-gray-100 cursor-pointer border border-gray-200">
+                    <a-avatar :size="32" :image-url="authStore.userAvatar" class="shadow-sm" />
+                </div>
+                <template #content>
+                    <div class="py-1 min-w-[150px]">
+                        <a-doption id="nav-profile" value="profile" class="py-2.5">
+                            <template #icon><ArcIcons.IconUser class="size-4 opacity-70"/></template>
+                            用户中心
+                        </a-doption>
+                        <a-doption id="nav-edit-mode" value="toggle-edit" class="py-2.5">
+                            <template #icon><component :is="configStore.isEditMode ? Eye : Pencil" class="size-4 opacity-70"/></template>
+                            {{ configStore.isEditMode ? '预览模式' : '编辑模式' }}
+                        </a-doption>
+                        <a-doption value="logout" class="text-red-500 py-2.5 font-medium">
+                            <template #icon><LogOut class="size-4"/></template>
+                            退出登录
+                        </a-doption>
+                    </div>
+                </template>
             </a-dropdown>
         </div>
       </a-layout-header>

@@ -6,36 +6,66 @@ import {
   Input as AInput, 
   Card as ACard, 
   Table as ATable, 
-  Form as AForm, 
-  FormItem as AFormItem, 
   Space as ASpace, 
-  Grid as AGrid,
   Alert as AAlert,
   Tooltip as ATooltip,
   Select as ASelect,
   Option as AOption,
   Upload as AUpload,
+  Tag as ATag,
+  Grid as AGrid,
   Message
 } from '@arco-design/web-vue'
 import { 
-  IconUser, IconEdit, IconDelete, IconPlus, IconSafe, IconAt, 
-  IconInfoCircle, IconRefresh, IconCamera, IconCheck
+  IconUser, IconDelete, IconPlus, IconSafe, 
+  IconRefresh, IconCamera, IconCheck, IconLocation, IconAt,
+  IconIdcard, IconUserGroup
 } from '@arco-design/web-vue/es/icon'
 import { useConfigTeamStore } from '@/stores/config_team_Store'
+
 
 const { Row: ARow, Col: ACol } = AGrid
 const authStore = useAuthStore()
 const teamStore = useConfigTeamStore()
 import type { TeamItem } from '@/types/navigation'
 
-// 2. 表单状态
+// 基础资料默认数据
+const baseProfile = {
+  jobTitle: '产品经理',
+  department: '中台-前端架构和平台工具团队',
+  location: '广州市'
+}
+
+// 扩展详情数据（标签、数据等）
+// 可选 type: 
+// - 'tags': 字符串数组，渲染为一组灰色标签
+// - 'tag': 字符串，渲染为单个灰色标签
+// - 'hobbies': 字符串数组，渲染为红色风格的“爱好”标签
+// - 'text': 字符串，渲染为普通文本
+const detailItems = [
+  { label: '团队', key: 'hobbies', value: ['HJL', ' Claude', 'Gemini'], type: 'tags' },
+  { label: '前端', value: ['vue3', 'pinia', 'vite', 'ts'], type: 'tags' },
+  { label: 'UIUX', key: 'zodiac', value: 'arco design', type: 'tag' },
+  { label: '数据库', key: 'birthday', value: 'PostgreSQL', type: 'tag' },
+  { label: 'AIAgent', key: 'birthday', value: 'Coze-豆包1.6极速速度', type: 'tag' }
+]
+
+// 个人资料数据
+const profile = reactive({
+  ...baseProfile,
+  details: [...detailItems]
+})
+
+// 表单状态
 const form = reactive({
   userName: '',
   avatarUrl: '',
-  teams: [] as TeamItem[]
+  teams: [] as TeamItem[],
+  ...baseProfile,
+  details: JSON.parse(JSON.stringify(detailItems))
 })
 
-// 3. 响应式自动保存逻辑
+// 响应式自动保存逻辑
 const isSaving = ref(false)
 const isSaveSuccess = ref(false)
 
@@ -44,6 +74,14 @@ const initForm = () => {
   form.userName = authStore.userDisplayName || ''
   form.avatarUrl = authStore.userAvatar || ''
   form.teams = JSON.parse(JSON.stringify(teamStore.teams))
+  
+  // 初始化个人详情
+  Object.assign(form, {
+    jobTitle: profile.jobTitle,
+    department: profile.department,
+    location: profile.location,
+    details: JSON.parse(JSON.stringify(profile.details))
+  })
 }
 
 onMounted(() => {
@@ -53,11 +91,21 @@ onMounted(() => {
 const performSave = async () => {
     if (!authStore.user) return
 
-    // 检查是否有真正的数据变动
     const isNameChanged = form.userName !== authStore.userDisplayName
     const isTeamsChanged = JSON.stringify(form.teams) !== JSON.stringify(teamStore.teams)
+    const isProfileChanged = JSON.stringify({
+      jobTitle: form.jobTitle,
+      department: form.department,
+      location: form.location,
+      details: form.details
+    }) !== JSON.stringify({
+      jobTitle: profile.jobTitle,
+      department: profile.department,
+      location: profile.location,
+      details: profile.details
+    })
     
-    if (!isNameChanged && !isTeamsChanged) return
+    if (!isNameChanged && !isTeamsChanged && !isProfileChanged) return
 
     isSaving.value = true
     isSaveSuccess.value = false
@@ -67,7 +115,14 @@ const performSave = async () => {
         teamStore.teams = JSON.parse(JSON.stringify(form.teams))
         await teamStore.saveTeams()
       }
-      // 保存成功反馈
+      if (isProfileChanged) {
+        Object.assign(profile, {
+          jobTitle: form.jobTitle,
+          department: form.department,
+          location: form.location,
+          details: JSON.parse(JSON.stringify(form.details))
+        })
+      }
       isSaveSuccess.value = true
       setTimeout(() => { isSaveSuccess.value = false }, 2000)
     } catch (e) {
@@ -126,156 +181,364 @@ const handleAvatarUpload = async (fileList: any[]) => {
 </script>
 
 <template>
-  <div class="p-4 max-w-[1400px] mx-auto">
-    <ASpace direction="vertical" size="large" fill>
-      
-      <!-- 顶部区域：基本信息 -->
-      <ARow :gutter="24">
-        <ACol :span="24">
-          <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden">
+  <div class="profile-page">
+    <ARow :gutter="20">
+      <!-- 左侧：个人信息面板 -->
+      <ACol :span="24" :lg="8">
+        <div class="profile-left">
+          <div class="profile-card">
+            <!-- 头像区域 -->
+            <div class="avatar-section">
+              <div class="avatar-wrapper">
+                <div v-if="!form.avatarUrl" class="avatar-placeholder">
+                  <IconUser class="text-4xl text-[var(--color-text-3)]" />
+                </div>
+                <img v-if="form.avatarUrl" :src="form.avatarUrl" class="avatar-img" />
+                <div class="avatar-overlay">
+                  <IconCamera class="text-white text-xl mb-0.5" />
+                  <span class="text-[9px] text-white font-medium">更换头像</span>
+                </div>
+                <AUpload :show-file-list="false" @change="handleAvatarUpload" class="avatar-upload-trigger">
+                  <template #upload-button><div class="w-[88px] h-[88px] rounded-full"></div></template>
+                </AUpload>
+              </div>
+            </div>
+
+            <!-- 用户名 -->
+            <h2 class="profile-name">{{ authStore.userDisplayName || '管理员' }}</h2>
+
+
+            <!-- 信息列表 -->
+            <div class="info-list">
+              <div class="info-item">
+                <IconIdcard class="info-icon" />
+                <span>{{ profile.jobTitle }}</span>
+              </div>
+              <div class="info-item">
+                <IconUserGroup class="info-icon" />
+                <span>{{ profile.department }}</span>
+              </div>
+              <div class="info-item">
+                <IconLocation class="info-icon" />
+                <span>{{ profile.location }}</span>
+              </div>
+              <div class="info-item">
+                <IconAt class="info-icon" />
+                <span>{{ authStore.userEmail }}</span>
+              </div>
+            </div>
+
+
+
+            <!-- 分隔线 -->
+            <div class="profile-divider"></div>
+
+            <!-- 动态详情区域 -->
+            <div class="details-section">
+              <div v-for="(item, idx) in profile.details" :key="idx" class="detail-row">
+                <span class="detail-label">{{ item.label }}</span>
+                
+                <!-- 根据类型渲染内容 -->
+                <div v-if="item.type === 'tags'" class="tags-list">
+                  <ATag v-for="tag in (item.value as string[])" :key="tag" class="profile-tag">{{ tag }}</ATag>
+                </div>
+                
+                <ATag v-else-if="item.type === 'tag'" class="profile-tag">{{ item.value }}</ATag>
+                
+                <div v-else-if="item.type === 'hobbies'" class="hobby-tags">
+                  <span v-for="hobby in (item.value as string[])" :key="hobby" class="hobby-tag">{{ hobby }}</span>
+                </div>
+                
+                <span v-else class="detail-value">{{ item.value }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ACol>
+
+      <!-- 右侧：团队管理 -->
+      <ACol :span="24" :lg="16">
+        <div class="profile-right">
+          <ACard :bordered="true" class="shadow-sm rounded-xl overflow-hidden">
             <template #title>
               <ASpace>
-                <IconUser class="text-primary" />
-                <span class="font-bold">基本信息</span>
+                <IconSafe class="text-primary" />
+                <span class="font-bold">团队管理</span>
               </ASpace>
             </template>
-            
-            <div class="flex flex-col md:flex-row gap-8 items-start">
-              <!-- 左侧：头像上传 -->
-              <div class="flex flex-col items-center gap-4 shrink-0 px-4">
-                <!-- 统一头像容器 -->
-                <div class="relative w-[100px] h-[100px] rounded-full overflow-hidden shadow-md border-2 border-white ring-4 ring-primary/5 group cursor-pointer">
-                  <!-- 1. 背景占位 -->
-                  <div v-if="!form.avatarUrl" class="absolute inset-0 bg-[var(--color-fill-3)] flex items-center justify-center">
-                    <IconUser class="text-5xl text-[var(--color-text-3)]" />
-                  </div>
-                  <!-- 2. 头像图片 -->
-                  <img v-if="form.avatarUrl" :src="form.avatarUrl" class="absolute inset-0 w-full h-full object-cover z-0" />
-                  <!-- 3. 交互遮罩层 -->
-                  <div class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                    <IconCamera class="text-white text-3xl mb-1" />
-                    <span class="text-[10px] text-white font-medium">更换头像</span>
-                  </div>
-                  <!-- 4. 上传控制 -->
-                  <AUpload :show-file-list="false" @change="handleAvatarUpload" class="absolute inset-0 z-20 opacity-0 w-full h-full">
-                    <template #upload-button><div class="w-[100px] h-[100px] rounded-full"></div></template>
-                  </AUpload>
-                </div>
-
-                <div class="text-center">
-                  <div class="text-sm font-bold text-[var(--color-text-1)]">{{ authStore.userDisplayName }}</div>
-                  <div class="mt-1.5 px-3 py-0.5 bg-[var(--color-primary-light-1)] text-[rgb(var(--primary-6))] text-[10px] font-medium rounded-full border border-[rgb(var(--primary-2))]">账号所有者</div>
-                </div>
-              </div>
-
-              <!-- 右侧：表单 -->
-              <div class="flex-1 w-full pt-2">
-                <AForm :model="form" layout="vertical">
-                  <ARow :gutter="24">
-                    <ACol :span="24" :lg="12">
-                      <AFormItem label="显示名称" help="修改后自动保存">
-                        <AInput v-model="form.userName" placeholder="请输入您的名字" size="large" @blur="performSave">
-                          <template #prefix><IconEdit /></template>
-                        </AInput>
-                      </AFormItem>
-                    </ACol>
-                    
-                    <ACol :span="24" :lg="12">
-                      <AFormItem label="关联邮箱" disabled>
-                        <AInput :model-value="authStore.userEmail" disabled>
-                          <template #prefix><IconAt /></template>
-                        </AInput>
-                        <template #extra>
-                          <div class="flex items-center gap-1 mt-1 text-xs opacity-70">
-                            <IconInfoCircle /> 邮箱暂不支持修改
-                          </div>
-                        </template>
-                      </AFormItem>
-                    </ACol>
-                  </ARow>
-                </AForm>
-              </div>
-            </div>
-          </ACard>
-        </ACol>
-      </ARow>
-      
-      <!-- 团队管理 -->
-      <ACard :bordered="false" class="shadow-sm rounded-xl overflow-hidden">
-        <template #title>
-          <ASpace>
-            <IconSafe class="text-primary" />
-            <span class="font-bold">团队管理</span>
-          </ASpace>
-        </template>
-        <template #extra>
-          <AButton type="primary" size="small" @click="addTeam">
-            <template #icon><IconPlus /></template>
-            新增团队
-          </AButton>
-        </template>
-        
-        <div class="mb-4">
-          <AAlert type="info" show-icon>
-            配置您在各个团队中的角色和操作权限。所有更改将自动保存。
-          </AAlert>
-        </div>
-
-        <ATable 
-          :columns="columns" 
-          :data="form.teams" 
-          :pagination="false"
-          :bordered="{ wrapper: true, cell: false }"
-          class="rounded-lg overflow-hidden border-none"
-        >
-          <template #name="{ record }">
-            <AInput v-model="record.name" size="small" class="border-transparent hover:border-gray-300" @blur="performSave" />
-          </template>
-          <template #role="{ record }">
-            <ASelect v-model="record.plan" size="small" @change="performSave">
-              <AOption value="online">在线 (Online)</AOption>
-              <AOption value="enterprise">企业 (Enterprise)</AOption>
-              <AOption value="free">免费 (Free)</AOption>
-            </ASelect>
-          </template>
-          <template #permissions>
-             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">即将推出</span>
-          </template>
-          <template #actions="{ record }">
-            <ATooltip content="删除团队">
-               <!-- 按钮 type status 需要显式强转避免类型错误，或者忽略，此处用 any 绕过 -->
-              <AButton type="text" status="danger" size="small" @click="removeTeam(record.name)">
-                <template #icon><IconDelete /></template>
-              </AButton>
-            </ATooltip>
-          </template>
-          <template #empty>
-            <div class="flex flex-col items-center py-8 text-gray-400">
-              <IconSafe class="text-3xl mb-3 opacity-30" />
-              <p class="text-sm mb-3">还没有团队</p>
-              <AButton type="outline" size="small" @click="addTeam">
+            <template #extra>
+              <AButton type="primary" size="small" @click="addTeam">
                 <template #icon><IconPlus /></template>
-                添加您的第一个团队
+                新增团队
               </AButton>
+            </template>
+            
+            <div class="mb-4">
+              <AAlert type="info" show-icon>
+                配置您在各个团队中的角色和操作权限。所有更改将自动保存。
+              </AAlert>
             </div>
-          </template>
-        </ATable>
-      </ACard>
 
-      <!-- 底部保存状态提示 -->
-      <div v-if="isSaving || isSaveSuccess" 
-           class="fixed bottom-4 right-4 backdrop-blur shadow-lg border rounded-full px-4 py-2 flex items-center gap-2 transition-all duration-300 z-50"
-           :class="isSaveSuccess ? 'bg-white/80 dark:bg-slate-800/80 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' : 'bg-white/80 dark:bg-slate-800/80 text-primary border-primary/20'">
-        <IconRefresh v-if="isSaving" class="animate-spin" />
-        <IconCheck v-else />
-        <span class="text-xs font-medium">{{ isSaveSuccess ? '已自动保存' : '自动保存中...' }}</span>
-      </div>
-      
-    </ASpace>
+            <ATable 
+              :columns="columns" 
+              :data="form.teams" 
+              :pagination="false"
+              :bordered="{ wrapper: true, cell: false }"
+              class="rounded-lg overflow-hidden border-none"
+            >
+              <template #name="{ record }">
+                <AInput v-model="record.name" size="small" class="border-transparent hover:border-gray-300" @blur="performSave" />
+              </template>
+              <template #role="{ record }">
+                <ASelect v-model="record.plan" size="small" @change="performSave">
+                  <AOption value="online">在线 (Online)</AOption>
+                  <AOption value="enterprise">企业 (Enterprise)</AOption>
+                  <AOption value="free">免费 (Free)</AOption>
+                </ASelect>
+              </template>
+              <template #permissions>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">即将推出</span>
+              </template>
+              <template #actions="{ record }">
+                <ATooltip content="删除团队">
+                  <AButton type="text" status="danger" size="small" @click="removeTeam(record.name)">
+                    <template #icon><IconDelete /></template>
+                  </AButton>
+                </ATooltip>
+              </template>
+              <template #empty>
+                <div class="flex flex-col items-center py-8 text-gray-400">
+                  <IconSafe class="text-3xl mb-3 opacity-30" />
+                  <p class="text-sm mb-3">还没有团队</p>
+                  <AButton type="outline" size="small" @click="addTeam">
+                    <template #icon><IconPlus /></template>
+                    添加您的第一个团队
+                  </AButton>
+                </div>
+              </template>
+            </ATable>
+          </ACard>
+        </div>
+      </ACol>
+    </ARow>
+
+
+    <!-- 底部保存状态提示 -->
+    <div v-if="isSaving || isSaveSuccess" 
+         class="fixed bottom-4 right-4 backdrop-blur shadow-lg border rounded-full px-4 py-2 flex items-center gap-2 transition-all duration-300 z-50"
+         :class="isSaveSuccess ? 'bg-white/80 dark:bg-slate-800/80 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' : 'bg-white/80 dark:bg-slate-800/80 text-primary border-primary/20'">
+      <IconRefresh v-if="isSaving" class="animate-spin" />
+      <IconCheck v-else />
+      <span class="text-xs font-medium">{{ isSaveSuccess ? '已自动保存' : '自动保存中...' }}</span>
+    </div>
   </div>
 </template>
 
 <style scoped>
+/* 页面整体布局 */
+.profile-page {
+  width: 100%;
+  padding: 24px;
+}
+
+/* ========== 左侧面板 ========== */
+.profile-left {
+  width: 100%;
+}
+
+.profile-card {
+  background: var(--color-bg-2);
+  border-radius: 16px;
+  border: 1px solid var(--color-border-2);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  padding: 32px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 头像 */
+.avatar-section {
+  margin-bottom: 16px;
+}
+
+.avatar-wrapper {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  border: 3px solid var(--color-bg-1);
+  outline: 4px solid rgba(var(--primary-6), 0.06);
+}
+
+.avatar-placeholder {
+  position: absolute;
+  inset: 0;
+  background: var(--color-fill-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.avatar-wrapper:hover .avatar-overlay {
+  opacity: 1;
+}
+
+.avatar-upload-trigger {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 用户名和签名 */
+.profile-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-1);
+  margin: 0 0 6px;
+}
+
+
+
+/* 信息列表 */
+.info-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 8px;
+  margin-bottom: 24px;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-text-2);
+  line-height: 1.6;
+}
+
+.info-icon {
+  flex-shrink: 0;
+  margin-top: 3px;
+  font-size: 16px;
+  color: var(--color-text-3);
+}
+
+
+
+/* 分隔线 */
+.profile-divider {
+  width: 100%;
+  height: 1px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--color-border-2) 0px,
+    var(--color-border-2) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  margin-bottom: 24px;
+}
+
+.details-section {
+  width: 100%;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.tags-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-tag {
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 2px 12px;
+  background: var(--color-fill-2);
+  color: var(--color-text-2);
+  border: 1px solid var(--color-border-2);
+}
+
+.detail-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-3);
+  flex-shrink: 0;
+  width: 44px;
+}
+
+.detail-value {
+  font-size: 13px;
+  color: var(--color-text-2);
+}
+
+.hobby-tags {
+  display: flex;
+  gap: 8px;
+}
+
+.hobby-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 14px;
+  font-size: 12px;
+  border-radius: 4px;
+  background: #FFF0F0;
+  color: #F76560;
+  border: 1px solid #FFCCC7;
+}
+
+/* ========== 右侧面板 ========== */
+.profile-right {
+  width: 100%;
+}
+
+/* ========== 通用样式覆盖 ========== */
 :deep(.arco-table-cell) {
   font-size: 13px;
 }
@@ -293,5 +556,15 @@ const handleAvatarUpload = async (fileList: any[]) => {
   font-weight: 600;
   color: var(--color-text-2);
   margin-bottom: 8px;
+}
+
+/* 响应式 */
+@media (max-width: 900px) {
+  .profile-page {
+    flex-direction: column;
+  }
+  .profile-left {
+    width: 100%;
+  }
 }
 </style>
