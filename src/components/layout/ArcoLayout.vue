@@ -17,7 +17,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useAIStore } from '@/stores/aiStore'
 import { useNavigation } from '@/composables/useNavigation'
 import { supabase } from '@/api/supabase'
-import type { TeamItem, NavGroup } from '@/types'
+import type { TeamItem, NavGroup, MenuItem } from '@/types'
 import AIChatAssistant from '@/views/AIChatAssistant.vue'
 import draggable from 'vuedraggable'
 
@@ -112,9 +112,9 @@ const handleEditSubmit = () => {
 }
 
 // --- Header 菜单 ---
-const hMenuDialog = reactive({ visible: false, isEdit: false, idx: -1, form: { type: 'text-button', label: '', options: '' } })
+const hMenuDialog = reactive({ visible: false, isEdit: false, idx: -1, form: { type: 'text-button', label: '', options: '', url: '' } })
 const _openHMenuDialog = (idx = -1, item?: any) => {
-    Object.assign(hMenuDialog, { visible: true, isEdit: idx > -1, idx, form: { type: item?.type || 'text-button', label: item?.label || '', options: item?.options?.join(',') || '' } })
+    Object.assign(hMenuDialog, { visible: true, isEdit: idx > -1, idx, form: { type: item?.type || 'text-button', label: item?.label || '', options: item?.options?.join(',') || '', url: item?.url || '' } })
 }
 
 const saveHMenu = async () => {
@@ -122,6 +122,7 @@ const saveHMenu = async () => {
     const newItem = { 
         type: f.type as "text-button" | "dropdown", 
         label: f.label, 
+        url: f.type === 'text-button' ? f.url : undefined,
         options: f.type === 'dropdown' ? f.options.split(/[,，]/).map(s => s.trim()).filter(Boolean) : undefined 
     }
     const items = [...(menuStore.menuConfig?.items || [])]
@@ -142,6 +143,17 @@ const navStyles = computed(() => {
         subName: { fontSize: `${cfg.subNavNameSize}px`, transform: `translateX(${cfg.subNavNameX}px)` }
     }
 })
+
+const handleMenuClick = (item: MenuItem) => {
+  if (item.type === 'text-button' && item.url) {
+    let targetUrl = item.url.trim()
+    // 如果不是以 http/https 开头且不是以 / 开头，则自动补全 https://
+    if (!targetUrl.startsWith('http') && !targetUrl.startsWith('/')) {
+      targetUrl = 'https://' + targetUrl
+    }
+    window.open(targetUrl, '_blank')
+  }
+}
 </script>
 
 <template>
@@ -240,7 +252,24 @@ const navStyles = computed(() => {
           <div id="breadcrumb-actions" class="flex items-center gap-4 ml-4"></div>
         </div>
         <div class="flex items-center gap-2">
-            <template v-if="!configStore.isEditMode"><template v-for="(i, idx) in menuStore.menuConfig?.items" :key="idx"><a-button v-if="i.type==='text-button'" type="text" size="small">{{ i.label }}</a-button><div v-else class="flex items-center gap-2 text-xs"><span>{{ i.label }}</span><a-select size="small" style="width:100px" :default-value="i.options?.[0]"><a-option v-for="o in i.options" :key="o">{{ o }}</a-option></a-select></div></template></template>
+            <template v-if="!configStore.isEditMode">
+              <template v-for="(i, idx) in menuStore.menuConfig?.items" :key="idx">
+                <a-button 
+                  v-if="i.type==='text-button'" 
+                  type="text" 
+                  size="small" 
+                  @click="handleMenuClick(i)"
+                >
+                  {{ i.label }}
+                </a-button>
+                <div v-else class="flex items-center gap-2 text-xs">
+                  <span>{{ i.label }}</span>
+                  <a-select size="small" style="width:100px" :default-value="i.options?.[0]">
+                    <a-option v-for="o in i.options" :key="o">{{ o }}</a-option>
+                  </a-select>
+                </div>
+              </template>
+            </template>
             <div v-else class="flex items-center gap-2 p-1 border border-dashed border-primary/30 rounded bg-primary/5">
                 <draggable v-model="menuStore.menuConfig.items" item-key="label" handle=".drag-handle" class="flex gap-2" @change="menuStore.updateMenu({items: menuStore.menuConfig.items})">
                     <template #item="{ element, index }">
@@ -286,7 +315,25 @@ const navStyles = computed(() => {
 
     <AIChatAssistant />
     <a-modal v-model:visible="editDialog.visible" :title="editDialog.title" @ok="handleEditSubmit"><a-form :model="editDialog.form" layout="vertical"><a-form-item label="标题" required><a-input v-model="editDialog.form.title" /></a-form-item><a-form-item v-if="editDialog.mode.includes('main')" label="图标"><a-select v-model="editDialog.form.icon" allow-search><a-option v-for="i in iconOptions" :key="i.value" :value="i.value"><template #icon><component :is="resolveIcon(i.value)" /></template>{{ i.label }}</a-option></a-select></a-form-item><a-form-item v-if="editDialog.mode.includes('main')" label="可见性"><a-checkbox v-model="editDialog.form.visible">侧边栏可见</a-checkbox></a-form-item></a-form></a-modal>
-    <a-modal v-model:visible="hMenuDialog.visible" :title="hMenuDialog.isEdit ? '编辑菜单' : '新增菜单'" @ok="saveHMenu"><a-form :model="hMenuDialog.form" layout="vertical"><a-form-item label="类型"><a-radio-group v-model="hMenuDialog.form.type" type="button"><a-radio value="text-button">按钮</a-radio><a-radio value="dropdown">下拉</a-radio></a-radio-group></a-form-item><a-form-item label="标题" required><a-input v-model="hMenuDialog.form.label" /></a-form-item><a-form-item v-if="hMenuDialog.form.type === 'dropdown'" label="选项 (逗号分隔)" required><a-textarea v-model="hMenuDialog.form.options" /></a-form-item></a-form></a-modal>
+    <a-modal v-model:visible="hMenuDialog.visible" :title="hMenuDialog.isEdit ? '编辑菜单' : '新增菜单'" @ok="saveHMenu">
+      <a-form :model="hMenuDialog.form" layout="vertical">
+        <a-form-item label="类型">
+          <a-radio-group v-model="hMenuDialog.form.type" type="button">
+            <a-radio value="text-button">按钮</a-radio>
+            <a-radio value="dropdown">下拉</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item label="标题" required>
+          <a-input v-model="hMenuDialog.form.label" />
+        </a-form-item>
+        <a-form-item v-if="hMenuDialog.form.type === 'text-button'" label="跳转链接 (可选)">
+          <a-input v-model="hMenuDialog.form.url" placeholder="https://..." />
+        </a-form-item>
+        <a-form-item v-if="hMenuDialog.form.type === 'dropdown'" label="选项 (逗号分隔)" required>
+          <a-textarea v-model="hMenuDialog.form.options" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
 
   </a-layout>
 </template>

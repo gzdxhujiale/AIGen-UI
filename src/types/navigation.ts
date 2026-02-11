@@ -66,6 +66,7 @@ export interface MenuItem {
     label: string
     key?: string
     icon?: string
+    url?: string
     options?: string[]
 }
 
