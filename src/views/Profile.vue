@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, watch } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 import { 
   Button as AButton, 
@@ -65,6 +65,13 @@ const form = reactive({
   details: JSON.parse(JSON.stringify(detailItems))
 })
 
+const editingName = ref('')
+
+// 状态同步
+watch(() => authStore.userDisplayName, (val: string) => {
+  editingName.value = val
+}, { immediate: true })
+
 // 响应式自动保存逻辑
 const isSaving = ref(false)
 const isSaveSuccess = ref(false)
@@ -126,10 +133,28 @@ const performSave = async () => {
       isSaveSuccess.value = true
       setTimeout(() => { isSaveSuccess.value = false }, 2000)
     } catch (e) {
-      console.error('自动保存失败:', e)
+      Message.error('保存失败')
     } finally {
       isSaving.value = false
     }
+}
+
+const handleNameBlur = async () => {
+  if (editingName.value === authStore.userDisplayName) return
+  isSaving.value = true
+  try {
+    const res = await authStore.updateUserMetadata({ full_name: editingName.value })
+    if (res.success) {
+      isSaveSuccess.value = true
+      setTimeout(() => { isSaveSuccess.value = false }, 2000)
+    } else {
+      Message.error('用户名更新失败')
+    }
+  } catch (e) {
+    Message.error('更新失败')
+  } finally {
+    isSaving.value = false
+  }
 }
 
 // 团队管理操作
@@ -204,8 +229,16 @@ const handleAvatarUpload = async (fileList: any[]) => {
               </div>
             </div>
 
-            <!-- 用户名 -->
-            <h2 class="profile-name">{{ authStore.userDisplayName || '管理员' }}</h2>
+            <!-- 用户名 (可直接编辑) -->
+            <div class="name-container">
+              <input 
+                v-model="editingName" 
+                class="profile-name-input" 
+                @blur="handleNameBlur" 
+                @keyup.enter="handleNameBlur"
+                placeholder="设置用户名"
+              />
+            </div>
 
 
             <!-- 信息列表 -->
@@ -417,12 +450,37 @@ const handleAvatarUpload = async (fileList: any[]) => {
   height: 100%;
 }
 
-/* 用户名和签名 */
-.profile-name {
+/* 用于无边框编辑的输入框 */
+.profile-name-input {
   font-size: 20px;
   font-weight: 700;
   color: var(--color-text-1);
   margin: 0 0 6px;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: center;
+  padding: 4px 0;
+  border-radius: 4px;
+  transition: all 0.2s;
+  cursor: text;
+}
+
+.profile-name-input:hover {
+  background: var(--color-fill-2);
+}
+
+.profile-name-input:focus {
+  background: var(--color-fill-1);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--color-primary-light-2);
+}
+
+.name-container {
+  padding: 0 20px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 

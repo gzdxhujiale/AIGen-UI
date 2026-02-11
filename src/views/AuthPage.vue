@@ -30,7 +30,7 @@ const handleAction = async (type: string) => {
     if (!canSubmit.value) return
     let res: any
     if (type === 'login') res = await authStore.signInWithPassword(form.email, form.password)
-    else if (type === 'register') res = await authStore.signUp(form.email, form.password, { full_name: form.name || undefined })
+    else if (type === 'register') res = await authStore.signUp(form.email, form.password, { full_name: form.name || '' })
     else res = await authStore.resetPassword(form.email)
 
     if (res.success) {
