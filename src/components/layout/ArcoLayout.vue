@@ -100,7 +100,7 @@ const _openNavDialog = (mode: string, params: any = {}) => {
     Object.assign(editDialog.form, { groupIdx: params.idx || 0, mainId: params.mId || '', subId: params.sId || '', title: params.item?.name || params.item?.title || '', icon: params.item?.icon || 'IconSettings', visible: params.item?.visible ?? true, pageType: params.item?.pageType || 'list' })
 }
 
-const handleEditSubmit = () => {
+const handleEditSubmit = async () => {
     const f = editDialog.form; if (!f.title) return Message.warning('请输入标题')
     const actions: any = {
         'add-main': () => pageStore.addNavMainItem({ title: f.title, icon: f.icon, visible: f.visible }),
@@ -108,7 +108,9 @@ const handleEditSubmit = () => {
         'add-sub': () => pageStore.addSubPage(f.mainId, { id: crypto.randomUUID(), name: f.title, pageType: f.pageType }),
         'edit-sub': () => pageStore.updateSubPage(f.mainId, f.subId, { name: f.title, pageType: f.pageType })
     }
-    actions[editDialog.mode]?.(); Message.success('操作成功'); editDialog.visible = false
+    const res = await actions[editDialog.mode]?.()
+    if (res?.success === false) return Message.error(res.message || '操作失败')
+    Message.success('操作成功'); editDialog.visible = false
 }
 
 // --- Header 菜单 ---

@@ -461,6 +461,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
 
             if (deleteError) throw deleteError
 
+            pageConfigs.value.delete(oldTitle) // 关键：删除旧的本地记录
             pageConfigs.value.set(newTitle, {
                 ...record,
                 title: newTitle,
