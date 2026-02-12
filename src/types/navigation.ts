@@ -2,16 +2,18 @@
 // 导航相关类型定义
 // ============================================
 import type { Component } from 'vue'
-import type { Page1ConfigData } from './page-config'
+import type { Page1ConfigData, FormPageConfig } from './page-config'
 
 export interface NavSubItem {
     id: string
     name: string
+    pageType?: 'list' | 'form'    // 页面类型，默认 'list'
     url?: string
     badge?: string
     template?: string
     visible?: boolean
-    component?: Page1ConfigData
+    component?: Page1ConfigData   // list 类型使用
+    formConfig?: FormPageConfig   // form 类型使用
 }
 
 export interface NavMainItem {

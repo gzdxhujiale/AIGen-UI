@@ -203,9 +203,26 @@ export const EFFECT_TYPES = {
     TABLE: 'table',
     /** 打开抽屉表格 */
     DRAWER: 'drawer',
-    /** 新页面表单 */
-    PAGE_FORM: 'page-form',
+    /** 新页面 */
+    PAGE: 'page',
 } as const
 
 /** 交互效果类型的联合类型 */
 export type EffectType = typeof EFFECT_TYPES[keyof typeof EFFECT_TYPES]
+
+// ============================================
+// 页面类型
+// ============================================
+
+/**
+ * 页面类型
+ */
+export const PAGE_TYPES = {
+    /** 列表页 (Page1) */
+    LIST: 'list',
+    /** 表单页 (DynamicFormPage) */
+    FORM: 'form',
+} as const
+
+/** 页面类型的联合类型 */
+export type PageType = typeof PAGE_TYPES[keyof typeof PAGE_TYPES]

@@ -76,10 +76,10 @@ const handleUserAction = (val: string) => {
 }
 
 // --- 统一弹窗逻辑 ---
-const editDialog = reactive({ visible: false, title: '', mode: '', form: { idx: 0, mId: '', sId: '', title: '', icon: 'Settings', url: '#' } })
+const editDialog = reactive({ visible: false, title: '', mode: '', form: { idx: 0, mId: '', sId: '', title: '', icon: 'Settings', url: '#', pageType: 'list' as 'list' | 'form' } })
 const _openNavDialog = (mode: string, params: any = {}) => {
     Object.assign(editDialog, { visible: true, mode, title: mode.includes('add') ? '新增导航' : '编辑导航' })
-    Object.assign(editDialog.form, { idx: params.idx || 0, mId: params.mId || '', sId: params.sId || '', title: params.item?.name || params.item?.title || '', icon: params.item?.icon || 'Settings', url: params.item?.url || '#' })
+    Object.assign(editDialog.form, { idx: params.idx || 0, mId: params.mId || '', sId: params.sId || '', title: params.item?.name || params.item?.title || '', icon: params.item?.icon || 'Settings', url: params.item?.url || '#', pageType: params.item?.pageType || 'list' })
 }
 
 const handleEditSubmit = () => {
@@ -87,8 +87,8 @@ const handleEditSubmit = () => {
     const actions: any = {
         'add-main': () => pageStore.addNavMainItem({ title: f.title, icon: f.icon }),
         'edit-main': () => pageStore.updateNavMainItem(f.mId, { title: f.title, icon: f.icon }),
-        'add-sub': () => pageStore.addSubPage(f.mId, { id: crypto.randomUUID(), name: f.title }),
-        'edit-sub': () => pageStore.updateSubPage(f.mId, f.sId, { name: f.title })
+        'add-sub': () => pageStore.addSubPage(f.mId, { id: crypto.randomUUID(), name: f.title, pageType: f.pageType }),
+        'edit-sub': () => pageStore.updateSubPage(f.mId, f.sId, { name: f.title, pageType: f.pageType })
     }
     actions[editDialog.mode]?.(); Message.success('操作成功'); editDialog.visible = false
 }
@@ -177,7 +177,7 @@ const iconOptions = ['Settings', 'GalleryVerticalEnd', 'AudioWaveform', 'Command
               <draggable v-model="i.items" item-key="id" group="subs" handle=".drag-handle" class="flex flex-col gap-1 pl-2" @change="pageStore.savePageConfig(i.title, i as any)">
                 <template #item="{ element: s }">
                   <div class="flex items-center justify-between p-1.5 rounded bg-background border border-transparent hover:border-border group/sub text-xs cursor-pointer" @click="handleNavClick(i.title, s.name, s.id)">
-                    <div class="flex items-center gap-2 min-w-0"><GripVertical class="size-3 text-muted-foreground drag-handle shrink-0" /><span class="truncate">{{ s.name }}</span></div>
+                    <div class="flex items-center gap-2 min-w-0"><GripVertical class="size-3 text-muted-foreground drag-handle shrink-0" /><span class="truncate">{{ s.name }}</span><span v-if="s.pageType === 'form'" class="px-1 py-0.5 text-[9px] font-medium bg-violet-100 text-violet-600 rounded shrink-0">Form</span></div>
                     <div class="flex gap-0.5 opacity-0 group-hover/sub:opacity-100"><Button variant="ghost" size="icon" class="size-5" @click.stop="_openNavDialog('edit-sub', {idx, mId: i.id, sId: s.id, item: s})"><Pencil class="size-3" /></Button><Button variant="ghost" size="icon" class="size-5 text-destructive" @click.stop="() => confirm('删除?') && pageStore.deleteSubPage(i.id, s.id)"><Trash2 class="size-3" /></Button></div>
                   </div>
                 </template>
@@ -213,7 +213,7 @@ const iconOptions = ['Settings', 'GalleryVerticalEnd', 'AudioWaveform', 'Command
     </SidebarInset>
 
     <AIChatAssistant />
-    <Dialog v-model:open="editDialog.visible"><DialogContent class="sm:max-w-md"><DialogHeader><DialogTitle>{{ editDialog.title }}</DialogTitle></DialogHeader><div class="grid gap-4 py-4"><div class="grid grid-cols-4 items-center gap-4"><label class="text-right text-sm">标题</label><Input v-model="editDialog.form.title" class="col-span-3" /></div><div v-if="editDialog.mode.includes('main')" class="grid grid-cols-4 items-center gap-4"><label class="text-right text-sm">图标</label><Select v-model="editDialog.form.icon"><SelectTrigger class="col-span-3"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="i in iconOptions" :key="i.value" :value="i.value">{{ i.label }}</SelectItem></SelectContent></Select></div></div><div class="flex justify-end"><Button @click="handleEditSubmit">保存</Button></div></DialogContent></Dialog>
+    <Dialog v-model:open="editDialog.visible"><DialogContent class="sm:max-w-md"><DialogHeader><DialogTitle>{{ editDialog.title }}</DialogTitle></DialogHeader><div class="grid gap-4 py-4"><div class="grid grid-cols-4 items-center gap-4"><label class="text-right text-sm">标题</label><Input v-model="editDialog.form.title" class="col-span-3" /></div><div v-if="editDialog.mode.includes('main')" class="grid grid-cols-4 items-center gap-4"><label class="text-right text-sm">图标</label><Select v-model="editDialog.form.icon"><SelectTrigger class="col-span-3"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="i in iconOptions" :key="i.value" :value="i.value">{{ i.label }}</SelectItem></SelectContent></Select></div><div v-if="editDialog.mode.includes('sub')" class="grid grid-cols-4 items-center gap-4"><label class="text-right text-sm">页面类型</label><div class="col-span-3 flex gap-3"><label class="flex items-center gap-1.5 text-sm cursor-pointer"><input type="radio" v-model="editDialog.form.pageType" value="list" class="w-4 h-4" />列表页</label><label class="flex items-center gap-1.5 text-sm cursor-pointer"><input type="radio" v-model="editDialog.form.pageType" value="form" class="w-4 h-4" />表单页</label></div></div></div><div class="flex justify-end"><Button @click="handleEditSubmit">保存</Button></div></DialogContent></Dialog>
     <Dialog v-model:open="hMenuDialog.visible"><DialogContent class="sm:max-w-md"><DialogHeader><DialogTitle>{{ hMenuDialog.isEdit ? '编辑' : '新增' }}菜单</DialogTitle></DialogHeader><div class="grid gap-4 py-4"><div class="flex gap-4 items-center px-4 text-sm"><label class="flex items-center gap-1"><input type="radio" v-model="hMenuDialog.form.type" value="text-button" />按钮</label><label class="flex items-center gap-1"><input type="radio" v-model="hMenuDialog.form.type" value="dropdown" />下拉</label></div><div class="grid grid-cols-4 items-center gap-4"><label class="text-right text-sm">标题</label><Input v-model="hMenuDialog.form.label" class="col-span-3" /></div><div v-if="hMenuDialog.form.type==='dropdown'" class="grid grid-cols-4 items-start gap-4"><label class="text-right text-sm pt-2">选项</label><textarea v-model="hMenuDialog.form.options" class="col-span-3 h-20 p-2 border rounded text-sm bg-background" placeholder="选项1,选项2"></textarea></div></div><div class="flex justify-end"><Button @click="saveHMenu">保存</Button></div></DialogContent></Dialog>
   </SidebarProvider>
 </template>

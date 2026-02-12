@@ -6,11 +6,13 @@
 export {
     FILTER_TYPES, COLUMN_TYPES, BUTTON_VARIANTS,
     MOCK_FORMATS, FIXED_POSITIONS, ALIGN_OPTIONS, EFFECT_TYPES,
+    PAGE_TYPES,
 } from './config'
 
 export type {
     FilterType, ColumnType, ButtonVariant,
     MockFormat, FixedPosition, AlignOption, EffectType,
+    PageType,
 } from './config'
 
 // 页面配置类型
@@ -22,6 +24,8 @@ export type {
     CardAreaConfig,
     TableColumn,
     TableAreaConfig,
+    FormPageConfig,
+    FormSection,
     ActionButtonConfig,
     ActionsAreaConfig,
     Page1Config,

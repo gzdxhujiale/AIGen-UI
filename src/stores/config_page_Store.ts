@@ -11,7 +11,8 @@ import type {
     ActionsAreaConfig,
     ActionButtonConfig,
     CardAreaConfig,
-    CardItemConfig
+    CardItemConfig,
+    FormPageConfig
 } from '@/types/page-config'
 import type { NavGroup, NavMainItem } from '@/types/navigation'
 import {
@@ -55,7 +56,9 @@ export interface PageConfigContent {
 export interface PageSubItem {
     id: string               // 二级导航 ID
     name: string             // 二级导航名称
-    component?: Page1ConfigData  // 页面组件配置
+    pageType?: 'list' | 'form'  // 页面类型，默认 'list'
+    component?: Page1ConfigData  // list 类型页面使用
+    formConfig?: FormPageConfig  // form 类型页面使用
 }
 
 /**
@@ -231,7 +234,9 @@ export const useConfigPageStore = defineStore('config-page', () => {
                     id: sub.id,
                     name: sub.name,
                     url: '#',
-                    component: sub.component
+                    pageType: sub.pageType,
+                    component: sub.component,
+                    formConfig: sub.formConfig,
                 }))
             }))
 
@@ -541,7 +546,11 @@ export const useConfigPageStore = defineStore('config-page', () => {
         if (!record) return { success: false, message: `一级导航 "${navTitle}" 不存在` }
         if (record.page_config.items.some(i => i.id === subItem.id)) return { success: false, message: 'ID 已存在' }
 
-        subItem.component = subItem.component || { ...DEFAULT_PAGE_COMPONENT }
+        if (subItem.pageType === 'form') {
+            subItem.formConfig = subItem.formConfig || { columnCount: 1, sections: [{ formItems: [] }] }
+        } else {
+            subItem.component = subItem.component || { ...DEFAULT_PAGE_COMPONENT }
+        }
         record.page_config.items.push(subItem)
         return await savePageConfig(navTitle, record.page_config)
     }
@@ -561,6 +570,9 @@ export const useConfigPageStore = defineStore('config-page', () => {
 
     const updateSubPageComponent = (navTitle: string, subId: string, component: Page1ConfigData) =>
         updateSubPage(navTitle, subId, { component })
+
+    const updateSubPageFormConfig = (navTitle: string, subId: string, formConfig: FormPageConfig) =>
+        updateSubPage(navTitle, subId, { formConfig })
 
     /**
      * 删除二级导航页面
@@ -855,6 +867,7 @@ export const useConfigPageStore = defineStore('config-page', () => {
         addSubPage,
         updateSubPage,
         updateSubPageComponent,
+        updateSubPageFormConfig,
         deleteSubPage,
         reorderSubPages,
 

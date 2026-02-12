@@ -53,7 +53,7 @@ const formSchemas = computed(() => ({
     { key: 'label', label: '按钮文本', comp: 'input', props: { placeholder: '如 查询' } },
     { key: 'variant', label: '样式', comp: 'select', props: { options: [{value:'primary',label:'Primary'},{value:'outline',label:'Outline'},{value:'text',label:'Text'},{value:'shadcn-outline',label:'Shadcn Outline'}] } },
     { key: 'className', label: '自定义样式类', comp: 'input', props: { placeholder: '可选，如 bg-emerald-50' } },
-    { key: 'effectType', label: '交互效果', comp: 'select', props: { options: [{value:'none',label:'无反应'},{value:'modal',label:'弹窗-表单'},{value:'page-form',label:'新页面-表单'},{value:'table',label:'弹窗-表格'},{value:'drawer',label:'抽屉-表格'}] }, fullWidth: true },
+    { key: 'effectType', label: '交互效果', comp: 'select', props: { options: [{value:'none',label:'无反应'},{value:'modal',label:'弹窗-表单'},{value:'page',label:'新页面'},{value:'table',label:'弹窗-表格'},{value:'drawer',label:'抽屉-表格'}] }, fullWidth: true },
     // Modal-specific fields defined separately in template for complexity
   ],
   card: [
@@ -114,7 +114,7 @@ const operatorOptions = [
 
 // Modal/Table Effect Logic
 watch(() => formState.value.effectType, (type) => {
-  if ((['modal', 'table', 'drawer', 'page-form'].includes(type)) && !formState.value.effectConfig) formState.value.effectConfig = {}
+  if ((['modal', 'table', 'drawer', 'page'].includes(type)) && !formState.value.effectConfig) formState.value.effectConfig = {}
 })
 
 const addCondition = () => conditionRulesProxy.value = [...conditionRulesProxy.value, { sourceColumn: '', operator: '==', compareValue: '', displayValue: '' }]
@@ -194,7 +194,7 @@ const addEffectItem = () => {
        <div><label class="text-xs font-medium">弹窗标题</label><AInput v-model="formState.effectTitle" /></div>
        
        <!-- Modal-Form -->
-       <template v-if="['modal', 'page-form'].includes(formState.effectType)">
+       <template v-if="formState.effectType === 'modal'">
           <div><label class="text-xs font-medium">内容描述</label><ATextarea v-model="formState.effectContent" :auto-size="{minRows:2}" /></div>
           <div class="pt-2 border-t">
             <div class="flex justify-between items-center mb-2"><label class="text-xs font-bold flex gap-1"><FormInput class="w-3" /> 表单项</label><AButton size="mini" type="outline" @click="addEffectItem"><Plus class="w-3"/> 添加</AButton></div>
@@ -216,6 +216,29 @@ const addEffectItem = () => {
                     <AInput :model-value="item.treeOptions ? '已配置 ' + (JSON.parse(item.treeOptions).length || 0) + ' 个根节点' : '未配置'" readonly class="flex-1 text-xs" />
                     <AButton size="small" @click="() => { currentTreeField = 'action-' + idx; treeConfigVisible = true }">配置数据</AButton>
                  </div>
+                 <Trash2 class="absolute top-1 right-1 w-3 h-3 text-red-400 cursor-pointer opacity-0 group-hover:opacity-100" @click="formState.effectFormItems.splice(idx,1)" />
+              </div>
+            </div>
+          </div>
+       </template>
+
+       <!-- Page (New Page) -->
+       <template v-if="formState.effectType === 'page'">
+          <div>
+            <label class="text-xs font-medium">目标页面</label>
+            <ASelect v-if="formState.effectConfig" v-model="formState.effectConfig.targetNavId" placeholder="选择目标页面" allow-clear>
+              <AOption v-for="p in availablePages" :key="p.value" :value="p.value">{{ p.label }}</AOption>
+            </ASelect>
+          </div>
+          <div v-if="!formState.effectConfig?.targetNavId" class="pt-2 border-t">
+            <div class="text-xs text-muted-foreground mb-2">未选择目标页面时，可配置临时表单项：</div>
+            <div class="flex justify-between items-center mb-2"><label class="text-xs font-bold flex gap-1"><FormInput class="w-3" /> 表单项</label><AButton size="mini" type="outline" @click="addEffectItem"><Plus class="w-3"/> 添加</AButton></div>
+            <div class="space-y-2">
+              <div v-for="(item, idx) in formState.effectFormItems" :key="item.key" class="p-2 border rounded bg-muted/30 relative group grid grid-cols-3 gap-2">
+                 <AInput v-model="item.label" size="mini" placeholder="标签" />
+                 <AInput v-model="item.key" size="mini" placeholder="Key" />
+                 <ASelect v-model="item.type" size="mini"><AOption value="input">Input</AOption><AOption value="textarea">Textarea</AOption><AOption value="select">Select</AOption><AOption value="tree-select">Tree</AOption><AOption value="date-range">Date Range</AOption><AOption value="date">Date</AOption><AOption value="radio">Radio</AOption><AOption value="checkbox">Checkbox</AOption></ASelect>
+                 <AInputTag v-if="['select', 'radio', 'checkbox'].includes(item.type)" v-model="item.options" placeholder="输入后回车" class="col-span-3" />
                  <Trash2 class="absolute top-1 right-1 w-3 h-3 text-red-400 cursor-pointer opacity-0 group-hover:opacity-100" @click="formState.effectFormItems.splice(idx,1)" />
               </div>
             </div>

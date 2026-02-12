@@ -94,10 +94,10 @@ const handleUserAction = (val: any) => {
 }
 
 // --- 编辑弹窗统合 ---
-const editDialog = reactive({ visible: false, title: '', mode: '', form: { groupIdx: 0, mainId: '', subId: '', title: '', icon: 'IconSettings', visible: true, url: '#' } })
+const editDialog = reactive({ visible: false, title: '', mode: '', form: { groupIdx: 0, mainId: '', subId: '', title: '', icon: 'IconSettings', visible: true, url: '#', pageType: 'list' as 'list' | 'form' } })
 const _openNavDialog = (mode: string, params: any = {}) => {
     Object.assign(editDialog, { visible: true, mode, title: mode.includes('add') ? '新增导航' : '编辑导航' })
-    Object.assign(editDialog.form, { groupIdx: params.idx || 0, mainId: params.mId || '', subId: params.sId || '', title: params.item?.name || params.item?.title || '', icon: params.item?.icon || 'IconSettings', visible: params.item?.visible ?? true })
+    Object.assign(editDialog.form, { groupIdx: params.idx || 0, mainId: params.mId || '', subId: params.sId || '', title: params.item?.name || params.item?.title || '', icon: params.item?.icon || 'IconSettings', visible: params.item?.visible ?? true, pageType: params.item?.pageType || 'list' })
 }
 
 const handleEditSubmit = () => {
@@ -105,8 +105,8 @@ const handleEditSubmit = () => {
     const actions: any = {
         'add-main': () => pageStore.addNavMainItem({ title: f.title, icon: f.icon, visible: f.visible }),
         'edit-main': () => pageStore.updateNavMainItem(f.mainId, { title: f.title, icon: f.icon, visible: f.visible }),
-        'add-sub': () => pageStore.addSubPage(f.mainId, { id: crypto.randomUUID(), name: f.title }),
-        'edit-sub': () => pageStore.updateSubPage(f.mainId, f.subId, { name: f.title })
+        'add-sub': () => pageStore.addSubPage(f.mainId, { id: crypto.randomUUID(), name: f.title, pageType: f.pageType }),
+        'edit-sub': () => pageStore.updateSubPage(f.mainId, f.subId, { name: f.title, pageType: f.pageType })
     }
     actions[editDialog.mode]?.(); Message.success('操作成功'); editDialog.visible = false
 }
@@ -226,6 +226,7 @@ const handleMenuClick = (item: MenuItem) => {
                                 <div class="flex items-center gap-2 min-w-0">
                                   <GripVertical class="size-3 text-gray-300 drag-handle cursor-move shrink-0 hover:text-gray-500" />
                                   <span class="truncate text-gray-600">{{ s.name }}</span>
+                                  <span v-if="s.pageType === 'form'" class="px-1 py-0.5 text-[9px] font-medium bg-violet-100 text-violet-600 rounded shrink-0">Form</span>
                                 </div>
                                 <div class="flex gap-0.5 opacity-0 group-hover/sub:opacity-100 transition-opacity shrink-0">
                                   <a-button size="mini" type="text" class="!px-1 !py-0.5 !rounded" @click.stop="_openNavDialog('edit-sub', {idx, mId: i.id, sId: s.id, item: s})"><Pencil class="size-3 text-gray-400" /></a-button>
@@ -314,7 +315,7 @@ const handleMenuClick = (item: MenuItem) => {
     </a-layout>
 
     <AIChatAssistant />
-    <a-modal v-model:visible="editDialog.visible" :title="editDialog.title" @ok="handleEditSubmit"><a-form :model="editDialog.form" layout="vertical"><a-form-item label="标题" required><a-input v-model="editDialog.form.title" /></a-form-item><a-form-item v-if="editDialog.mode.includes('main')" label="图标"><a-select v-model="editDialog.form.icon" allow-search><a-option v-for="i in iconOptions" :key="i.value" :value="i.value"><template #icon><component :is="resolveIcon(i.value)" /></template>{{ i.label }}</a-option></a-select></a-form-item><a-form-item v-if="editDialog.mode.includes('main')" label="可见性"><a-checkbox v-model="editDialog.form.visible">侧边栏可见</a-checkbox></a-form-item></a-form></a-modal>
+    <a-modal v-model:visible="editDialog.visible" :title="editDialog.title" @ok="handleEditSubmit"><a-form :model="editDialog.form" layout="vertical"><a-form-item label="标题" required><a-input v-model="editDialog.form.title" /></a-form-item><a-form-item v-if="editDialog.mode.includes('main')" label="图标"><a-select v-model="editDialog.form.icon" allow-search><a-option v-for="i in iconOptions" :key="i.value" :value="i.value"><template #icon><component :is="resolveIcon(i.value)" /></template>{{ i.label }}</a-option></a-select></a-form-item><a-form-item v-if="editDialog.mode.includes('main')" label="可见性"><a-checkbox v-model="editDialog.form.visible">侧边栏可见</a-checkbox></a-form-item><a-form-item v-if="editDialog.mode.includes('sub')" label="页面类型"><a-radio-group v-model="editDialog.form.pageType" type="button"><a-radio value="list">列表页</a-radio><a-radio value="form">表单页</a-radio></a-radio-group></a-form-item></a-form></a-modal>
     <a-modal v-model:visible="hMenuDialog.visible" :title="hMenuDialog.isEdit ? '编辑菜单' : '新增菜单'" @ok="saveHMenu">
       <a-form :model="hMenuDialog.form" layout="vertical">
         <a-form-item label="类型">

@@ -8,7 +8,8 @@ import type {
     AlignOption,
     MockFormat,
     ButtonVariant,
-    EffectType
+    EffectType,
+    PageType
 } from './config'
 
 /**
@@ -36,6 +37,8 @@ export interface FilterConfig {
     defaultValue?: string | string[] | undefined
     visible?: boolean
     fullWidth?: boolean
+    uploadMode?: 'text' | 'button' | 'dragger'
+    draggerHeight?: string
 }
 
 /**
@@ -112,6 +115,30 @@ export interface TableAreaConfig {
 }
 
 /**
+ * 表单分栏
+ */
+export interface FormSection {
+    title?: string
+    formItems: FilterConfig[]
+}
+
+/**
+ * 表单页配置
+ */
+export interface FormPageConfig {
+    formItems?: FilterConfig[]       // 单栏模式 (向后兼容)
+    sections?: FormSection[]         // 多栏模式 (1-3栏)
+    columnCount?: number             // 栏数 (1-3), 默认 1
+    layout?: {
+        columns?: number              // 表单列数
+        labelPosition?: 'left' | 'top'
+        maxWidth?: string             // 如 '600px'
+    }
+    submitText?: string               // 提交按钮文字
+    cancelText?: string               // 取消按钮文字
+}
+
+/**
  * 操作按钮配置
  */
 export interface ActionButtonConfig {
@@ -125,7 +152,8 @@ export interface ActionButtonConfig {
         title?: string
         content?: string
         formItems?: FilterConfig[]
-        targetNavId?: string        // 关联的目标页面 ID (用于 'table' 效果)
+        targetNavId?: string        // 关联的目标页面 ID (用于 'table'/'page' 效果)
+        targetPageType?: PageType   // 'page' 效果：目标页面类型
     }
 }
 

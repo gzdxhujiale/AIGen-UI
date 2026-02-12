@@ -13,6 +13,7 @@ const _navGroupsRef = ref<NavGroup[] | null>(null)
 const exceptionType = ref<'403' | '404' | '500' | null>(null)
 const detailKey = ref<string | null>(null)
 const detailType = ref<string | null>(null)
+const detailTargetNavId = ref<string | null>(null)
 
 /**
  * 设置 navGroups 引用（由 configStore 调用）
@@ -36,6 +37,19 @@ function findNavContext(navGroups: NavGroup[], navId: string) {
             if (subItem) {
                 return { mainNav: mainItem.title, subNav: subItem.name, navId: subItem.id }
             }
+        }
+    }
+    return null
+}
+
+/**
+ * 在 navGroups 中根据 ID 查找具体的 subItem
+ */
+function findSubItemById(navGroups: NavGroup[], navId: string) {
+    for (const group of navGroups) {
+        for (const mainItem of group.items) {
+            const subItem = mainItem.items?.find(item => item.id === navId)
+            if (subItem) return subItem
         }
     }
     return null
@@ -155,10 +169,11 @@ export function useNavigation() {
         }
     }
 
-    const setDetailTitle = (title: string | null, key: string | null = null, type: string | null = null) => {
+    const setDetailTitle = (title: string | null, key: string | null = null, type: string | null = null, targetNavId: string | null = null) => {
         detailTitle.value = title
         detailKey.value = title ? key : null
         detailType.value = title ? type : null
+        detailTargetNavId.value = title ? targetNavId : null
     }
 
     const breadcrumbs = computed(() => ({
@@ -183,11 +198,11 @@ export function useNavigation() {
                 if (subItem) {
                     if (subItem.template) return subItem.template
                     // 只要有 component 配置，或者它是 AI 生成的（通常带有 component），就应该渲染 Page1
-                    if (subItem.component) return 'Page1'
+                    if (subItem.component) return 'PageList'
 
-                    // 兜底：如果它是一个标准的导航项且没有指定特殊模板，默认也应该视作 Page1
+                    // 兜底：如果它是一个标准的导航项且没有指定特殊模板，默认也应该视作 PageList
                     // 除非它是 settings/profile 等特殊页面
-                    return 'Page1'
+                    return 'PageList'
                 }
             }
         }
@@ -201,10 +216,29 @@ export function useNavigation() {
     }
 
     const currentPage = computed(() => {
-        if (detailType.value === 'page-form') return 'DynamicFormPage'
+        // 三级面包屑场景
+        if (detailType.value === 'page') {
+            // 如果指定了目标页面 ID，查看该页面的 pageType
+            if (detailTargetNavId.value && _navGroupsRef.value) {
+                const targetSub = findSubItemById(_navGroupsRef.value, detailTargetNavId.value)
+                if (targetSub?.pageType === 'form') return 'PageForm'
+                if (targetSub?.pageType === 'list' || targetSub?.component) return 'PageList'
+            }
+            // 默认跳转到 PageForm（兼容无目标的临时表单场景）
+            return 'PageForm'
+        }
+
+        // 兼容旧的 'page-form' 类型
+        if (detailType.value === 'page-form') return 'PageForm'
 
         const navId = _currentNavId.value
         if (navId in SPECIAL_PAGES) return SPECIAL_PAGES[navId]
+
+        // 二级导航场景：检查 pageType
+        if (_navGroupsRef.value) {
+            const subItem = findSubItemById(_navGroupsRef.value, navId)
+            if (subItem?.pageType === 'form') return 'PageForm'
+        }
 
         if (currentTemplate.value) {
             return currentTemplate.value
@@ -219,6 +253,7 @@ export function useNavigation() {
         detailTitle,
         detailKey,
         detailType,
+        detailTargetNavId,
         breadcrumbs,
         currentPage,
         currentTemplate,
@@ -227,3 +262,4 @@ export function useNavigation() {
         setDetailTitle,
     }
 }
+

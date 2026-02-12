@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import Page1 from '@/views/Page1.vue'
+import PageList from '@/views/page_list.vue'
 import AuthPage from '@/views/AuthPage.vue'
 import Profile from '@/views/Profile.vue'
 import SkeletonLoading from '@/views/SkeletonLoading.vue'
 import ExceptionPage from '@/views/ExceptionPage.vue'
-import DynamicFormPage from '@/views/DynamicFormPage.vue'
+import PageForm from '@/views/page_form.vue'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 
 import { useOnboarding } from '@/composables/useOnboarding'
@@ -18,7 +18,7 @@ import ArcoLayout from '@/components/layout/ArcoLayout.vue'
 import ShadcnLayout from '@/components/layout/ShadcnLayout.vue'
 import { useNavigation, initNavigation } from '@/composables/useNavigation'
 
-const { currentPage, currentNavId, exceptionType } = useNavigation() 
+const { currentPage, currentNavId, exceptionType, detailTitle, detailTargetNavId } = useNavigation() 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
 const teamStore = useConfigTeamStore()
@@ -29,8 +29,9 @@ const { startOnboarding } = useOnboarding()
 const isConfigLoading = ref(true)
 
 // Page Mapping
-const pageComponents: Record<string, any> = { Page1, profile: Profile, DynamicFormPage }
-const CurrentPageComponent = computed(() => pageComponents[currentPage.value] || Page1)
+const pageComponents: Record<string, any> = { PageList, profile: Profile, PageForm }
+const CurrentPageComponent = computed(() => pageComponents[currentPage.value] || PageList)
+const pageKey = computed(() => `${currentPage.value}-${currentNavId.value}-${detailTitle.value || ''}-${detailTargetNavId.value || ''}`)
 
 // Dynamic Layout
 const LayoutComponent = computed(() => configStore.navigationStyle === 'arco' ? ArcoLayout : ShadcnLayout)
@@ -105,7 +106,7 @@ onUnmounted(() => authStore.cleanup())
   <ExceptionPage v-else-if="exceptionType" :type="exceptionType" />
   <component :is="LayoutComponent" v-else>
     <Transition name="fade-slide" mode="out-in" appear>
-      <component :is="CurrentPageComponent" :key="currentPage" />
+      <component :is="CurrentPageComponent" :key="pageKey" />
     </Transition>
   </component>
 </template>

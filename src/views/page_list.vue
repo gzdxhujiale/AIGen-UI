@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineOptions({ name: 'Page1' })
+defineOptions({ name: 'PageList' })
 import { computed, reactive, ref, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm, Drawer as ADrawer, Select as ASelect, Option as AOption } from '@arco-design/web-vue'
@@ -9,6 +9,7 @@ import { safeJsonParseWithError } from '@/utils/error'
 import { generateMockValue, evaluateConditionalValue } from '@/utils/mock-data'
 import { FilterInput, FilterSelect, FilterDateRange, FilterTreeSelect, FilterRadio, FilterCheckbox, FilterCard, ArcoTable } from '@/components/ui/filter'
 import ConfigForm from '@/views/ConfigForm.vue'
+import PageForm from '@/views/page_form.vue'
 import { useNavigation } from '@/composables/useNavigation'
 import { useConfigStore } from '@/stores/configStore'
 import type { Page1Config, TableColumn, Page1ConfigData, ActionButtonConfig } from '@/types'
@@ -17,8 +18,8 @@ import { useConfigCrud } from '@/composables/useConfigCrud'
 
 // --- Props & Route ---
 const props = defineProps<{ navId?: string; visibleSections?: ('filter' | 'actions' | 'card' | 'table')[] }>()
-const { currentNavId: routeNavId, setDetailTitle } = useNavigation()
-const currentNavId = computed(() => props.navId || routeNavId.value)
+const { currentNavId: routeNavId, detailTargetNavId, setDetailTitle } = useNavigation()
+const currentNavId = computed(() => props.navId || detailTargetNavId.value || routeNavId.value)
 
 // --- Stores ---
 const configStore = useConfigStore()
@@ -34,7 +35,7 @@ const uiState = reactive({
   // Modals
   effect: { visible: false, title: '', content: '', formItems: [] as any[], data: {} as Record<string, any>, fullscreen: false },
   table: { visible: false, title: '', columns: [] as any[], data: [] as any[], showCheckbox: false },
-  drawer: { visible: false, title: '', targetNavId: '' },
+  drawer: { visible: false, title: '', targetNavId: '', targetPageType: 'list' as 'list' | 'form' },
   area: { visible: false, type: 'filter' as 'filter' | 'card' | 'table' | 'column' | 'action', config: {} as any },
   // Drag & Drop
   drag: { index: -1, overIndex: -1 }
@@ -86,7 +87,7 @@ const transformers: Record<string, (item: any) => any> = {
 const crudHandlers = {
   filter: useConfigCrud({ name: '筛选项', defaultForm: () => ({ key: '', type: 'input', label: '', placeholder: '', options: [] as string[], treeOptions: '', visible: true, multiple: false, precision: '', disabled: false }), doSave: async (m, i, f) => _saveComponentAction(item => { const opts = f.options as any; const nf: any = { key: f.key || `f_${Date.now()}`, type: f.type, label: f.label, placeholder: f.placeholder || undefined, visible: f.visible, multiple: f.multiple, precision: ['date', 'date-range'].includes(f.type) && f.precision ? f.precision : undefined, disabled: f.disabled || undefined, options: Array.isArray(opts) ? opts : (opts ? String(opts).split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : []), treeOptions: f.treeOptions ? safeJsonParseWithError(f.treeOptions, '树形') : undefined }; if (m && i !== null) item.filterArea.filters[i] = nf; else item.filterArea.filters.push(nf) }), doDelete: (i) => _saveComponentAction(item => item.filterArea.filters.splice(i, 1)) }),
   column: useConfigCrud({ name: '列', defaultForm: () => ({ key: '', label: '', width: '120px', type: 'text', mockFormat: 'none', mockList: [] as string[], mockDigits: 5, conditionRules: '', buttons: [] as string[], fixed: 'none', align: 'left', visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { const ml = f.mockList as any; const btns = f.buttons as any; const nc: any = { key: f.key || `c_${Date.now()}`, label: f.label, width: f.width, type: f.type === 'text' ? undefined : f.type, visible: f.visible, mockFormat: f.mockFormat === 'none' ? undefined : f.mockFormat, mockList: ['list', 'list-order'].includes(f.mockFormat) ? (Array.isArray(ml) ? ml : (ml ? String(ml).split(',').map((s: string) => s.trim()).filter(Boolean) : [])) : undefined, mockDigits: f.mockFormat === 'random-number' ? f.mockDigits : undefined, conditionRules: f.mockFormat === 'conditional' && f.conditionRules ? safeJsonParseWithError(f.conditionRules, '条件') : undefined, buttons: f.type === 'text-button' ? (Array.isArray(btns) ? btns : (btns ? String(btns).split(/[，,]/).map((s: string) => s.trim()).filter(Boolean) : [])) : undefined, fixed: f.fixed === 'none' ? undefined : f.fixed, align: f.align === 'left' ? undefined : f.align }; if (m && i !== null) item.tableArea.columns[i] = nc; else item.tableArea.columns.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.tableArea.columns.splice(i, 1)) }),
-  action: useConfigCrud({ name: '按钮', defaultForm: () => ({ key: '', label: '', variant: 'outline', className: '', effectType: 'none', effectTitle: '', effectContent: '', effectFormItems: [], effectTableColumns: [], visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.actionsArea) item.actionsArea = { buttons: [], show: true }; const na: any = { key: f.key || `a_${Date.now()}`, label: f.label, variant: f.variant, className: f.className || undefined, visible: f.visible, effectType: f.effectType === 'none' ? undefined : f.effectType, effectConfig: ['modal', 'page-form'].includes(f.effectType) ? { title: f.effectTitle, content: f.effectContent, formItems: f.effectFormItems } : ['table', 'drawer'].includes(f.effectType) ? { title: f.effectTitle, targetNavId: (f as any).targetNavId || (f as any).effectConfig?.targetNavId } : undefined }; if (m && i !== null) item.actionsArea!.buttons[i] = na; else item.actionsArea!.buttons.push(na) }), doDelete: (i) => _saveComponentAction(item => item.actionsArea!.buttons.splice(i, 1)) }),
+  action: useConfigCrud({ name: '按钮', defaultForm: () => ({ key: '', label: '', variant: 'outline', className: '', effectType: 'none', effectTitle: '', effectContent: '', effectFormItems: [], effectTableColumns: [], visible: true }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.actionsArea) item.actionsArea = { buttons: [], show: true }; const na: any = { key: f.key || `a_${Date.now()}`, label: f.label, variant: f.variant, className: f.className || undefined, visible: f.visible, effectType: f.effectType === 'none' ? undefined : f.effectType, effectConfig: ['modal', 'page'].includes(f.effectType) ? { title: f.effectTitle, content: f.effectContent, formItems: f.effectFormItems, targetNavId: (f as any).targetNavId || (f as any).effectConfig?.targetNavId } : ['table', 'drawer'].includes(f.effectType) ? { title: f.effectTitle, targetNavId: (f as any).targetNavId || (f as any).effectConfig?.targetNavId } : undefined }; if (m && i !== null) item.actionsArea!.buttons[i] = na; else item.actionsArea!.buttons.push(na) }), doDelete: (i) => _saveComponentAction(item => item.actionsArea!.buttons.splice(i, 1)) }),
   card: useConfigCrud({ name: '卡片', defaultForm: () => ({ key: '', title: '', data: '' }), doSave: async (m, i, f) => _saveComponentAction(item => { if (!item.cardArea) item.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }; const nc = { key: f.key || `cd_${Date.now()}`, title: f.title, data: f.data }; if (m && i !== null) item.cardArea!.cards[i] = nc; else item.cardArea!.cards.push(nc) }), doDelete: (i) => _saveComponentAction(item => item.cardArea!.cards.splice(i, 1)) })
 }
 
@@ -106,11 +107,12 @@ const actions = {
   handleAction(key: string, _record?: any) {
     const config = pageConfig.value?.actionsArea?.buttons?.find(b => b.key === key)
     if (!config) return
-    if (['modal', 'page-form'].includes(config.effectType as string)) {
-      if (config.effectType === 'page-form') {
-        const title = config.effectConfig?.title || '表单页'
-        // Use the new setDetailTitle signature: title, key, type
-        setDetailTitle(title, config.key, 'page-form')
+    if (['modal', 'page'].includes(config.effectType as string)) {
+      if (config.effectType === 'page') {
+        const title = config.effectConfig?.title || '新页面'
+        const targetNavId = config.effectConfig?.targetNavId || null
+        // Use the new setDetailTitle signature: title, key, type, targetNavId
+        setDetailTitle(title, config.key, 'page', targetNavId)
         return
       }
 
@@ -127,7 +129,10 @@ const actions = {
     } else if (config.effectType === 'drawer') {
       const targetId = config.effectConfig?.targetNavId
       if (!targetId) return Message.warning('未配置关联页面')
-      Object.assign(uiState.drawer, { visible: true, title: (config.effectConfig as any)?.title || '详情', targetNavId: targetId })
+      const targetTitle = pageStore.findNavTitleBySubId(targetId)
+      const targetCfg = targetTitle ? pageStore.getSubPageConfig(targetTitle, targetId) : null
+      const targetPageType = targetCfg?.pageType || 'list'
+      Object.assign(uiState.drawer, { visible: true, title: (config.effectConfig as any)?.title || '详情', targetNavId: targetId, targetPageType })
     }
   },
   openAreaConfig(type: 'filter' | 'card' | 'table') {
@@ -528,7 +533,8 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
     <!-- 效果抽屉 (Drawer) -->
     <ADrawer v-model:visible="uiState.drawer.visible" :title="uiState.drawer.title" width="80%" :footer="false">
       <div v-if="uiState.drawer.visible && uiState.drawer.targetNavId" class="h-full">
-         <Page1 :nav-id="uiState.drawer.targetNavId" :visible-sections="['filter', 'actions', 'table', 'card']" />
+         <PageForm v-if="uiState.drawer.targetPageType === 'form'" :nav-id="uiState.drawer.targetNavId" />
+         <PageList v-else :nav-id="uiState.drawer.targetNavId" :visible-sections="['filter', 'actions', 'table', 'card']" />
       </div>
     </ADrawer>
 
@@ -601,5 +607,5 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
 </template>
 
 <style scoped>
-/* Page1 组件样式已移至 ArcoTable 组件 */
+/* PageList styles moved to ArcoTable component */
 </style>
