@@ -2,7 +2,7 @@
 defineOptions({ name: 'PageList' })
 import { computed, reactive, ref, watch } from 'vue'
 import { Button } from '@/components/ui/button'
-import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm, Drawer as ADrawer, Select as ASelect, Option as AOption } from '@arco-design/web-vue'
+import { Button as AButton, Modal as AModal, Scrollbar as AScrollbar, Input as AInput, InputNumber as AInputNumber, Message, Popconfirm as APopconfirm, Drawer as ADrawer, Select as ASelect, Option as AOption, RadioGroup as ARadioGroup, Radio as ARadio } from '@arco-design/web-vue'
 import { debounce } from 'lodash-es'
 import { Pencil, Plus, Trash2, File } from 'lucide-vue-next'
 import { safeJsonParseWithError } from '@/utils/error'
@@ -139,20 +139,26 @@ const actions = {
     uiState.area.type = type
     const cfg = pageConfig.value
     if (!cfg) return
-    uiState.area.config = type === 'filter' ? { columns: cfg.filterArea.columns, gap: cfg.filterArea.gap, showActions: cfg.actionsArea?.show !== false } 
-      : type === 'card' ? { show: cfg.cardArea?.show ?? false, columns: cfg.cardArea?.columns ?? 4, gap: cfg.cardArea?.gap ?? '16px' } 
-      : { 
-          height: cfg.tableArea.height ?? '400px', 
-          pageSize: cfg.tableArea.pageSize ?? 10, 
-          scrollX: !!cfg.tableArea.scrollX, 
-          scrollY: !!cfg.tableArea.scrollY, 
-          showCheckbox: !!cfg.tableArea.showCheckbox, 
-          stickyHeader: cfg.tableArea.stickyHeader !== false, 
-          isEmptyData: !!cfg.tableArea.isEmptyData,
-          draggable: !!cfg.tableArea.draggable,
-          sortableColumns: cfg.tableArea.sortableColumns || [],
-          filterableColumns: cfg.tableArea.filterableColumns || []
-        }
+    if (type === 'filter') {
+      uiState.area.config = { columns: cfg.filterArea.columns, gap: cfg.filterArea.gap, showActions: cfg.actionsArea?.show !== false }
+    } else if (type === 'card') {
+      uiState.area.config = { show: cfg.cardArea?.show ?? false, columns: cfg.cardArea?.columns ?? 4, gap: cfg.cardArea?.gap ?? '16px' }
+    } else {
+      const isFixed = !!cfg.tableArea.height
+      uiState.area.config = { 
+        height: cfg.tableArea.height || '400px', 
+        pageSize: cfg.tableArea.pageSize ?? 10, 
+        scrollX: !!cfg.tableArea.scrollX, 
+        scrollY: !!cfg.tableArea.scrollY, 
+        showCheckbox: !!cfg.tableArea.showCheckbox, 
+        stickyHeader: cfg.tableArea.stickyHeader !== false, 
+        isEmptyData: !!cfg.tableArea.isEmptyData,
+        draggable: !!cfg.tableArea.draggable,
+        sortableColumns: cfg.tableArea.sortableColumns || [],
+        filterableColumns: cfg.tableArea.filterableColumns || [],
+        heightMode: isFixed ? 'fixed' : 'pagination'
+      }
+    }
     uiState.area.visible = true
   },
   async saveAreaConfig() {
@@ -161,10 +167,11 @@ const actions = {
       if (type === 'filter') { item.filterArea.columns = config.columns; item.filterArea.gap = config.gap; if (!item.actionsArea) item.actionsArea = { buttons: [] }; item.actionsArea.show = config.showActions }
       else if (type === 'card') { if (!item.cardArea) item.cardArea = { show: true, columns: 4, gap: '16px', cards: [] }; item.cardArea.show = config.show; item.cardArea.columns = config.columns; item.cardArea.gap = config.gap }
       else { 
-        item.tableArea.height = config.height; 
-        item.tableArea.pageSize = config.pageSize; 
+        const isFixed = config.heightMode === 'fixed'
+        item.tableArea.height = isFixed ? config.height : undefined;
+        item.tableArea.pageSize = config.pageSize;
         item.tableArea.scrollX = config.scrollX; 
-        item.tableArea.scrollY = config.scrollY; 
+        item.tableArea.scrollY = isFixed; 
         item.tableArea.showCheckbox = config.showCheckbox; 
         item.tableArea.stickyHeader = config.stickyHeader; 
         item.tableArea.isEmptyData = config.isEmptyData;
@@ -571,14 +578,37 @@ const handleColumnResize = debounce((dataIndex: string, width: number) => {
       </div>
 
       <div v-else-if="uiState.area.type === 'table'" class="space-y-4 text-left">
-        <div class="grid grid-cols-2 gap-4">
-          <div><label class="text-sm font-medium mb-1.5 block">表格高度</label><AInput v-model="uiState.area.config.height" placeholder="如: 400px" /></div>
-          <div><label class="text-sm font-medium mb-1.5 block">每页条数</label><AInputNumber v-model="uiState.area.config.pageSize" :min="5" :max="100" /></div>
+        <div class="space-y-2">
+           <label class="text-sm font-medium block">高度控制</label>
+           <ARadioGroup v-model="uiState.area.config.heightMode" type="button">
+             <ARadio value="pagination">按页行数 (自适应高度)</ARadio>
+             <ARadio value="fixed">固定高度 (内容滚动)</ARadio>
+           </ARadioGroup>
         </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+          <div v-if="uiState.area.config.heightMode === 'fixed'">
+             <label class="text-sm font-medium mb-1.5 block">表格高度</label>
+             <AInput v-model="uiState.area.config.height" placeholder="如: 400px" />
+          </div>
+          <div v-else>
+             <label class="text-sm font-medium mb-1.5 block">每页条数</label>
+             <AInputNumber v-model="uiState.area.config.pageSize" :min="5" :max="100" />
+          </div>
+        </div>
+
         <div class="grid grid-cols-2 gap-4">
           <div class="flex items-center gap-2"><input type="checkbox" id="scrollX" v-model="uiState.area.config.scrollX" class="rounded" /><label for="scrollX" class="text-sm">横向滚动</label></div>
-          <div class="flex items-center gap-2"><input type="checkbox" id="scrollY" v-model="uiState.area.config.scrollY" class="rounded" /><label for="scrollY" class="text-sm">纵向滚动</label></div>
+          <div v-if="uiState.area.config.heightMode === 'fixed'" class="flex items-center gap-2 opacity-50 cursor-not-allowed">
+             <input type="checkbox" checked disabled class="rounded" />
+             <label class="text-sm">纵向滚动 (固定高度强制开启)</label>
+          </div>
+          <div v-else class="flex items-center gap-2 opacity-50 cursor-not-allowed">
+             <input type="checkbox" disabled class="rounded" />
+             <label class="text-sm">纵向滚动 (自适应高度禁用)</label>
+          </div>
         </div>
+        
         <div class="grid grid-cols-2 gap-4">
           <div class="flex items-center gap-2"><input type="checkbox" id="showCheckbox" v-model="uiState.area.config.showCheckbox" class="rounded" /><label for="showCheckbox" class="text-sm">显示复选框</label></div>
           <div class="flex items-center gap-2"><input type="checkbox" id="stickyHeader" v-model="uiState.area.config.stickyHeader" class="rounded" /><label for="stickyHeader" class="text-sm">吸顶表头</label></div>

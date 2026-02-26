@@ -201,7 +201,7 @@ const handleDragEnd = () => {
 </script>
 
 <template>
-  <div class="arco-table-wrapper bg-background rounded-xl border border-border/60 shadow-sm flex flex-col">
+  <div class="arco-table-wrapper bg-[var(--color-bg-2)] rounded border border-[var(--color-border-2)] shadow-sm flex flex-col">
     <ATable
       :columns="arcoColumns"
       :data="props.data"
@@ -317,8 +317,8 @@ const handleDragEnd = () => {
     </ATable>
 
     <!-- Loading Overlay with Arco Skeleton -->
-    <div v-if="props.loading" class="absolute inset-0 z-50 bg-background/80 backdrop-blur-[1px] flex flex-col p-4">
-      <div class="bg-card border rounded-lg p-6 shadow-sm w-full h-full">
+    <div v-if="props.loading" class="absolute inset-0 z-50 bg-[var(--color-bg-2)]/80 backdrop-blur-[1px] flex flex-col p-4">
+      <div class="bg-[var(--color-bg-2)] border border-[var(--color-border-2)] rounded p-6 shadow-sm w-full h-full">
         <ASkeleton :animation="true">
           <ASkeletonLine :rows="8" :widths="['40%', '100%', '100%', '80%', '100%', '100%', '60%', '100%']" />
         </ASkeleton>
@@ -328,51 +328,14 @@ const handleDragEnd = () => {
 </template>
 
 <style scoped>
-/* Override Arco styles to match shadcn theme where needed */
-.arco-table-wrapper :deep(.arco-table) {
-  background: transparent;
-  --color-text-1: hsl(var(--foreground));
-  --color-text-2: hsl(var(--muted-foreground));
-  --color-border-2: hsl(var(--border));
-  --color-fill-2: hsl(var(--muted));
-}
 
-.arco-table-wrapper :deep(.arco-table-th-item-title) {
-  font-weight: 700;
-  font-size: 0.875rem;
-  color: hsl(var(--foreground));
-}
 
-.custom-header-cell {
-  box-sizing: border-box;
-}
-
-/* Header Action Buttons Hover Logic */
-.arco-table-wrapper :deep(.header-actions) {
-  opacity: 0;
-  pointer-events: none;
-  transition: all 0.2s ease-in-out;
-  transform: translateY(-50%) translateX(4px);
-}
-
-.arco-table-wrapper :deep(.arco-table-th:hover) .header-actions {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(-50%) translateX(0);
-}
-
-.arco-table-wrapper :deep(.arco-btn-link) {
-  padding: 0;
-  height: auto;
-  line-height: inherit;
-}
-
-/* Pagination container alignment within Arco */
+/* Pagination container alignment */
 .arco-table-wrapper :deep(.arco-table-pagination) {
   margin-top: 0;
-  border-top: 1px solid hsl(var(--border));
+  border-top: 1px solid var(--color-border-2);
   padding: 0.75rem 1rem;
-  background-color: hsl(var(--muted) / 0.2);
+  background-color: var(--color-bg-2);
 }
 
 .arco-table-wrapper :deep(.arco-pagination) {
@@ -398,8 +361,32 @@ const handleDragEnd = () => {
   justify-content: center !important;
 }
 
-/* Remove background from sorted columns */
+/* Remove background from sorted columns if needed, or keep Arco default */
 .arco-table-wrapper :deep(.arco-table-td-sorted) {
-  background-color: transparent;
+  background-color: var(--color-fill-2);
+}
+
+.custom-header-cell {
+  box-sizing: border-box;
+}
+
+/* Header Action Buttons Hover Logic */
+.arco-table-wrapper :deep(.header-actions) {
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s ease-in-out;
+  transform: translateY(-50%) translateX(4px);
+}
+
+.arco-table-wrapper :deep(.arco-table-th:hover) .header-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+}
+
+.arco-table-wrapper :deep(.arco-btn-link) {
+  padding: 0;
+  height: auto;
+  line-height: inherit;
 }
 </style>
