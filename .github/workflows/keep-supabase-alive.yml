@@ -1,0 +1,29 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # 每天 UTC 时间凌晨 0 点（北京时间早上 8 点）运行一次
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 允许手动触发测试
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase API to prevent pausing
+        run: |
+          echo "Pinging Supabase to keep it active..."
+          response=$(curl -s -w "%{http_code}" -X GET "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/team_configs?limit=1" \
+          -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+          -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}")
+          
+          # 提取状态码
+          http_code=${response: -3}
+          
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+            echo "Successfully pinged Supabase! Status code: $http_code"
+          else
+            echo "Failed to ping Supabase. Status code: $http_code"
+            # 让该 Action 失败，以便在 GitHub 上引起注意
+            exit 1
+          fi
