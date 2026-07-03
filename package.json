@@ -21,6 +21,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "dayjs": "^1.11.21",
     "driver.js": "^1.4.0",
     "jsonrepair": "^3.13.2",
     "lodash-es": "^4.17.23",
