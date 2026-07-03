@@ -1,0 +1,31 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "cross-env HTTP_PROXY= HTTPS_PROXY= http_proxy= https_proxy= NO_PROXY=* wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:push": "prisma db push"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@hono/clerk-auth": "^3.1.1",
+    "@prisma/client": "^6.19.3",
+    "@tidbcloud/prisma-adapter": "^6.17.0",
+    "@tidbcloud/serverless": "^0.3.0",
+    "hono": "^4.12.27"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260702.1",
+    "cross-env": "^10.1.0",
+    "dotenv": "^17.4.2",
+    "prisma": "^6.19.3",
+    "tsx": "^4.22.4",
+    "typescript": "~5.9.3",
+    "wrangler": "^4.106.0"
+  }
+}

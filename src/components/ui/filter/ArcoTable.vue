@@ -84,8 +84,8 @@ const arcoColumns = computed<TableColumnData[]>(() => {
       title: col.label,
       dataIndex: col.key,
       width: width,
-      fixed: col.fixed,
-      align: col.align,
+      fixed: col.fixed as 'left' | 'right' | undefined,
+      align: col.align as 'left' | 'right' | 'center' | undefined,
       ellipsis: col.ellipsis,
       tooltip: col.tooltip,
       slotName: col.key,
@@ -206,7 +206,7 @@ const handleDragEnd = () => {
       :columns="arcoColumns"
       :data="props.data"
       :scroll="scroll"
-      :pagination="paginationProps"
+      :pagination="(paginationProps as any)"
       :loading="props.loading"
       :row-selection="rowSelection"
       row-key="id"

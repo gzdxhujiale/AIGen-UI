@@ -250,8 +250,7 @@ const handleSwitchSession = async (id: string) => {
     isHistoryOpen.value = false
 }
 
-const handleDeleteSession = async (e: Event, id: string) => {
-    e.stopPropagation()
+const handleDeleteSession = async (id: string) => {
     await aiStore.deleteSession(id)
 }
 
@@ -447,7 +446,7 @@ watch(() => authStore.isAuthenticated, (v) => {
                             <span class="history-title truncate">{{ session.title || '未命名对话' }}</span>
                             <span class="history-date">{{ formatRelativeDate(session.updated_at) }}</span>
                         </div>
-                        <APopconfirm content="确定删除该会话吗？" @ok="handleDeleteSession($event, session.id)">
+                        <APopconfirm content="确定删除该会话吗？" @ok="handleDeleteSession(session.id)">
                             <button class="history-delete-btn" @click.stop>
                                 <Trash2 :size="14"/>
                             </button>

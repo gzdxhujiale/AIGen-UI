@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { supabase } from '@/api/supabase'
+import { fetchApi } from '@/api/request'
 import { toast } from 'vue-sonner'
 import type { TeamItem } from '@/types/navigation'
 import * as Icons from 'lucide-vue-next'
@@ -17,12 +17,10 @@ export const useConfigTeamStore = defineStore('config-team', () => {
     const isLoaded = ref(false), isLoading = ref(false)
     const CACHE_KEY = 'aigen_team_config_cache'
 
-    const _runAction = async (fn: (uid: string) => Promise<any>, silent = false) => {
+    const _runAction = async (fn: () => Promise<any>, silent = false) => {
         if (!silent) isLoading.value = true
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) throw new Error('用户未登录')
-            const res = await fn(user.id)
+            const res = await fn()
             localStorage.setItem(CACHE_KEY, JSON.stringify(teams.value))
             return { success: true, data: res }
         } catch (e: unknown) {
@@ -37,17 +35,16 @@ export const useConfigTeamStore = defineStore('config-team', () => {
         if (cached) { teams.value = JSON.parse(cached); isLoaded.value = true }
     }
 
-    const saveTeams = () => _runAction(async (uid) => {
+    const saveTeams = () => _runAction(async () => {
         const serialized = teams.value.map(t => ({ ...t, logo: typeof t.logo === 'string' ? t.logo : (t.logo as any)?.name || 'GalleryVerticalEnd' }))
-        const { error } = await supabase.from('team_configs').upsert({
-            user_id: uid, team_config: serialized, updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' })
-        if (error) throw error
+        await fetchApi('/configs/team', {
+            method: 'POST',
+            body: JSON.stringify({ team_config: serialized })
+        })
     })
 
-    const loadTeams = () => _runAction(async (uid) => {
-        const { data, error } = await supabase.from('team_configs').select('team_config').eq('user_id', uid).maybeSingle()
-        if (error) throw error
+    const loadTeams = () => _runAction(async () => {
+        const { data } = await fetchApi('/configs/team')
         if (data?.team_config) teams.value = data.team_config
         else { teams.value = JSON.parse(JSON.stringify(DEFAULT_TEAM_CONFIG)); await saveTeams() }
         isLoaded.value = true

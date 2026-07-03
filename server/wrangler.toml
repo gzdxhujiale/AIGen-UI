@@ -1,0 +1,7 @@
+name = "server"
+compatibility_date = "2024-04-03"
+compatibility_flags = [ "nodejs_compat" ]
+main = "src/index.ts"
+
+[vars]
+# DATABASE_URL and CLERK variables should be provided via Cloudflare dashboard or locally via .dev.vars

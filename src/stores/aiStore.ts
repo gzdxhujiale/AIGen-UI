@@ -6,7 +6,7 @@ import { useConfigStore } from './configStore'
 import { useConfigPageStore } from './config_page_Store'
 import { useAuthStore } from './authStore'
 import type { PageConfigRecord, PageSubItem } from './config_page_Store'
-import { supabase } from '@/api/supabase'
+import { fetchApi } from '@/api/request'
 import { useNavigation } from '@/composables/useNavigation'
 import { toast } from 'vue-sonner'
 
@@ -164,11 +164,7 @@ export const useAIStore = defineStore('ai', () => {
         const authStore = useAuthStore()
         if (!authStore.user) return
 
-        const { data, error } = await supabase
-            .from('ai_chat_sessions')
-            .select('*')
-            .eq('user_id', authStore.user.id)
-            .order('updated_at', { ascending: false })
+        const { data, error } = await fetchApi('/ai/sessions').catch(e => ({ error: e, data: null }))
 
         if (error) {
             console.error('Failed to load sessions:', error)
@@ -181,15 +177,11 @@ export const useAIStore = defineStore('ai', () => {
     async function loadSessionMessages(sessionId: string) {
         isLoading.value = true
         try {
-            const { data, error } = await supabase
-                .from('ai_chat_messages')
-                .select('*')
-                .eq('session_id', sessionId)
-                .order('created_at', { ascending: true })
+            const { data, error } = await fetchApi(`/ai/sessions/${sessionId}/messages`).catch(e => ({ error: e, data: null }))
 
             if (error) throw error
 
-            messages.value = (data || []).map(m => ({
+            messages.value = (data || []).map((m: any) => ({
                 id: m.id,
                 role: m.role as 'user' | 'assistant',
                 content: m.content || '',
@@ -213,7 +205,7 @@ export const useAIStore = defineStore('ai', () => {
     }
 
     async function deleteSession(sessionId: string) {
-        const { error } = await supabase.from('ai_chat_sessions').delete().eq('id', sessionId)
+        const { error } = await fetchApi(`/ai/sessions/${sessionId}`, { method: 'DELETE' }).catch(e => ({ error: e }))
         if (error) {
             toast.error('删除失败')
             return
@@ -287,11 +279,7 @@ export const useAIStore = defineStore('ai', () => {
                 if (authStore.user) {
                     // Create new session in DB
                     const title = content.slice(0, 30)
-                    const { data, error } = await supabase
-                        .from('ai_chat_sessions')
-                        .insert({ user_id: authStore.user.id, title })
-                        .select()
-                        .single()
+                    const { data, error } = await fetchApi('/ai/sessions', { method: 'POST', body: JSON.stringify({ title }) }).catch(e => ({ error: e, data: null }))
 
                     if (data && !error) {
                         sessionId = data.id
@@ -303,11 +291,7 @@ export const useAIStore = defineStore('ai', () => {
 
             // 2. Persist User Message
             if (sessionId) {
-                await supabase.from('ai_chat_messages').insert({
-                    session_id: sessionId,
-                    role: 'user',
-                    content: content.trim()
-                })
+                await fetchApi('/ai/messages', { method: 'POST', body: JSON.stringify({ session_id: sessionId, role: 'user', content: content.trim() }) }).catch(() => {})
             }
 
             // 构建发送给 API 的消息
@@ -357,13 +341,7 @@ export const useAIStore = defineStore('ai', () => {
 
                     // 3. Persist AI Message
                     if (sessionId) {
-                        await supabase.from('ai_chat_messages').insert({
-                            session_id: sessionId,
-                            role: 'assistant',
-                            content: full,
-                            config_data: config,
-                            status: 'complete'
-                        })
+                        await fetchApi('/ai/messages', { method: 'POST', body: JSON.stringify({ session_id: sessionId, role: 'assistant', content: full, config_data: config, status: 'complete' }) }).catch(() => {})
                     }
                 },
                 (err) => {

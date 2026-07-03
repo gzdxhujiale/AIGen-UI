@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { supabase } from '@/api/supabase'
+import { fetchApi } from '@/api/request'
 import { toast } from 'vue-sonner'
 import type { MenuConfig } from '@/types'
 
@@ -13,12 +13,10 @@ export const useConfigMenuStore = defineStore('config-menu', () => {
     const isLoaded = ref(false), isLoading = ref(false)
     const CACHE_KEY = 'aigen_menu_config_cache'
 
-    const _runAction = async (fn: (userId: string) => Promise<any>, silent = false) => {
+    const _runAction = async (fn: () => Promise<any>, silent = false) => {
         if (!silent) isLoading.value = true
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) throw new Error('用户未登录')
-            const res = await fn(user.id)
+            const res = await fn()
             localStorage.setItem(CACHE_KEY, JSON.stringify(menuConfig.value))
             return { success: true, data: res }
         } catch (e: unknown) {
@@ -33,16 +31,15 @@ export const useConfigMenuStore = defineStore('config-menu', () => {
         if (cached) { menuConfig.value = JSON.parse(cached); isLoaded.value = true }
     }
 
-    const saveMenu = () => _runAction(async (uid) => {
-        const { error } = await supabase.from('menu_configs').upsert({
-            user_id: uid, menu_config: menuConfig.value, updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' })
-        if (error) throw error
+    const saveMenu = () => _runAction(async () => {
+        await fetchApi('/configs/menu', {
+            method: 'POST',
+            body: JSON.stringify({ menu_config: menuConfig.value })
+        })
     })
 
-    const loadMenu = () => _runAction(async (uid) => {
-        const { data, error } = await supabase.from('menu_configs').select('menu_config').eq('user_id', uid).maybeSingle()
-        if (error) throw error
+    const loadMenu = () => _runAction(async () => {
+        const { data } = await fetchApi('/configs/menu')
         if (data?.menu_config) menuConfig.value = data.menu_config
         else { menuConfig.value = JSON.parse(JSON.stringify(DEFAULT_MENU_CONFIG)); await saveMenu() }
         isLoaded.value = true

@@ -16,7 +16,6 @@ import { useConfigMenuStore } from '@/stores/config_menu_Store'
 import { useAuthStore } from '@/stores/authStore'
 import { useAIStore } from '@/stores/aiStore'
 import { useNavigation } from '@/composables/useNavigation'
-import { supabase } from '@/api/supabase'
 import type { TeamItem, NavGroup, MenuItem } from '@/types'
 import AIChatAssistant from '@/views/AIChatAssistant.vue'
 import draggable from 'vuedraggable'
@@ -30,8 +29,8 @@ const collapsed = ref(false), isNavInitialized = ref(false), activeTeam = ref<Te
 const openKeys = ref<string[]>([])
 
 const teamLogoUrl = computed(() => {
-    const logoMap: Record<string, string> = { '2063994160@qq.com': 'black.jpeg' }
-    return supabase.storage.from('team_avatars').getPublicUrl(logoMap[authStore.userEmail] || 'ai.svg').data.publicUrl
+    // 使用简单的占位符或默认logo
+    return '/ai.svg'
 })
 
 const effectiveTeams = computed(() => teamStore.teams)
@@ -163,7 +162,7 @@ const handleMenuClick = (item: MenuItem) => {
     <a-layout-sider :collapsed="collapsed" :width="230" class="border-r border-[var(--color-border-2)] bg-[var(--color-bg-2)] transition-all">
       <div class="flex flex-col h-full overflow-hidden">
         <div class="h-14 flex items-center px-2 border-b border-[var(--color-border-2)]">
-          <a-dropdown @select="(v: string) => v !== 'add_team' && (activeTeam = effectiveTeams.find(t => t.name === v)!)" trigger="click" position="br" v-if="!collapsed">
+          <a-dropdown @select="(v: any) => v !== 'add_team' && (activeTeam = effectiveTeams.find(t => t.name === v)!)" trigger="click" position="br" v-if="!collapsed">
             <div class="flex items-center gap-2 p-2 rounded-lg hover:bg-[var(--color-fill-2)] cursor-pointer w-full overflow-hidden">
                 <div class="size-8 rounded-lg bg-white border border-[var(--color-border-2)] flex items-center justify-center overflow-hidden"><img :src="teamLogoUrl" class="size-full" /></div>
                 <div class="flex-1 min-w-0 text-left"><div class="truncate font-medium text-sm">{{ activeTeam?.name }}</div><div class="truncate text-xs text-gray-500">{{ activeTeam?.plan }}</div></div>

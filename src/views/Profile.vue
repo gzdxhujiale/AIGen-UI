@@ -181,7 +181,7 @@ const columns = [
   { title: '团队名称', dataIndex: 'name', slotName: 'name' },
   { title: '角色', dataIndex: 'plan', slotName: 'role', width: 150 },
   { title: '权限', dataIndex: 'permissions', slotName: 'permissions' },
-  { title: '操作', slotName: 'actions', width: 80, align: 'center' }
+  { title: '操作', slotName: 'actions', width: 80, align: 'center' as const }
 ]
 
 // 头像上传处理
@@ -195,7 +195,7 @@ const handleAvatarUpload = async (fileList: any[]) => {
       form.avatarUrl = authStore.userAvatar
       Message.success('头像更新成功')
     } else {
-      Message.error(result.error || '头像上传失败')
+      Message.error('头像上传失败')
     }
   } catch (err) {
     Message.error('头像上传出错')

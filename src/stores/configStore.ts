@@ -106,7 +106,7 @@ export const useConfigStore = defineStore('config', () => {
         }
     }
 
-    async function saveToSupabase() {
+    async function saveToCloud() {
         try {
             const [r1, r2] = await Promise.all([
                 teamStore.saveTeams(),
@@ -125,6 +125,6 @@ export const useConfigStore = defineStore('config', () => {
         previewMode, previewConfig, previewNavGroups, isInPreviewMode,
         setEditMode, setNavigationStyle, setFilterActionFusion,
         setPreviewConfig, setPreviewNav, clearPreviewConfig,
-        exportFullConfig, importFullConfig, saveToSupabase,
+        exportFullConfig, importFullConfig, saveToCloud,
     }
 })

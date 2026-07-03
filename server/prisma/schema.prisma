@@ -1,0 +1,64 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model TeamConfig {
+  id          String   @id @default(uuid())
+  user_id     String   @unique
+  team_config Json     @default("[{\"id\":\"team-default\",\"logo\":\"IconMosaic\",\"name\":\"AIGen-UI\",\"role\":\"online\",\"permissions\":[\"read\"]}]")
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("team_configs")
+}
+
+model MenuConfig {
+  id          String   @id @default(uuid())
+  user_id     String   @unique
+  menu_config Json     @default("{\"items\":[{\"type\":\"text-button\",\"label\":\"权限申请\"},{\"type\":\"dropdown\",\"label\":\"语言\",\"options\":[\"中文\",\"English\"]}]}")
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("menu_configs")
+}
+
+model PageConfig {
+  id          String   @id @default(uuid())
+  user_id     String
+  title       String
+  page_config Json
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("page_configs")
+}
+
+model AiChatSession {
+  id         String          @id @default(uuid())
+  user_id    String
+  title      String          @default("New Chat")
+  created_at DateTime        @default(now())
+  updated_at DateTime        @updatedAt
+  messages   AiChatMessage[]
+
+  @@map("ai_chat_sessions")
+}
+
+model AiChatMessage {
+  id          String        @id @default(uuid())
+  session_id  String
+  session     AiChatSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  role        String
+  content     String?       @db.Text
+  config_data Json?
+  status      String?       @default("complete")
+  created_at  DateTime      @default(now())
+
+  @@map("ai_chat_messages")
+}

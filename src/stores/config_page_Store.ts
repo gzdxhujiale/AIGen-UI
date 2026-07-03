@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { supabase } from '@/api/supabase'
+import { fetchApi } from '@/api/request'
 import { toast } from 'vue-sonner'
 import type {
     Page1ConfigData,
@@ -257,14 +257,8 @@ export const useConfigPageStore = defineStore('config-page', () => {
     async function loadPageConfigs() {
         isLoading.value = true
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return { success: false, message: '用户未登录' }
-
-            const { data, error } = await supabase
-                .from('page_configs')
-                .select('*')
-                .eq('user_id', user.id)
-
+            /* Auth handled by fetchApi */
+            const { data, error } = await fetchApi('/configs/pages').catch(e => ({ error: e, data: null }))
             if (error) throw error
 
             // 清空并重新填充
@@ -350,29 +344,15 @@ export const useConfigPageStore = defineStore('config-page', () => {
      */
     async function savePageConfig(title: string, content: PageConfigContent) {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return { success: false, message: '用户未登录' }
-
-            const { data, error } = await supabase
-                .from('page_configs')
-                .upsert({
-                    user_id: user.id,
-                    title: title,
-                    page_config: content,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'user_id,title' })
-                .select()
-                .single()
-
+            /* Auth handled by fetchApi */
+            const { error } = await fetchApi('/configs/pages/sync', { method: 'POST', body: JSON.stringify({ upsert: [{ title, page_config: content }] }) }).catch(e => ({ error: e }))
             if (error) throw error
 
             // 更新本地缓存
-            if (data) {
-                pageConfigs.value.set(title, data)
-                updateCache() // 更新缓存
-            }
+            pageConfigs.value.set(title, { title, page_config: content })
+            updateCache()
             lastSyncTime.value = new Date()
-            return { success: true, data }
+            return { success: true, data: { title, page_config: content } }
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error)
             console.error('保存页面配置失败:', error)
@@ -399,15 +379,8 @@ export const useConfigPageStore = defineStore('config-page', () => {
      */
     async function deletePageConfig(title: string) {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return { success: false, message: '用户未登录' }
-
-            const { error } = await supabase
-                .from('page_configs')
-                .delete()
-                .eq('user_id', user.id)
-                .eq('title', title)
-
+            /* Auth handled by fetchApi */
+            const { error } = await fetchApi('/configs/pages/sync', { method: 'POST', body: JSON.stringify({ delete: [title] }) }).catch(e => ({ error: e }))
             if (error) throw error
 
             pageConfigs.value.delete(title)
@@ -435,31 +408,14 @@ export const useConfigPageStore = defineStore('config-page', () => {
         }
 
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return { success: false, message: '用户未登录' }
-
+            /* Auth handled by fetchApi */
             const newContent: PageConfigContent = {
                 ...record.page_config,
                 title: newTitle
             }
 
-            const { error: insertError } = await supabase
-                .from('page_configs')
-                .insert({
-                    user_id: user.id,
-                    title: newTitle,
-                    page_config: newContent
-                })
-
-            if (insertError) throw insertError
-
-            const { error: deleteError } = await supabase
-                .from('page_configs')
-                .delete()
-                .eq('user_id', user.id)
-                .eq('title', oldTitle)
-
-            if (deleteError) throw deleteError
+            const { error } = await fetchApi('/configs/pages/sync', { method: 'POST', body: JSON.stringify({ delete: [oldTitle], upsert: [{ title: newTitle, page_config: newContent }] }) }).catch(e => ({ error: e }))
+            if (error) throw error
 
             pageConfigs.value.delete(oldTitle) // 关键：删除旧的本地记录
             pageConfigs.value.set(newTitle, {
@@ -708,15 +664,10 @@ export const useConfigPageStore = defineStore('config-page', () => {
      */
     async function applyPreview() {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return { success: false, message: '用户未登录' }
-
             const updates: PageConfigRecord[] = []
 
             // 1. 更新本地状态
             previewPageConfigs.value.forEach((record, title) => {
-                // 确保 user_id 正确
-                record.user_id = user.id
                 // 更新正式 Map
                 pageConfigs.value.set(title, record)
                 updates.push(record)
@@ -725,19 +676,10 @@ export const useConfigPageStore = defineStore('config-page', () => {
             // 2. 更新缓存
             updateCache()
 
-            // 3. 持久化到 Supabase
             // 注意: 这里的 saveAll 是先删后插，如果只是部分更新，应该用 upsert
             // 为了安全起见，我们这里使用批量 upsert 逻辑
             if (updates.length > 0) {
-                const { error } = await supabase
-                    .from('page_configs')
-                    .upsert(updates.map(r => ({
-                        user_id: user.id,
-                        title: r.title,
-                        page_config: r.page_config,
-                        updated_at: new Date().toISOString()
-                    })), { onConflict: 'user_id,title' })
-
+                const { error } = await fetchApi('/configs/pages/sync', { method: 'POST', body: JSON.stringify({ upsert: updates }) }).catch(e => ({ error: e }))
                 if (error) throw error
             }
 
@@ -758,29 +700,9 @@ export const useConfigPageStore = defineStore('config-page', () => {
      */
     async function saveAllPageConfigs(configs: PageConfigRecord[]) {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return { success: false, message: '用户未登录' }
-
-            const { error: deleteError } = await supabase
-                .from('page_configs')
-                .delete()
-                .eq('user_id', user.id)
-
-            if (deleteError) throw deleteError
-
-            if (configs.length > 0) {
-                const insertData = configs.map(config => ({
-                    user_id: user.id,
-                    title: config.title,
-                    page_config: config.page_config
-                }))
-
-                const { error: insertError } = await supabase
-                    .from('page_configs')
-                    .insert(insertData)
-
-                if (insertError) throw insertError
-            }
+            /* Auth handled by fetchApi */
+            const { error } = await fetchApi('/configs/pages/sync', { method: 'POST', body: JSON.stringify({ upsert: configs, deleteAll: true }) }).catch(e => ({ error: e }))
+            if (error) throw error
 
             await loadPageConfigs()
             return { success: true }

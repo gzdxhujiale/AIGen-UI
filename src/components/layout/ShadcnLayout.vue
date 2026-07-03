@@ -67,7 +67,7 @@ const handleUserAction = (val: string) => {
     const actions: Record<string, () => void> = {
         logout: async () => {
             isLoggingOut.value = true
-            try { const r = await authStore.signOut(); r.success ? Message.success('已退出') : Message.error(r.error || '失败') } finally { isLoggingOut.value = false }
+            try { await authStore.signOut(); Message.success('已退出') } catch (e: any) { Message.error(e.message || '失败') } finally { isLoggingOut.value = false }
         },
         profile: () => handleNavClick('账户', '个人资料', 'profile'),
         'toggle-edit': () => configStore.setEditMode(!configStore.isEditMode)

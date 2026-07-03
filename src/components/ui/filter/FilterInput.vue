@@ -18,7 +18,7 @@ defineEmits<{
   <div class="flex items-center gap-2">
     <label class="text-xs font-medium text-muted-foreground whitespace-nowrap">{{ label }}</label>
     <AInput
-      :model-value="modelValue"
+      :model-value="String(modelValue)"
       :placeholder="placeholder"
       :disabled="disabled"
       allow-clear
